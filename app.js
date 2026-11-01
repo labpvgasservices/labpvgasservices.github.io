@@ -457,16 +457,13 @@
       </div><datalist id="names">${names.map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
     $("#v-entry").innerHTML = `
       <div class="card"><h2><i>1</i> Loại thiết bị</h2><div class="chips">${types}</div></div>
-      <div class="card"><h2><i>2</i> Thông tin thiết bị <small>(phần ghi tay trên QTG)</small></h2>${dev}</div>
-      <div class="card"><h2><i>3</i> Chuẩn sử dụng</h2>${std}</div>
-      <div class="card"><h2><i>4</i> Số liệu đo ${ptsTitle}</h2>${pts}</div>
+      <div class="card" id="c2"><h2><i>2</i> Thông tin thiết bị <small>(phần ghi tay trên QTG)</small></h2>${dev}</div>
+      <div class="card" id="c3"><h2><i>3</i> Chuẩn sử dụng</h2>${std}</div>
+      <div class="card" id="c4"><h2><i>4</i> Số liệu đo ${ptsTitle}</h2>${pts}</div>
       ${photoCard()}
       <div class="card"><h2><i>5</i> Kết quả & ĐKĐBĐ</h2><div id="result"></div></div>
       <div class="card"><h2><i>6</i> Ký tên & xuất hồ sơ</h2>${sig}
-        ${ownerHtml()}${approvalHtml()}
-        <div class="btns"><button class="btn pri" data-act="save">Lưu hồ sơ</button><button class="btn" data-act="new">Hồ sơ mới</button></div>
-        <div class="btns"><button class="btn pri" data-pdf="cert">Chứng chỉ (2 trang)</button><button class="btn" data-pdf="qtg">Biên bản QTG</button><button class="btn" data-pdf="unc">Bảng Uncer (QC)</button><button class="btn" data-pdf="all">Trọn bộ PDF</button></div>
-        <div class="btns"><button class="btn" data-act="preview">Xem trước trọn bộ</button></div>
+        ${ownerHtml()}${actionsHtml()}
         <div id="pdfout"></div></div>
       <div id="preview"></div>`;
     if (!rec.certNo) rec.certNo = autoCertNo();
@@ -488,11 +485,14 @@
       ${ph.has ? `<small class="mut">${esc(ph.by || "")}${ph.at ? " · " + esc(new Date(ph.at).toLocaleString("vi-VN", { hour12: false })) : ""}</small>` : ""}
       ${ed ? `<div class="btns"><label class="btn sm">${ph.has ? "Thay" : "+ Ảnh"}<input type="file" accept="image/*" capture="environment" data-photo="${i}" hidden></label>${ph.has ? `<button class="btn sm" data-phdel="${i}">Xoá</button>` : ""}</div>` : ""}</div>`).join("");
     const n = rec.photos.filter(x => x.has).length;
-    return `<div class="card"><h2><i>📷</i> Ảnh bằng chứng <small>(${n}/${P.SLOTS}, không bắt buộc)</small></h2>
-      <p class="hint">Chụp màn hình chuẩn / thiết bị tại từng điểm đo làm bằng chứng. Ảnh lưu trên máy này, đi kèm khi Sao lưu JSON. Thay hoặc xoá ảnh sau khi duyệt thì hồ sơ phải duyệt lại.</p>
-      <div class="phgrid">${cells}</div></div>`;
+    // Mặc định thu gọn (yêu cầu NGOC 01/11/2026); đã bung thì giữ bung qua các lần vẽ lại cho tới khi người dùng thu lại
+    return `<details class="card phcard" id="phcard"${photoOpen ? " open" : ""}><summary><h2><i>📷</i> Ảnh bằng chứng <small>(${n}/${P.SLOTS})</small><span class="phx">${photoOpen ? "Thu gọn" : "Bấm để mở"}</span></h2></summary>
+      <p class="hint">Chụp màn hình chuẩn / thiết bị tại từng điểm đo làm bằng chứng. Ảnh lưu trên máy này, đi kèm khi Sao lưu JSON và khi Gửi duyệt. Thay hoặc xoá ảnh sau khi duyệt thì hồ sơ phải duyệt lại.</p>
+      <div class="phgrid">${cells}</div></details>`;
   }
+  let photoOpen = false;
   async function loadThumbs() {
+    const pc = $("#phcard"); if (pc && !pc.dataset.w) { pc.dataset.w = 1; pc.addEventListener("toggle", () => { photoOpen = pc.open; const x = $(".phx", pc); if (x) x.textContent = pc.open ? "Thu gọn" : "Bấm để mở"; }); }
     const id = rec.id;
     for (let i = 0; i < rec.photos.length; i++) {
       if (!rec.photos[i].has) continue;
@@ -692,6 +692,35 @@
           <div>Bản đầy đủ: nút "Bảng Uncer (QC)".</div></div></details>`;
     }
     el.innerHTML = (msgs ? `<ul class="msgs">${msgs}</ul>` : "") + (body || `<p class="mut">Nhập đủ thông tin để xem kết quả.</p>`);
+    dock(c.errors, c.warns);
+  }
+  /* ---------- thanh cảnh báo nổi (yêu cầu NGOC 01/11/2026): luôn đi theo màn hình đang xem, bấm vào mục để nhảy tới ô cần sửa ---------- */
+  let dockOpen = false, dockMsgs = [];
+  const TARGETS = [[/\bTag\b/, "#f_h_tag"], [/Kiểm định viên/, "#f_sig_inspector"], [/Người kiểm soát/, "#f_sig_controller"], [/Pset/, "#f_h_pset"], [/Tset/, "#f_h_tset"],
+    [/Max > Min|Phạm vi đo chưa/, "#f_h_max"], [/độ chính xác/, "#f_h_acc"], [/vạch chia/, "#f_h_scale"], [/độ chia nhỏ nhất/, "#f_h_res"],
+    [/Stand3|milivôn/, "#f_h_stand3"], [/Stand2|chuẩn điện|dải cao|dải trung/, "#f_h_stand2"], [/Stand1|chuẩn áp suất/, "#f_h_stand1"], [/^Chuẩn |chuẩn/, "#c3"],
+    [/số đọc|ở điểm đo|Set-Pressure|Reset-Pressure|^Thiếu/, "#c4"], [/Cơ sở sử dụng/, "#c2"], [/./, "#result"]];
+  function dock(errs, warns) {
+    dockMsgs = errs.map(t => ["bad", t]).concat(warns.map(t => ["warn", t]));
+    let d = $("#wdock");
+    if (!d) { d = document.createElement("div"); d.id = "wdock"; document.body.appendChild(d); d.addEventListener("click", onDock); }
+    const show = dockMsgs.length && !$("#v-entry").hidden;
+    d.hidden = !show; document.body.classList.toggle("hasdock", !!show); if (!show) return;
+    const ne = errs.length, cls = ne ? "bad" : "warn";
+    d.className = cls + (dockOpen ? " open" : "");
+    d.innerHTML = `<button class="wbar" data-w="tog"><span class="wic">${ne ? "!" : "i"}</span><b>${ne ? `${ne} mục bắt buộc chưa đủ` : "Không còn lỗi"}</b>${warns.length ? `<span class="wsub">${warns.length} lưu ý</span>` : ""}<span class="wch">${dockOpen ? "▾" : "▴"}</span></button>
+      ${dockOpen ? `<ul>${dockMsgs.map(([k, t], i) => `<li><button class="${k}" data-w="${i}"><span>${esc(t)}</span><span class="wgo">›</span></button></li>`).join("")}</ul>` : ""}`;
+  }
+  function onDock(e) {
+    const b = e.target.closest("button[data-w]"); if (!b) return;
+    if (b.dataset.w === "tog") { dockOpen = !dockOpen; dock(dockMsgs.filter(m => m[0] === "bad").map(m => m[1]), dockMsgs.filter(m => m[0] === "warn").map(m => m[1])); return; }
+    const t = dockMsgs[Number(b.dataset.w)][1], sel = (TARGETS.find(([re]) => re.test(t)) || [])[1];
+    let el = sel && $(sel); if (!el) el = $("#result");
+    if (el.classList.contains("card")) el = $$("input:not([readonly]),select", el).find(x => !x.value) || el;
+    dockOpen = false; dock(dockMsgs.filter(m => m[0] === "bad").map(m => m[1]), dockMsgs.filter(m => m[0] === "warn").map(m => m[1]));
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const box = el.closest("label.f") || el; box.classList.remove("flash"); void box.offsetWidth; box.classList.add("flash");
+    if (el.matches("input,select")) setTimeout(() => el.focus({ preventScroll: true }), 350);
   }
 
   /* ---------- events: entry ---------- */
@@ -760,8 +789,8 @@
       P.del(`${rec.id}:${i}`).catch(() => { }); rec.photos[i] = { cap: rec.photos[i].cap, has: false };
       touched(); logAct(`Xoá ảnh ô ${i + 1}`); if (rec.saved) saveRecord(true); renderEntry(); persistCurrent(); return;
     }
-    if (act && !["new", "preview", "share", "download"].includes(act) && !canEdit()) { toast(`Hồ sơ của ${rec.owner.name}: cấp 1 chỉ sửa hồ sơ mình tạo`); return; }
-    if (act && !["save", "new", "preview", "share", "download"].includes(act)) touched();
+    if (act && !["new", "preview", "share", "download", "viewqtg", "sendpkg"].includes(act) && !canEdit()) { toast(`Hồ sơ của ${rec.owner.name}: cấp 1 chỉ sửa hồ sơ mình tạo`); return; }
+    if (act && !["save", "new", "preview", "share", "download", "viewqtg", "submit", "sendpkg"].includes(act)) touched();
     if (act === "pts") { genPoints(); rec.ptAuto = true; renderEntry(); }
     if (act === "sync") syncRF();
     if (act === "syncpg") {
@@ -788,19 +817,41 @@
     if (act === "save") saveRecord();
     if (act === "new") { const keep = { location: rec.h.location, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.custFree }; const t = rec.type; rec = newRecord(t); Object.assign(rec.h, keep); rec.certNo = autoCertNo(); renderEntry(); persistCurrent(); window.scrollTo(0, 0); }
     if (act === "preview") renderPreview("all");
+    if (act === "viewqtg") renderPreview("qtg");
+    if (act === "submit") submitReview();
     if (b.dataset.pdf) makePdf(b.dataset.pdf);
     if (act === "share") sharePdf();
+    if (act === "sendpkg") sendPkg();
     if (act === "download") downloadPdf();
     persistCurrent();
   }
 
   /* ---------- duyệt hồ sơ (cấp 2 trở lên) ---------- */
-  function approvalHtml() {
-    const a = rec.approved;
-    const st = a ? `<span class="ok">Đã duyệt</span> bởi <b>${esc(a.by)}</b> lúc ${esc(new Date(a.at).toLocaleString("vi-VN", { hour12: false }))}`
-      : `<span class="bad">Chưa duyệt</span> – chứng chỉ in dấu BẢN NHÁP cho đến khi Người kiểm soát duyệt`;
-    const btn = A.can("approve") ? (a ? `<button class="btn" data-act="unapprove">Huỷ duyệt</button>` : `<button class="btn pri" data-act="approve">Duyệt hồ sơ</button>`) : "";
-    return `<div class="hint wide">${st}</div>${btn ? `<div class="btns">${btn}</div>` : ""}`;
+  // Cấp 1 (Kiểm định viên): chỉ XEM Biên bản QTG, không tải; được xuất GCN + Uncer và Gửi duyệt cho cấp 2/3 (yêu cầu NGOC 01/11/2026)
+  const lv1 = () => !A.can("approve");
+  const when = t => esc(new Date(t).toLocaleString("vi-VN", { hour12: false }));
+  function actionsHtml() {
+    const a = rec.approved, sb = rec.submitted;
+    const st = a ? `<span class="stp ok">✓ Đã duyệt</span><span>bởi <b>${esc(a.by)}</b> · ${when(a.at)}</span>`
+      : sb ? `<span class="stp wait">⏳ Chờ duyệt</span><span>${esc(sb.by)} gửi lúc ${when(sb.at)} · chứng chỉ còn dấu BẢN NHÁP</span>`
+      : `<span class="stp no">Chưa duyệt</span><span>Chứng chỉ in dấu BẢN NHÁP cho đến khi Người kiểm soát duyệt</span>`;
+    const rv = A.can("approve") ? (a ? `<button class="btn" data-act="unapprove">Huỷ duyệt</button>` : `<button class="btn pri" data-act="approve">✓ Duyệt hồ sơ</button>`)
+      : (a ? "" : `<button class="btn pri" data-act="submit">${sb ? "Gửi duyệt lại" : "➜ Gửi duyệt"}</button>`);
+    const L = lv1();
+    return `<div class="acts">
+      <div class="agrp"><div class="alab">Hồ sơ</div><div class="arow">
+        <button class="btn pri" data-act="save">💾 Lưu hồ sơ</button><button class="btn" data-act="new">＋ Hồ sơ mới</button></div></div>
+      <div class="agrp"><div class="alab">Duyệt</div><div class="astat">${st}</div>${rv ? `<div class="arow">${rv}</div>` : ""}
+        ${L && !a ? `<div class="hint">Gửi duyệt: đóng gói Chứng chỉ + Bảng Uncer (PDF) và file hồ sơ (.json, kèm ảnh) để chuyển cho Người kiểm soát / Trưởng phòng qua Zalo, email… Người duyệt mở tab Hồ sơ › Nhập JSON.</div>` : ""}</div>
+      <div class="agrp"><div class="alab">Xuất tài liệu</div><div class="agrid">
+        <button class="btn pri" data-pdf="cert">Chứng chỉ <small>2 trang</small></button>
+        <button class="btn" data-pdf="unc">Bảng Uncer <small>QC</small></button>
+        ${L ? `<button class="btn" data-act="viewqtg">Biên bản QTG <small>chỉ xem</small></button>
+        <button class="btn" data-pdf="certunc">GCN + Uncer <small>PDF</small></button>`
+        : `<button class="btn" data-pdf="qtg">Biên bản QTG <small>PDF</small></button>
+        <button class="btn" data-pdf="all">Trọn bộ <small>PDF</small></button>`}
+        <button class="btn wide2" data-act="preview">Xem trước trọn bộ</button></div></div>
+    </div>`;
   }
   function logAct(act) { (rec.log = rec.log || []).push({ at: new Date().toISOString(), by: A.me() ? A.me().name : "", act }); }
   function approve(on) {
@@ -811,12 +862,16 @@
       if (!rec.sig.inspector) { toast("Chưa có tên Kiểm định viên"); return; }
       const m = A.me();
       if (rec.sig.inspector.trim().toLowerCase() === m.name.toLowerCase()) toast("Lưu ý: người duyệt trùng Kiểm định viên");
-      rec.sig.controller = m.name; rec.approved = { by: m.name, role: m.role, at: new Date().toISOString() }; logAct("Duyệt");
+      rec.sig.controller = m.name; rec.approved = { by: m.name, role: m.role, at: new Date().toISOString() }; delete rec.submitted; logAct("Duyệt");
     } else { delete rec.approved; logAct("Huỷ duyệt"); }
     saveRecord(); renderEntry();
   }
   // Mọi chỉnh sửa số liệu sau khi duyệt đều huỷ duyệt
-  function touched() { if (rec.approved) { delete rec.approved; logAct("Sửa sau duyệt – huỷ duyệt"); toast("Đã sửa: hồ sơ cần duyệt lại"); return true; } return false; }
+  function touched() {
+    if (rec.approved) { delete rec.approved; delete rec.submitted; logAct("Sửa sau duyệt – huỷ duyệt"); toast("Đã sửa: hồ sơ cần duyệt lại"); return true; }
+    if (rec.submitted) { delete rec.submitted; logAct("Sửa sau khi gửi duyệt"); toast("Đã sửa: cần Gửi duyệt lại"); }
+    return false;
+  }
   function rememberNames() {
     [rec.sig.inspector, rec.sig.controller].forEach(n => { n = (n || "").trim(); if (n && !names.includes(n)) names.unshift(n); });
     names = names.slice(0, 30); store.set("names", names);
@@ -845,6 +900,11 @@
   function pagesHtml(which) {
     const { c, info } = docInfo();
     if (!c.res) { toast(c.errors[0] || "Chưa đủ số liệu"); return null; }
+    if (which === "certunc") {
+      const P = D2.PAGES[rec.type], u = P ? P.u(rec, c.res, settings, info) : D.uncPage(rec, c.res, settings, info);
+      if (failed(c)) { toast("Không đạt: không xuất chứng chỉ – chỉ gồm Bảng Uncer"); return u; }
+      return (P ? P.c1(rec, c.res, settings, info) + P.c2(rec, c.res, settings, info) : D.certPage1(rec, c.res, settings, info) + D.certPage2(rec, c.res, settings, info)) + u;
+    }
     if (failed(c)) {
       if (which === "cert") { toast("Không đạt: không xuất chứng chỉ (kể cả bản nháp)"); return null; }
       if (which === "all") toast("Không đạt: bộ PDF chỉ gồm Biên bản và bảng Uncer");
@@ -875,9 +935,7 @@
   function fitPreview() { const pv = $(".pv"); if (!pv) return; const s = Math.min(1, (pv.clientWidth - 2) / 794); const inn = $(".pv-in"); inn.style.transform = `scale(${s})`; pv.style.height = (inn.scrollHeight * s) + "px"; }
   window.addEventListener("resize", fitPreview);
 
-  async function makePdf(which, htmlIn, nameIn, outSel) {
-    const html = htmlIn || pagesHtml(which); if (!html) return;
-    const out = $(outSel || "#pdfout"); out.innerHTML = `<p class="mut">Đang tạo PDF…</p>`;
+  async function buildPdf(html) {
     const host = $("#render"); host.innerHTML = html;
     try {
       await Promise.all($$("img", host).map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
@@ -890,13 +948,50 @@
         if (i) pdf.addPage();
         pdf.addImage(cv.toDataURL("image/jpeg", 0.82), "JPEG", 0, 0, 210, 297);
       }
-      const label = { cert: "ChungChi", qtg: "BienBan", unc: "Uncer", all: "HoSo" }[which];
-      const name = nameIn || `${label}_${(rec.certNo || "").replace(/[^\w.-]+/g, "_")}_${(rec.h.tag || "").replace(/[^\w.-]+/g, "_")}.pdf`;
-      lastPdf = { blob: pdf.output("blob"), name };
+      return pdf.output("blob");
+    } finally { host.innerHTML = ""; }
+  }
+  const fileTag = () => `${(rec.certNo || "").replace(/[^\w.-]+/g, "_")}_${(rec.h.tag || "").replace(/[^\w.-]+/g, "_")}`;
+  async function makePdf(which, htmlIn, nameIn, outSel) {
+    if (!htmlIn && lv1()) { if (which === "qtg") { renderPreview("qtg"); return; } if (which === "all") which = "certunc"; }
+    const html = htmlIn || pagesHtml(which); if (!html) return;
+    const out = $(outSel || "#pdfout"); out.innerHTML = `<p class="mut">Đang tạo PDF…</p>`;
+    try {
+      const label = { cert: "ChungChi", qtg: "BienBan", unc: "Uncer", all: "HoSo", certunc: "GCN_Uncer" }[which];
+      const name = nameIn || `${label}_${fileTag()}.pdf`;
+      lastPdf = { blob: await buildPdf(html), name };
       out.innerHTML = `<div class="pdfready"><b>${esc(name)}</b><span class="mut">${(lastPdf.blob.size / 1024).toFixed(0)} KB</span>
         <div class="btns"><button class="btn pri" data-act="share" data-r="share">Chia sẻ / Lưu vào Tệp</button><button class="btn" data-act="download" data-r="download">Mở / Tải xuống</button></div></div>`;
     } catch (e) { out.innerHTML = `<p class="bad">Không tạo được PDF: ${esc(e.message)}</p>`; }
-    host.innerHTML = "";
+  }
+  // Gửi duyệt: đánh dấu Chờ duyệt, đóng gói GCN + Uncer (PDF) + hồ sơ JSON (kèm ảnh) để chuyển cho cấp 2/3
+  async function submitReview() {
+    if (!rec.h.tag) { toast("Nhập Tag trước khi gửi duyệt"); return; }
+    const c = compute(); if (!c.res) { toast(c.errors[0] || "Chưa đủ số liệu"); return; }
+    if (!rec.sig.inspector) { toast("Chưa có tên Kiểm định viên"); return; }
+    const html = pagesHtml("certunc"); if (!html) return;
+    const m = A.me(); rec.submitted = { by: m ? m.name : "", at: new Date().toISOString() }; logAct("Gửi duyệt"); saveRecord(true); persistCurrent();
+    const out = $("#pdfout"); out.innerHTML = `<p class="mut">Đang đóng gói hồ sơ gửi duyệt…</p>`;
+    try {
+      const pdf = new File([await buildPdf(html)], `GuiDuyet_${fileTag()}.pdf`, { type: "application/pdf" });
+      const all = await P.all().catch(() => ({})), photos = {};
+      Object.keys(all).forEach(k => { if (k.startsWith(rec.id + ":")) photos[k] = all[k]; });
+      const js = new File([JSON.stringify({ app: "lab-pvgas-services", kind: "review", records: [rec], photos }, null, 1)], `GuiDuyet_${fileTag()}.json`, { type: "application/json" });
+      renderEntry();
+      const o = $("#pdfout");
+      o.innerHTML = `<div class="pdfready"><b>Đã đánh dấu Chờ duyệt</b><span class="mut">${esc(pdf.name)} (${(pdf.size / 1024).toFixed(0)} KB) + ${esc(js.name)}</span>
+        <div class="btns"><button class="btn pri" data-act="sendpkg">Chuyển cho người duyệt</button></div></div>`;
+      lastPkg = [pdf, js];
+      sendPkg();
+    } catch (e) { out.innerHTML = `<p class="bad">Không đóng gói được: ${esc(e.message)}</p>`; }
+  }
+  let lastPkg = null;
+  async function sendPkg() {
+    if (!lastPkg) return;
+    if (navigator.canShare && navigator.canShare({ files: lastPkg })) {
+      try { await navigator.share({ files: lastPkg, title: "Gửi duyệt " + (rec.certNo || rec.h.tag) }); return; } catch (e) { if (e.name === "AbortError") return; }
+    }
+    lastPkg.forEach(f => { const url = URL.createObjectURL(f); const a = document.createElement("a"); a.href = url; a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); });
   }
   async function sharePdf() {
     if (!lastPdf) return;
@@ -919,12 +1014,18 @@
     const q = ($("#rq") && $("#rq").value || "").toLowerCase();
     const m = A.me();
     const list = records.filter(r => (!mineOnly || (m && r.owner && r.owner.id === m.id)) && (!q || [r.h.tag, r.certNo, r.h.model, r.h.location, r.h.locFree, r.owner ? r.owner.name : ""].join(" ").toLowerCase().includes(q)));
-    $("#v-records").innerHTML = `<div class="card"><h2>Hồ sơ đã lưu <small>(${records.length})</small></h2>
+    // Hàng chờ duyệt (cấp 2/3): hồ sơ cấp 1 đã Gửi duyệt nhảy lên đầu tab Hồ sơ (yêu cầu NGOC 01/11/2026)
+    const pend = A.can("approve") ? records.filter(r => r.submitted && !r.approved) : [];
+    const queue = pend.length ? `<div class="card hl"><h2>⏳ Chờ duyệt <small>(${pend.length})</small></h2>
+      ${pend.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""}<br>
+        <small class="mut">${esc(r.certNo)} · ${esc(r.submitted.by)} gửi ${esc(new Date(r.submitted.at).toLocaleString("vi-VN", { hour12: false }))}</small></div>
+        <div class="ra"><button class="btn sm pri" data-r="open" data-id="${r.id}">Mở để duyệt</button></div></div>`).join("")}</div>` : "";
+    $("#v-records").innerHTML = queue + `<div class="card"><h2>Hồ sơ đã lưu <small>(${records.length})</small></h2>
       <input id="rq" placeholder="Tìm tag, số chứng chỉ, model, người nhập…" value="${esc(q)}">
       <div class="btns"><button class="btn sm${mineOnly ? "" : " pri"}" data-r="all">Tất cả</button><button class="btn sm${mineOnly ? " pri" : ""}" data-r="mine">Hồ sơ của tôi</button></div>
       <div class="btns"><button class="btn pri" data-r="qcPT">Bảng kiểm tra PT (QC)</button><button class="btn pri" data-r="qcPS">Bảng kiểm tra PS (QC)</button></div><div id="qcout"></div>
       <div class="btns"><button class="btn" data-r="csv">Xuất danh mục CSV</button><button class="btn" data-r="backup">Sao lưu JSON</button><label class="btn">Nhập JSON<input type="file" id="imp" accept=".json,application/json" hidden></label></div>
-      ${list.length ? folders(list, r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} <span class="${r.approved ? "ok" : "mut"}">${r.approved ? "Đã duyệt" : "Chưa duyệt"}</span><br>
+      ${list.length ? folders(list, r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} <span class="${r.approved ? "ok" : r.submitted ? "warn" : "mut"}">${r.approved ? "Đã duyệt" : r.submitted ? "Chờ duyệt" : "Chưa duyệt"}</span><br>
         <small class="mut">${esc(r.certNo)} · ${esc(r.h.calDate)} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)} · U=${esc(r.summary ? r.summary.U : "—")} · Người nhập: ${esc(r.owner ? r.owner.name : "—")}${(r.photos || []).some(x => x.has) ? ` · 📷 ${(r.photos || []).filter(x => x.has).length}` : ""}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở</button><button class="btn sm" data-r="dup" data-id="${r.id}">Nhân bản</button>${A.can("deleteRecord") ? `<button class="btn sm" data-r="del" data-id="${r.id}">Xoá</button>` : ""}</div></div>`) : `<p class="mut">Chưa có hồ sơ.</p>`}</div>`;
     const imp = $("#imp"); if (imp) imp.onchange = importJson;
@@ -1000,8 +1101,15 @@
     const f = e.target.files[0]; if (!f) return;
     f.text().then(t => {
       const d = JSON.parse(t); let n = 0;
-      (d.records || []).forEach(r => { if (!records.some(x => x.id === r.id)) { records.push(normalize(r)); n++; Object.keys(d.photos || {}).forEach(k => { if (k.startsWith(r.id + ":")) P.put(k, d.photos[k]).catch(() => { }); }); } });
-      store.set("records", records); renderRecords(); toast(`Đã nhập ${n} hồ sơ`);
+      // Hồ sơ mới: thêm; hồ sơ đã có (cùng id): thay bằng bản mới hơn – để Gửi duyệt / trả kết quả duyệt qua lại giữa các máy
+      let u = 0;
+      (d.records || []).forEach(r => {
+        const i = records.findIndex(x => x.id === r.id);
+        if (i >= 0 && !((r.updated || "") > (records[i].updated || ""))) return;
+        if (i >= 0) { records[i] = normalize(r); u++; } else { records.push(normalize(r)); n++; }
+        Object.keys(d.photos || {}).forEach(k => { if (k.startsWith(r.id + ":")) P.put(k, d.photos[k]).catch(() => { }); });
+      });
+      store.set("records", records); renderRecords(); toast(`Đã nhập ${n} hồ sơ mới${u ? `, cập nhật ${u} hồ sơ` : ""}`);
     }).catch(() => toast("File không hợp lệ"));
   }
 
@@ -1129,6 +1237,7 @@
     $$("main > section").forEach(s => s.hidden = s.id !== "v-" + v);
     $$("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
     VIEWS[v](); window.scrollTo(0, 0);
+    const wd = $("#wdock"); if (wd && v !== "entry") { wd.hidden = true; document.body.classList.remove("hasdock"); }
   }
   document.addEventListener("DOMContentLoaded", () => {
     $("nav.tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) go(b.dataset.v); });
