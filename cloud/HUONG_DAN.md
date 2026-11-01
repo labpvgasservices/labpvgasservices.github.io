@@ -11,4 +11,4 @@ Ghi chú
 - App vẫn chạy offline; có mạng lại thì tự đồng bộ (mỗi phút, khi mở lại app, và ngay khi máy khác thay đổi).
 - Hai người sửa cùng một hồ sơ: bản lưu sau cùng thắng.
 - Số GCN tự động tính trên máy: nên đồng bộ (có mạng) trước khi tạo hồ sơ mới để không trùng số.
-- Gói miễn phí: 500 MB database, 1 GB ảnh; dự án bị tạm dừng nếu 7 ngày không ai dùng (bấm Restore trong trang Supabase).
+- Gói miễn phí (theo hiểu biết của em, cần kiểm tra lại trang Pricing của Supabase): khoảng 500 MB database, 1 GB ảnh; dự án có thể bị tạm dừng nếu 7 ngày không ai dùng (bấm Restore trong trang Supabase).
