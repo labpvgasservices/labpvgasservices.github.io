@@ -1016,10 +1016,13 @@
     const list = records.filter(r => (!mineOnly || (m && r.owner && r.owner.id === m.id)) && (!q || [r.h.tag, r.certNo, r.h.model, r.h.location, r.h.locFree, r.owner ? r.owner.name : ""].join(" ").toLowerCase().includes(q)));
     // Hàng chờ duyệt (cấp 2/3): hồ sơ cấp 1 đã Gửi duyệt nhảy lên đầu tab Hồ sơ (yêu cầu NGOC 01/11/2026)
     const pend = A.can("approve") ? records.filter(r => r.submitted && !r.approved) : [];
+    const byF = new Map(); pend.forEach(r => { const k = folderKey(r); if (!byF.has(k)) byF.set(k, []); byF.get(k).push(r); });
     const queue = pend.length ? `<div class="card hl"><h2>⏳ Chờ duyệt <small>(${pend.length})</small></h2>
-      ${pend.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""}<br>
+      ${[...byF].map(([k, a]) => `<div class="qf"><b>📁 ${esc(a[0].owner ? a[0].owner.name : "Chưa rõ người nhập")}</b><small class="mut">${a.length} hồ sơ chờ duyệt</small>
+        <button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${a.length})</button></div>`).join("")}
+      <details class="qd"><summary>Xem từng hồ sơ</summary>${pend.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""}<br>
         <small class="mut">${esc(r.certNo)} · ${esc(r.submitted.by)} gửi ${esc(new Date(r.submitted.at).toLocaleString("vi-VN", { hour12: false }))}</small></div>
-        <div class="ra"><button class="btn sm pri" data-r="open" data-id="${r.id}">Mở để duyệt</button></div></div>`).join("")}</div>` : "";
+        <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở xem</button></div></div>`).join("")}</details></div>` : "";
     $("#v-records").innerHTML = queue + `<div class="card"><h2>Hồ sơ đã lưu <small>(${records.length})</small></h2>
       <input id="rq" placeholder="Tìm tag, số chứng chỉ, model, người nhập…" value="${esc(q)}">
       <div class="btns"><button class="btn sm${mineOnly ? "" : " pri"}" data-r="all">Tất cả</button><button class="btn sm${mineOnly ? " pri" : ""}" data-r="mine">Hồ sơ của tôi</button></div>
@@ -1043,7 +1046,7 @@
     if (!openFolders) openFolders = new Set(m ? [m.id] : []);
     return keys.map(k => { const f = G.get(k), n = f.items.length, ok = f.items.filter(r => r.approved).length;
       return `<details class="fold" data-f="${esc(k)}"${openFolders.has(k) || keys.length === 1 ? " open" : ""}><summary>📁 <b>${esc(f.name)}</b>${m && k === m.id ? " <span class=\"tag\">của tôi</span>" : ""} <small class="mut">${n} hồ sơ · ${ok} đã duyệt</small></summary>
-        <div class="btns"><button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button><button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button></div>
+        <div class="btns">${A.can("approve") && f.items.some(r => r.submitted && !r.approved) ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${f.items.filter(r => r.submitted && !r.approved).length})</button>` : ""}<button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button><button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button></div>
         ${f.items.map(row).join("")}</details>`; }).join("");
   }
   function onRecordsClick(e) {
@@ -1074,6 +1077,7 @@
       makePdf("qc", D.qcPages(type, items, settings), `BangKiemTra_${type}_${todayISO()}.pdf`, "#qcout");
       return;
     }
+    if (b.dataset.r === "apf") { approveFolder(b); return; }
     if (b.dataset.r === "share") { sharePdf(); return; }
     if (b.dataset.r === "download") { downloadPdf(); return; }
     // backupf / csvf: chỉ hồ sơ trong thư mục của một người, tên file mang tên người đó
@@ -1091,6 +1095,25 @@
       const csv = "﻿" + [head].concat(rows).map(a => a.map(v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`).join(",")).join("\r\n");
       saveFile(new Blob([csv], { type: "text/csv" }), `DanhMuc${fname}_${todayISO()}.csv`);
     }
+  }
+  // Duyệt cả gói (yêu cầu NGOC 01/11/2026): cấp 2/3 duyệt một lần mọi hồ sơ "Chờ duyệt" trong thư mục của một người.
+  // Mỗi hồ sơ vẫn qua đủ kiểm tra như duyệt lẻ; hồ sơ thiếu số liệu bị bỏ qua và báo tên. Bấm 2 lần để xác nhận.
+  function approveFolder(b) {
+    if (!A.can("approve")) return;
+    const list = records.filter(r => folderKey(r) === b.dataset.f && r.submitted && !r.approved);
+    if (!list.length) return;
+    if (!b.dataset.armed) { b.dataset.armed = 1; const t = b.textContent; b.textContent = `Xác nhận duyệt ${list.length} hồ sơ?`; b.classList.add("danger"); setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = t; b.classList.remove("danger"); } }, 4000); return; }
+    const m = A.me(), now = new Date().toISOString(), skip = [];
+    let n = 0;
+    list.forEach(r => {
+      const c = compute(r);
+      if (!r.h.tag || !c.res || !r.sig.inspector) { skip.push(r.h.tag || r.certNo || "?"); return; }
+      r.sig.controller = m.name; r.approved = { by: m.name, role: m.role, at: now, batch: true }; delete r.submitted;
+      (r.log = r.log || []).push({ at: now, by: m.name, act: "Duyệt (cả gói)" }); r.updated = now; n++;
+      if (rec && rec.id === r.id) rec = normalize(clone(r));
+    });
+    store.set("records", records); persistCurrent(); renderRecords();
+    toast(`Đã duyệt ${n} hồ sơ${skip.length ? ` · bỏ qua ${skip.length} (thiếu số liệu): ${skip.join(", ")}` : ""}`);
   }
   async function saveFile(blob, name) {
     const file = new File([blob], name, { type: blob.type });

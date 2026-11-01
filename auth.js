@@ -8,7 +8,7 @@
   "use strict";
   const ROLES = { 1: "Kiểm định viên", 2: "Người kiểm soát", 3: "Trưởng phòng / Quản trị" };
   const PERM = { approve: 2, deleteRecord: 2, editStands: 3, settings: 3, certNo: 3, users: 3 };
-  const IDLE_MIN = 30;
+  const IDLE_MIN = 12 * 60;   // NGOC 01/11/2026: tự khoá sau 12 giờ không thao tác (trước đây 30 phút)
   const ls = {
     get(k, d) { try { const v = localStorage.getItem("lab." + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem("lab." + k, JSON.stringify(v)); } catch (e) { } }
@@ -102,7 +102,7 @@
     const mine = `<div class="card"><h2>Tài khoản</h2><p>Đang đăng nhập: <b>${esc(me.name)}</b> – ${ROLES[me.role]}.</p>
       <div class="grid"><label class="f"><span>PIN mới (4–8 số)</span><input id="u_mypin" type="password" inputmode="numeric" autocomplete="new-password"></label></div>
       <div class="btns"><button class="btn" data-u="mypin">Đổi PIN của tôi</button><button class="btn" data-u="logout">Đăng xuất</button></div>
-      <p class="hint">Quyền: cấp 1 nhập liệu và lưu hồ sơ; cấp 2 thêm duyệt và xoá hồ sơ; cấp 3 thêm thư viện chuẩn, cài đặt, số chứng chỉ, người dùng. Khoá tự động sau ${IDLE_MIN} phút không thao tác.
+      <p class="hint">Quyền: cấp 1 nhập liệu và lưu hồ sơ; cấp 2 thêm duyệt và xoá hồ sơ; cấp 3 thêm thư viện chuẩn, cài đặt, số chứng chỉ, người dùng. Khoá tự động sau ${IDLE_MIN / 60} giờ không thao tác.
       Đây là khoá trên máy này (danh sách người dùng lưu trong trình duyệt), chưa phải bảo mật máy chủ.</p></div>`;
     if (!can("users")) return mine;
     const rows = users.map(u => `<div class="rec"><div><b>${esc(u.name)}</b> <span class="tag">cấp ${u.role}</span><br><small class="mut">${ROLES[u.role]}</small></div>
@@ -158,7 +158,7 @@
     const id = ss.get(), u = id && users.find(x => x.id === id);
     if (u) login(u); else if (!users.length) showSetup(); else showLogin();
     ["click", "keydown", "touchstart", "input"].forEach(ev => document.addEventListener(ev, () => { lastAct = Date.now(); }, true));
-    setInterval(() => { if (me && Date.now() - lastAct > IDLE_MIN * 60000) logout(`Đã khoá sau ${IDLE_MIN} phút không thao tác`); }, 30000);
+    setInterval(() => { if (me && Date.now() - lastAct > IDLE_MIN * 60000) logout(`Đã khoá sau ${IDLE_MIN / 60} giờ không thao tác`); }, 30000);
   }
 
   window.LabAuth = { ROLES, start, can, me: () => me, accountCard, onAccountClick, onAccountChange };
