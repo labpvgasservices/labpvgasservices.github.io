@@ -89,16 +89,75 @@
     const g = document.getElementById("auth"); if (g) g.hidden = true; document.body.classList.remove("locked");
     chip(); if (onReady) onReady(me);
   }
-  function logout(msg) { me = null; ss.set(null); chip(); showLogin(msg); }
+  function logout(msg) {
+    me = null; ss.set(null); chip();
+    if (C && C.enabled) { C.signOut().finally(() => showCloudLogin(msg)); return; }
+    showLogin(msg);
+  }
+
+  /* ---------- đăng nhập máy chủ (Supabase) – dùng khi cloud.js đã có CONFIG ---------- */
+  const C = window.LabCloud;
+  function showCloudLogin(msg, signup) {
+    const g = gate(signup
+      ? `<p>Tạo tài khoản mới. Người đăng ký đầu tiên là Trưởng phòng / Quản trị; người sau chờ Trưởng phòng cấp quyền trong Cài đặt › Người dùng.</p>
+        <label>Họ tên<input id="cn" autocomplete="name"></label><label>Email<input id="ce" type="email" autocomplete="email"></label>
+        <label>Mật khẩu (ít nhất 8 ký tự)<input id="cp" type="password" autocomplete="new-password"></label>
+        <button class="btn pri" id="cgo">Tạo tài khoản</button><p class="hint"><a href="#" id="csw">Đã có tài khoản? Đăng nhập</a></p>`
+      : `${msg ? `<p class="mut">${esc(msg)}</p>` : ""}<label>Email<input id="ce" type="email" autocomplete="email" value="${esc(ls.get("lastEmail", ""))}"></label>
+        <label>Mật khẩu<input id="cp" type="password" autocomplete="current-password"></label>
+        <button class="btn pri" id="cgo">Đăng nhập</button>
+        <p class="hint">Dữ liệu đồng bộ giữa điện thoại và máy tính qua máy chủ. <a href="#" id="csw">Tạo tài khoản mới</a></p>`);
+    const val = id => (g.querySelector("#" + id) || {}).value || "";
+    g.querySelector("#csw").onclick = e => { e.preventDefault(); showCloudLogin("", !signup); };
+    const go = async () => {
+      err(""); const b = g.querySelector("#cgo"); b.disabled = true;
+      try {
+        if (signup) {
+          if (!val("cn").trim()) throw new Error("Nhập họ tên");
+          if (val("cp").length < 8) throw new Error("Mật khẩu ít nhất 8 ký tự");
+          const p = await C.signUp(val("ce"), val("cp"), val("cn"));
+          if (!p) { showCloudLogin("Đã tạo tài khoản. Mở email xác nhận rồi đăng nhập."); return; }
+          ls.set("lastEmail", val("ce").trim()); cloudEnter(p);
+        } else {
+          const p = await C.signIn(val("ce"), val("cp")); ls.set("lastEmail", val("ce").trim()); cloudEnter(p);
+        }
+      } catch (x) { err(x.message || String(x)); b.disabled = false; }
+    };
+    g.querySelector("#cgo").onclick = go;
+    g.querySelector("#cp").onkeydown = e => { if (e.key === "Enter") go(); };
+  }
+  function cloudEnter(p) {
+    if (!p) return showCloudLogin();
+    if (!(p.role >= 1)) {
+      const g = gate(`<p>Tài khoản <b>${esc(p.email || "")}</b> đã tạo, đang chờ Trưởng phòng cấp quyền.</p>
+        <div class="btns"><button class="btn pri" id="crt">Kiểm tra lại</button><button class="btn" id="cso">Đăng xuất</button></div>`);
+      g.querySelector("#crt").onclick = async () => cloudEnter(await C.currentProfile());
+      g.querySelector("#cso").onclick = () => C.signOut().finally(() => showCloudLogin());
+      return;
+    }
+    login({ id: p.id, name: p.name || p.email, role: p.role, email: p.email, cloud: true });
+    C.start(p);
+  }
   function chip() {
     const h = document.querySelector("header.top"); if (!h) return;
     let c = h.querySelector(".me"); if (!c) { c = document.createElement("button"); c.className = "me"; c.onclick = () => logout("Đã đăng xuất"); h.appendChild(c); }
     c.hidden = !me; if (me) c.innerHTML = `${esc(me.name)} · cấp ${me.role} <span>Đăng xuất</span>`;
+    let st = h.querySelector("#cloudst"); if (!st && C && C.enabled) { st = document.createElement("span"); st.id = "cloudst"; st.className = "cloudst"; st.hidden = true; st.onclick = () => C.sync(); h.appendChild(st); }
+    if (st) { if (me) C.paint(st); else st.hidden = true; }
   }
 
   /* ---------- quản lý người dùng (tab Cài đặt) ---------- */
   function accountCard() {
     if (!me) return "";
+    if (me.cloud) {
+      const mineC = `<div class="card"><h2>Tài khoản</h2><p>Đang đăng nhập: <b>${esc(me.name)}</b> (${esc(me.email || "")}) – ${ROLES[me.role]}.</p>
+        <div class="grid"><label class="f"><span>Mật khẩu mới (ít nhất 8 ký tự)</span><input id="u_mypw" type="password" autocomplete="new-password"></label></div>
+        <div class="btns"><button class="btn" data-u="mypw">Đổi mật khẩu</button><button class="btn" data-u="sync">Đồng bộ ngay</button><button class="btn" data-u="logout">Đăng xuất</button></div>
+        <p class="hint">Dữ liệu đồng bộ tự động qua máy chủ (khi có mạng). Khoá tự động sau ${IDLE_MIN / 60} giờ không thao tác.</p></div>`;
+      if (!can("users")) return mineC;
+      setTimeout(loadCloudUsers, 0);
+      return mineC + `<div class="card"><h2>Người dùng</h2><p class="hint">Người mới tự tạo tài khoản ở màn hình đăng nhập, rồi Trưởng phòng cấp quyền ở đây. Cấp 0 = khoá / chờ duyệt.</p><div id="cusers"><p class="mut">Đang tải…</p></div></div>`;
+    }
     const mine = `<div class="card"><h2>Tài khoản</h2><p>Đang đăng nhập: <b>${esc(me.name)}</b> – ${ROLES[me.role]}.</p>
       <div class="grid"><label class="f"><span>PIN mới (4–8 số)</span><input id="u_mypin" type="password" inputmode="numeric" autocomplete="new-password"></label></div>
       <div class="btns"><button class="btn" data-u="mypin">Đổi PIN của tôi</button><button class="btn" data-u="logout">Đăng xuất</button></div>
@@ -115,11 +174,21 @@
       <div class="btns"><button class="btn pri" data-u="add">Thêm người dùng</button><button class="btn" data-u="export">Xuất danh sách (JSON)</button><label class="btn">Nhập danh sách<input type="file" id="u_imp" accept=".json,application/json" hidden></label></div>
       <p class="hint">Danh sách người dùng chỉ nằm trên máy này. Muốn dùng cùng tài khoản trên máy khác: Xuất danh sách ở đây rồi Nhập ở máy kia (PIN đã băm, không lộ số).</p>${rows}</div>`;
   }
+  async function loadCloudUsers() {
+    const el = document.getElementById("cusers"); if (!el) return;
+    try {
+      const list = await C.listUsers();
+      el.innerHTML = list.map(u => `<div class="rec"><div><b>${esc(u.name || "(chưa có tên)")}</b> <span class="tag">cấp ${u.role}</span><br><small class="mut">${esc(u.email || "")}</small></div>
+        <div class="ra"><select data-crole="${u.id}"${u.id === me.id ? " disabled" : ""}>${[0, 1, 2, 3].map(r => `<option value="${r}"${u.role === r ? " selected" : ""}>${r === 0 ? "0 – Khoá / chờ duyệt" : `${r} – ${ROLES[r]}`}</option>`).join("")}</select></div></div>`).join("");
+    } catch (x) { el.innerHTML = `<p class="bad">Không tải được danh sách: ${esc(x.message || x)}</p>`; }
+  }
   async function onAccountClick(e, rerender, toast) {
     const b = e.target.closest("button[data-u]"); if (!b) return false;
     const a = b.dataset.u, val = id => (document.getElementById(id) || {}).value || "";
     try {
       if (a === "logout") { logout("Đã đăng xuất"); return true; }
+      if (a === "sync") { C.sync(); toast("Đang đồng bộ…"); return true; }
+      if (a === "mypw") { const p = val("u_mypw"); if (p.length < 8) throw new Error("Mật khẩu ít nhất 8 ký tự"); await C.changePassword(p); toast("Đã đổi mật khẩu"); rerender(); return true; }
       if (a === "mypin") { await setPin(me.id, val("u_mypin")); toast("Đã đổi PIN"); rerender(); }
       if (!can("users")) return true;
       if (a === "add") { const u = await addUser(val("u_name"), val("u_role"), val("u_pin")); toast("Đã thêm " + u.name); rerender(); }
@@ -134,6 +203,10 @@
   }
   function onAccountChange(e, rerender, toast) {
     const t = e.target;
+    if (t.dataset.crole && can("users")) {
+      C.setRole(t.dataset.crole, Number(t.value)).then(() => toast("Đã đổi quyền")).catch(x => toast(x.message)).finally(loadCloudUsers);
+      return true;
+    }
     if (t.dataset.urole && can("users")) {
       const u = users.find(x => x.id === t.dataset.urole), r = Number(t.value);
       if (u.role === 3 && r < 3 && admins() <= 1) { toast("Phải còn ít nhất 1 Trưởng phòng / Quản trị"); rerender(); return true; }
@@ -155,8 +228,11 @@
 
   function start(cb) {
     onReady = cb;
-    const id = ss.get(), u = id && users.find(x => x.id === id);
-    if (u) login(u); else if (!users.length) showSetup(); else showLogin();
+    if (C && C.enabled) { C.currentProfile().then(p => p ? cloudEnter(p) : showCloudLogin()).catch(() => showCloudLogin()); }
+    else {
+      const id = ss.get(), u = id && users.find(x => x.id === id);
+      if (u) login(u); else if (!users.length) showSetup(); else showLogin();
+    }
     ["click", "keydown", "touchstart", "input"].forEach(ev => document.addEventListener(ev, () => { lastAct = Date.now(); }, true));
     setInterval(() => { if (me && Date.now() - lastAct > IDLE_MIN * 60000) logout(`Đã khoá sau ${IDLE_MIN / 60} giờ không thao tác`); }, 30000);
   }

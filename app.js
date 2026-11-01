@@ -29,8 +29,13 @@
   /* ---------- storage (never throws) ---------- */
   const store = {
     get(k, def) { try { const v = localStorage.getItem("lab." + k); return v ? JSON.parse(v) : def; } catch (e) { return def; } },
-    set(k, v) { try { localStorage.setItem("lab." + k, JSON.stringify(v)); return true; } catch (e) { toast("Không lưu được vào bộ nhớ máy"); return false; } }
+    set(k, v) {
+      try { localStorage.setItem("lab." + k, JSON.stringify(v)); } catch (e) { toast("Không lưu được vào bộ nhớ máy"); return false; }
+      if (!fromCloud && window.LabCloud && LabCloud.enabled && (k === "records" || k === "stands" || k === "settings")) LabCloud.schedule();   // đồng bộ máy chủ
+      return true;
+    }
   };
+  let fromCloud = false;
   function deepMerge(base, over) { const o = clone(base); for (const k in over || {}) o[k] = (over[k] && typeof over[k] === "object" && !Array.isArray(over[k]) && base[k]) ? deepMerge(base[k], over[k]) : over[k]; return o; }
   // v2 (mẫu 2026): bỏ các thiết lập tiêu đề/chân trang cũ, giữ tên người ký và tuỳ chọn của người dùng
   function loadSettings() {
@@ -1065,7 +1070,7 @@
       rec.certNo = autoCertNo(); rec.certAuto = true; persistCurrent(); go("entry"); toast("Đã nhân bản – nhập tag và số đọc mới");
     }
     if (b.dataset.r === "del" && r && A.can("deleteRecord")) {
-      if (b.dataset.armed) { P.delRecord(r.id).catch(() => { }); records = records.filter(x => x.id !== r.id); store.set("records", records); renderRecords(); toast("Đã xoá"); }
+      if (b.dataset.armed) { P.delRecord(r.id).catch(() => { }); records = records.filter(x => x.id !== r.id); if (window.LabCloud) LabCloud.deleted(r.id); store.set("records", records); renderRecords(); toast("Đã xoá"); }
       else { b.dataset.armed = 1; b.textContent = "Xoá thật?"; b.classList.add("danger"); setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = "Xoá"; b.classList.remove("danger"); } }, 3000); }
     }
     if (b.dataset.r === "qcPT" || b.dataset.r === "qcPS") {
@@ -1256,7 +1261,9 @@
   }
   function renderRefs() { const m = A.me(); $("#v-refs").innerHTML = window.LabRefs.render(settings, m ? m.role : 0); }
   const VIEWS = { entry: renderEntry, records: renderRecords, stands: renderStands, formulas: renderFormulas, refs: renderRefs, settings: renderSettings };
+  let curView = "entry";
   function go(v) {
+    curView = v;
     $$("main > section").forEach(s => s.hidden = s.id !== "v-" + v);
     $$("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
     VIEWS[v](); window.scrollTo(0, 0);
@@ -1279,6 +1286,18 @@
     $("#v-settings").addEventListener("input", onSettingsInput);
     $("#v-settings").addEventListener("change", onSettingsInput);
     $("#v-settings").addEventListener("click", onSettingsClick);
+    // Đồng bộ máy chủ (cloud.js): app trao quyền đọc/ghi dữ liệu cục bộ; thay đổi từ máy khác vẽ lại màn hình đang xem
+    if (window.LabCloud) LabCloud.attach({
+      getRecords: () => records, normalize, photos: P, seedVersion: SEED.version,
+      setRecords: list => { records = list; fromCloud = true; store.set("records", records); fromCloud = false; },
+      getShared: k => k === "stands" ? stands : settings,
+      setShared: (k, v) => { fromCloud = true; if (k === "stands") { stands = v; store.set("stands", stands); } else { settings = deepMerge(SEED.settings, v); settings.ver = SEED.settings.ver; store.set("settings", settings); } fromCloud = false; },
+      onRemote: () => {
+        if (curView !== "entry") { VIEWS[curView](); return; }
+        const r = rec.saved && records.find(x => x.id === rec.id);
+        if (r && (r.updated || "") > (rec.updated || "")) { rec = normalize(clone(r)); persistCurrent(); renderEntry(); toast("Hồ sơ vừa được cập nhật từ máy khác"); }
+      }
+    });
     A.start(m => { if (!rec.saved) { rec.owner = { id: m.id, name: m.name }; rec.sig.inspector = m.name; } go("entry"); });   // an unsaved draft belongs to whoever is logged in   // nothing renders before PIN login
     // New version: check sw.js on every open, and reload once when the new worker takes over (unsaved drafts are kept in lab.current)
     if ("serviceWorker" in navigator && location.protocol === "https:") {
