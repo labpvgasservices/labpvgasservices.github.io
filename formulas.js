@@ -13,7 +13,8 @@
   const h = t => `<h4>${t}</h4>`;
   const p = t => `<p>${t}</p>`;
   const ul = a => `<ul>${a.map(x => `<li>${x}</li>`).join("")}</ul>`;
-  const diff = a => `<div class="fdiff"><b>Khác file Excel / cần lưu ý</b>${ul(a)}</div>`;
+  // Khung "Khác file Excel / cần lưu ý" ẩn khỏi giao diện theo yêu cầu NGOC 01/11/2026 – nội dung vẫn giữ trong mã để tra cứu
+  const diff = a => "";
   const T = s => R`\text{${s}}`;
   const STD = "Chuẩn quy đổi sang đơn vị thiết bị theo bảng Stand!A4:K14 (1 bar = 100 kPa = 14,503773773 psi = 1,019716213 kg/cm² = 1000 mbar = 401,47 inH₂O = 10197,162 mmH₂O).";
   const HEAT = (name = R`u_{\text{lò}}`) => f(R`${name}=\sqrt{\left(\frac{\delta_{\text{ổn định}}}{\sqrt3}\right)^2+\left(\frac{\delta_{\text{radial}}}{\sqrt3}\right)^2+\left(\frac{\delta_{\text{axial}}}{\sqrt3}\right)^2}`, "Stand!Stability / Radial / Axial – phân bố chữ nhật");
@@ -158,8 +159,7 @@
     if (cache) return cache;
     const nav = SECTIONS.map(s => `<button class="chip fchip" data-fj="${s.id}"><b>${s.id}</b></button>`).join("");
     return cache = `<div class="card"><h2>Công thức tính <small>(9 bộ)</small></h2>
-      <p class="hint">Viết lại đúng công thức app đang chạy, đã đối chiếu với các file Uncer Excel của anh Khai. Ô Excel ghi dưới mỗi công thức để Quality Checker dò lại.
-      Khung "Khác file Excel" liệt kê mọi chỗ app không làm giống hệt file. Muốn xem số cụ thể của một hồ sơ: mở hồ sơ, bấm "Bảng Uncer (QC)". Công thức dài thì vuốt ngang.</p>
+      <p class="hint">Viết lại đúng công thức app đang chạy, đã đối chiếu với các file Uncer Excel của anh Khai. Ô Excel ghi dưới mỗi công thức để Quality Checker dò lại. Muốn xem số cụ thể của một hồ sơ: mở hồ sơ, bấm "Bảng Uncer (QC)". Công thức dài thì vuốt ngang.</p>
       <div class="chips fnav">${nav}</div>
       <details class="fsec" id="f-common"><summary><b>Chung cho mọi bộ</b></summary>
         ${f(R`\bar x=\frac{1}{n}\sum_{i=1}^{n}x_i,\qquad s=\sqrt{\frac{\sum_{i=1}^{n}(x_i-\bar x)^2}{n-1}}`, "AVERAGE, STDEV")}
