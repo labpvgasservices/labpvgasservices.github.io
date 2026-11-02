@@ -115,10 +115,21 @@
   const num = v => (v === "" || v == null) ? NaN : Number(String(v).replace(",", "."));
   const standById = id => stands.find(s => s.id === id);
   function locInfo(code) { const l = SEED.locations.find(x => x[0] === code) || [code, code, "", "", ""]; return { code: l[0], locVN: l[1], locEN: l[2], custVN: l[3], custEN: l[4] }; }
+  // Khách hàng (Customer) gom theo tên tiếng Anh: cùng 1 công ty có thể ghi tiếng Việt khác nhau trong sheet Location.
+  // Tên hiển thị = cách ghi tiếng Việt xuất hiện nhiều nhất. GCN vẫn in đúng chữ của từng dòng địa điểm.
+  const CUSTS = (() => {
+    const vn2en = {}; SEED.locations.forEach(l => { if (l[3] && l[4]) vn2en[l[3]] = l[4].trim(); });
+    const key = l => (l[4] || "").trim() || vn2en[l[3]] || l[3] || "";
+    const g = new Map();
+    SEED.locations.forEach(l => { const k = key(l); if (!k) return; if (!g.has(k)) g.set(k, { key: k, names: {}, locs: [] }); const c = g.get(k); c.names[l[3]] = (c.names[l[3]] || 0) + 1; if (!l[5]) c.locs.push(l); });
+    const out = [...g.values()].map(c => ({ key: c.key, name: Object.entries(c.names).sort((a, b) => b[1] - a[1])[0][0], locs: c.locs }));
+    out.keyOf = code => { const l = SEED.locations.find(x => x[0] === code); return l ? key(l) : ""; };
+    return out;
+  })();
   function recLoc(r = rec) {
     const h = r.h;
     if (h.locMode === "free") return { code: "", locVN: h.locFree || "", locEN: "", custVN: h.custFree || "", custEN: "" };
-    const l = locInfo(h.location); if (h.custFree) l.custVN = h.custFree;   // sửa Cơ sở sử dụng khi khác danh mục
+    const l = locInfo(h.location); if (h.custFree) l.custVN = h.custFree;   // chỉ còn ở hồ sơ cũ (trước 02/11/2026); app hiện ô để xoá
     return l;
   }
   function makerSel(h, type = rec.type) { return h.makerSel || (makersFor(type).includes(h.maker) ? h.maker : (h.maker ? OTHER : "")); }
@@ -213,7 +224,8 @@
     if (!s1) out.errors.push("Chưa chọn chuẩn áp suất (Stand1)");
     if (settings.warnExpired && s1 && isExpired(s1, h.calDate)) out.warns.push(`Chuẩn ${s1.key} (S/N ${s1.serial}) hết hạn ${s1.due} – trước ngày hiệu chuẩn`);
     if (s1 && s1.due && h.calDate && s1.due < h.calDate) out.warns.push(`Chuẩn ${s1.key} hết hạn ${s1.due}, trước ngày hiệu chuẩn`);
-    if (h.locMode !== "free" && !recLoc(rec).custVN) out.warns.push("Địa điểm này chưa có Cơ sở sử dụng trong danh mục – nhập ở ô Cơ sở sử dụng");
+    if (h.locMode !== "free" && !h.location) out.errors.push("Chưa chọn Công trình khí");
+    else if (h.locMode !== "free" && !recLoc(rec).custVN) out.warns.push("Địa điểm này chưa có Cơ sở sử dụng trong danh mục – báo cấp 3 bổ sung");
     if (s1 && !isFinite(C.factor(s1.unit, rec.type === "PT" ? h.unit : h.unitPset))) out.errors.push(`Không đổi được đơn vị ${s1.unit} → ${rec.type === "PT" ? h.unit : h.unitPset}`);
     if (!rec.sig.inspector) out.warns.push("Chưa nhập Kiểm định viên");
     if (!rec.sig.controller) out.warns.push("Chưa nhập Người kiểm soát");
@@ -266,7 +278,8 @@
     const need = (s, lab) => { if (!s) E.push(`Chưa chọn ${lab}`); else if (s.due && h.calDate && s.due < h.calDate) W.push(`Chuẩn ${s.key} hết hạn ${s.due}, trước ngày hiệu chuẩn`); };
     const nums = (a, lab) => { const v = a.map(num); if (v.some(isNaN)) E.push(`Thiếu ${lab}`); return v; };
     if (!h.tag) E.push("Chưa nhập Tag");
-    if (h.locMode !== "free" && !recLoc(rec).custVN) W.push("Địa điểm này chưa có Cơ sở sử dụng trong danh mục – nhập ở ô Cơ sở sử dụng");
+    if (h.locMode !== "free" && !h.location) E.push("Chưa chọn Công trình khí");
+    else if (h.locMode !== "free" && !recLoc(rec).custVN) W.push("Địa điểm này chưa có Cơ sở sử dụng trong danh mục – báo cấp 3 bổ sung");
     if (!rec.sig.inspector) W.push("Chưa nhập Kiểm định viên");
     if (!rec.sig.controller) W.push("Chưa nhập Người kiểm soát");
     if (!(acc > 0)) E.push(T === "TS" ? "Chưa nhập độ chính xác % Tset" : "Chưa nhập độ chính xác %FS");
@@ -398,12 +411,21 @@
     const h = rec.h, PT = rec.type === "PT";
     h.makerSel = makerSel(h);
     const types = TYPES.map(([k, t, d]) => `<button class="chip${rec.type === k ? " on" : ""}" data-type="${k}" ${READY.includes(k) ? "" : "disabled"}><b>${t}</b><small>${READY.includes(k) ? d : "sắp có"}</small></button>`).join("");
-    const locOpts = SEED.locations.map(l => [l[0], `${l[0]} – ${l[1]}`]);
+    if (h.locMode !== "free" && h.cust === undefined) h.cust = CUSTS.keyOf(h.location);
+    const cu = CUSTS.find(c => c.key === h.cust);
+    const custOpts = [["", "— chọn khách hàng —"]].concat(CUSTS.map(c => [c.key, c.name]));
+    // Chỉ hiện chữ in trên chứng chỉ (Location VN); trùng chữ trong cùng khách hàng thì thêm mã QTG để phân biệt.
+    const locOpts = cu ? [["", cu.locs.length > 1 ? "— chọn công trình —" : "—"]].concat(cu.locs.map(l => [l[0], cu.locs.filter(x => x[1] === l[1]).length > 1 ? `${l[1]} (${l[0]})` : l[1]])) : [["", "— chọn khách hàng trước —"]];
+    const legacyLoc = h.location && cu && !cu.locs.some(l => l[0] === h.location);   // hồ sơ cũ dùng mục đã ẩn
+    if (legacyLoc) { const l = locInfo(h.location); locOpts.push([l.code, `${l.locVN} (mục cũ)`]); }
+    const L0 = h.locMode !== "free" && h.location ? recLoc() : null;
     const descOpts = PT ? ["Pressure Transmitter", "Differential Pressure Transmitter"] : ["Pressure Switch", "Differential Pressure Switch"];
     const locHtml = `<div class="f wide"><span>Địa điểm</span><div class="seg"><button data-loc="list" class="${h.locMode !== "free" ? "on" : ""}">Công trình khí (chọn sẵn)</button><button data-loc="free" class="${h.locMode === "free" ? "on" : ""}">Địa điểm 2 (gõ tay)</button></div></div>
         ${h.locMode === "free"
           ? fld("Địa điểm 2 – nơi lắp đặt", "h.locFree", { wide: 1, ph: "Theo gói thầu, VD: Giàn …" }) + fld("Cơ sở sử dụng (Customer)", "h.custFree", { wide: 1, ph: "Tên đơn vị sử dụng in trên chứng chỉ" })
-          : fld("Địa điểm công trình khí", "h.location", { options: locOpts, wide: 1 }) + fld("Cơ sở sử dụng (để trống = theo danh mục)", "h.custFree", { wide: 1, ph: locInfo(h.location).custVN || "Chưa có trong danh mục – nhập tay" })}
+          : fld("Khách hàng (Customer)", "h.cust", { options: custOpts, wide: 1 }) + fld("Công trình khí (Location)", "h.location", { options: locOpts, wide: 1 })
+            + (h.custFree ? `<div class="f wide locold"><span>Hồ sơ cũ có Cơ sở sử dụng gõ tay: <b>${esc(h.custFree)}</b></span><button class="btn sm" data-act="clearcust">Bỏ, dùng theo danh mục</button></div>` : "")
+            + (L0 ? `<div class="f wide locprint"><span>In trên chứng chỉ</span><div>Cơ sở sử dụng: <b>${esc(L0.custVN || "—")}</b><br>Địa điểm lắp đặt: <b>${esc(L0.locVN)}</b></div></div>` : "")}
         ${fld("Địa điểm thực hiện (in trên QTG)", "h.calPlace", { ph: h.locMode === "free" ? (h.locFree || "") : h.location })}
         ${fld("Số chứng chỉ", "certNo", { ph: autoCertNo(), ro: !A.can("certNo") })}`;
     let dev = `
@@ -704,7 +726,7 @@
   const TARGETS = [[/\bTag\b/, "#f_h_tag"], [/Kiểm định viên/, "#f_sig_inspector"], [/Người kiểm soát/, "#f_sig_controller"], [/Pset/, "#f_h_pset"], [/Tset/, "#f_h_tset"],
     [/Max > Min|Phạm vi đo chưa/, "#f_h_max"], [/độ chính xác/, "#f_h_acc"], [/vạch chia/, "#f_h_scale"], [/độ chia nhỏ nhất/, "#f_h_res"],
     [/Stand3|milivôn/, "#f_h_stand3"], [/Stand2|chuẩn điện|dải cao|dải trung/, "#f_h_stand2"], [/Stand1|chuẩn áp suất/, "#f_h_stand1"], [/^Chuẩn |chuẩn/, "#c3"],
-    [/số đọc|ở điểm đo|Set-Pressure|Reset-Pressure|^Thiếu/, "#c4"], [/Cơ sở sử dụng/, "#c2"], [/./, "#result"]];
+    [/số đọc|ở điểm đo|Set-Pressure|Reset-Pressure|^Thiếu/, "#c4"], [/Công trình khí/, "#f_h_location"], [/Cơ sở sử dụng/, "#c2"], [/./, "#result"]];
   function dock(errs, warns) {
     dockMsgs = errs.map(t => ["bad", t]).concat(warns.map(t => ["warn", t]));
     let d = $("#wdock");
@@ -740,9 +762,10 @@
     if (p.startsWith("pt.points") || p.startsWith("pg.std") || p.startsWith("dpg.std") || p.startsWith("tt.nom")) rec.ptAuto = false;
     if (["PT", "PG", "TT", "TG", "DPG"].includes(rec.type) && (p === "h.min" || p === "h.max") && rec.ptAuto) { genPoints(); renderEntry(); focusPath(p); }
     else if (p === "h.psType" && rec.type === "TS") { renderEntry(); focusPath(p); }
-    else if (p === "h.unit" || p === "h.unitPset" || p === "h.description" || p === "h.calDate" || p === "h.dirQTG" || p === "h.location" || p === "h.locFree" || p.startsWith("h.stand")) {
+    else if (p === "h.unit" || p === "h.unitPset" || p === "h.description" || p === "h.calDate" || p === "h.dirQTG" || p === "h.location" || p === "h.cust" || p === "h.locFree" || p.startsWith("h.stand")) {
       if (p === "h.calDate" && rec.certAuto) rec.certNo = autoCertNo();
-      renderEntry(); focusPath(p);
+      if (p === "h.cust") { const c = CUSTS.find(x => x.key === rec.h.cust); rec.h.location = c && c.locs.length === 1 ? c.locs[0][0] : ""; persistCurrent(); }
+      renderEntry(); focusPath(p === "h.cust" && !rec.h.location ? "h.location" : p);
     } else renderResult();
     if (p.startsWith("pt.points") || p === "h.min" || p === "h.max") updateIdeal();
     if (wasApproved) { renderEntry(); focusPath(p); }
@@ -782,7 +805,7 @@
     }
     if (b.dataset.type) {
       if (b.dataset.type === rec.type) return;
-      const keep = { location: rec.h.location, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.custFree, calDate: rec.h.calDate, issueDate: rec.h.issueDate };
+      const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.custFree, calDate: rec.h.calDate, issueDate: rec.h.issueDate };
       rec = newRecord(b.dataset.type); Object.assign(rec.h, keep); rec.certNo = autoCertNo();
       renderEntry(); persistCurrent(); return;
     }
@@ -820,7 +843,8 @@
     if (act === "rtdcopy") { rec.rtd.dut = rec.rtd.dut.map(a => a.map(() => a[0])); renderEntry(); toast("Đã chép lần 1 cho lần 2–5"); }
     if (act === "copy1") { rec.ps.set = rec.ps.set.map(() => rec.ps.set[0]); rec.ps.reset = rec.ps.reset.map(() => rec.ps.reset[0]); renderEntry(); toast("Đã chép lần 1 cho cả 5 lần"); }
     if (act === "save") saveRecord();
-    if (act === "new") { const keep = { location: rec.h.location, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.custFree }; const t = rec.type; rec = newRecord(t); Object.assign(rec.h, keep); rec.certNo = autoCertNo(); renderEntry(); persistCurrent(); window.scrollTo(0, 0); }
+    if (act === "clearcust") { rec.h.custFree = ""; touched(); renderEntry(); persistCurrent(); return; }
+    if (act === "new") { const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.custFree }; const t = rec.type; rec = newRecord(t); Object.assign(rec.h, keep); rec.certNo = autoCertNo(); renderEntry(); persistCurrent(); window.scrollTo(0, 0); }
     if (act === "preview") renderPreview("all");
     if (act === "viewqtg") renderPreview("qtg");
     if (act === "submit") submitReview();

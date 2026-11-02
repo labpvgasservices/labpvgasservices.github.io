@@ -80,7 +80,9 @@ window.LabSeed = {
     {"id": "SPRT (2267)", "kind": "t", "key": "SPRT (2267)", "name": "Pla. Resistance Thermometer", "model": "5626", "serial": "2267", "maker": "Fluke", "min": -40, "max": 420, "unit": "°C", "res": "0.0001 °C", "accuracy": "±0.015 °C", "unc": 0.025, "uncUnit": "°C", "stab": 0, "radial": 0, "axial": 0, "heat": "", "trace": "Viện Đo lường Việt Nam (VMI)", "due": "2027-07-17", "cert": "V10.CN5.2224.26", "loc": "Cà Mau", "note": "Dải hiệu chuẩn −40÷420 °C (đặc tính −200÷661 °C)"},
     {"id": "SPRT (4579)", "kind": "t", "key": "SPRT (4579)", "name": "Pla. Resistance Thermometer", "model": "5626", "serial": "4579", "maker": "Fluke", "min": -40, "max": 420, "unit": "°C", "res": "0.0001 °C", "accuracy": "±0.015 °C", "unc": 0.025, "uncUnit": "°C", "stab": 0, "radial": 0, "axial": 0, "heat": "", "trace": "Viện Đo lường Việt Nam (VMI)", "due": "2027-07-17", "cert": "V10.CN5.2225.26", "loc": "Cà Mau", "note": "GCN: điểm 419,980 °C ghi 266,895883 Ω, theo hệ số CVD phải ≈ 256,6 Ω – nghi lỗi đánh máy, hỏi VMI"}
   ],
-  // [Location (short, as on QTG), Location VN, Location EN, Customer VN, Customer EN] – sheet "Location" 2026
+  // [Location (short, as on QTG), Location VN, Location EN, Customer VN, Customer EN, hidden] – sheet "Location" 2026 (file PT/PS/TG).
+  // Cà Mau theo sheet NGOC gửi 02/11/2026 ("Công ty Khí Cà Mau"); file RTD/TS/TT/PG ghi "CN Khí Tây Nam Bộ" – chờ NGOC chốt.
+  // hidden = 1: giữ cho hồ sơ cũ, không hiện trong danh sách chọn.
   locations: [
     ["KCTV", "Kho Cảng PVGAS Vũng Tàu", "PVGAS Vung Tau Terminal", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
     ["TNTV", "Kho Cảng PVGAS Vũng Tàu", "PVGAS Vung Tau Terminal", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
@@ -102,11 +104,11 @@ window.LabSeed = {
     ["Trạm LH", "Trạm Long Hải", "Long Hai LBV Station", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"],
     ["GDC TH", "Trạm GDC Tiền Hải", "Tien Hai Gas Distribution Center", "Chi nhánh Khí Hải Phòng - TCT Khí Việt Nam - CTCP", "PVGAS Hai Phong"],
     ["LFS TH", "Trạm LFS Tiền Hải", "Tien Hai Lane Fall Station", "Chi nhánh Khí Hải Phòng - TCT Khí Việt Nam - CTCP", "PVGAS Hai Phong"],
-    ["Trạm LFS", "Trạm Tiếp Bờ", "Ca Mau Lane Fall Station", "CN Khí Tây Nam Bộ - TCT Khí Việt Nam - CTCP", "Petrovietnam Gas South West Branch"],
-    ["LFS Cà Mau", "Trạm Tiếp Bờ (LFS)", "Ca Mau Land Fall Station", "CN Khí Tây Nam Bộ - TCT Khí Việt Nam - CTCP", "Petrovietnam Gas South West Branch"],
-    ["LBV Cà Mau", "Trạm LBV Cà Mau", "Ca Mau LBV Station", "CN Khí Tây Nam Bộ - TCT Khí Việt Nam - CTCP", "Petrovietnam Gas South West Branch"],
-    ["GDC CM", "Trạm GDC Cà Mau", "Ca Mau Gas Distribution Center", "CN Khí Tây Nam Bộ - TCT Khí Việt Nam - CTCP", "Petrovietnam Gas South West Branch"],
-    ["GPP Cà Mau", "Nhà máy xử lý Khí Cà Mau", "Ca Mau Gas Processing Plant", "CN Khí Tây Nam Bộ - TCT Khí Việt Nam - CTCP", "Petrovietnam Gas South West Branch"],
+    ["Trạm LFS", "Trạm Tiếp Bờ", "Ca Mau Lane Fall Station", "TCT Khí Việt Nam - CTCP- Công ty Khí Cà Mau", "PetroVietnam Gas Ca Mau Company"],
+    ["LFS Cà Mau", "Trạm Tiếp Bờ (LFS)", "Ca Mau Land Fall Station", "TCT Khí Việt Nam - CTCP- Công ty Khí Cà Mau", "PetroVietnam Gas Ca Mau Company", 1],
+    ["LBV Cà Mau", "Trạm LBV Cà Mau", "Ca Mau LBV Station", "TCT Khí Việt Nam - CTCP- Công ty Khí Cà Mau", "PetroVietnam Gas Ca Mau Company"],
+    ["GDC CM", "Trạm GDC Cà Mau", "Ca Mau Gas Distribution Center", "TCT Khí Việt Nam - CTCP- Công ty Khí Cà Mau", "PetroVietnam Gas Ca Mau Company"],
+    ["GPP Cà Mau", "Nhà máy xử lý Khí Cà Mau", "Ca Mau Gas Processing Plant", "TCT Khí Việt Nam - CTCP- Công ty Khí Cà Mau", "PetroVietnam Gas Ca Mau Company"],
     ["NCS GPP", "Nhà máy xử lý Khí Nam Côn Sơn", "Nam Con Son Gas Processing Plant", "Công ty Đường Ống Khí Nam Côn Sơn", "NAMCONSON Pipeline Company."],
     ["Lab DVK", "Phòng Lab DVK", "VILAS 389", "TCT Khí Việt Nam - CTCP- Công ty Dịch Vụ Khí", "PetroVietnam Gas Services"],
     ["Xưởng ĐX", "Xưởng BDSC Đông Xuyên", "Dong Xuyen Maintenance WorkShop", "TCT Khí Việt Nam - CTCP- Công ty Dịch Vụ Khí", "PetroVietnam Gas Services"],
