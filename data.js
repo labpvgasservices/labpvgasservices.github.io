@@ -83,11 +83,13 @@ window.LabSeed = {
   // [Location (short, as on QTG), Location VN, Location EN, Customer VN, Customer EN, hidden] – sheet "Location" 2026 (file PT/PS/TG).
   // Cà Mau theo sheet NGOC gửi 02/11/2026 ("Công ty Khí Cà Mau"); file RTD/TS/TT/PG ghi "CN Khí Tây Nam Bộ" – chờ NGOC chốt.
   // hidden = 1: giữ cho hồ sơ cũ, không hiện trong danh sách chọn.
+  // Đông Nam Bộ: thống nhất theo GCN mẫu NGOC gửi 02/11/2026 (CN.PT.26.2864): "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP"
+  // (trước đó GPP ghi "CN Khí Đông Nam Bộ - TCT…", Giàn TƯ ghi "…– Công ty cổ phần"; 101 Lê Lợi thiếu tên EN).
   locations: [
     ["KCTV", "Kho Cảng PVGAS Vũng Tàu", "PVGAS Vung Tau Terminal", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
     ["TNTV", "Kho Cảng PVGAS Vũng Tàu", "PVGAS Vung Tau Terminal", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
     ["KLTV", "Kho Cảng PVGAS Vũng Tàu", "PVGAS Vung Tau Terminal", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
-    ["GPP", "Nhà máy xử lý Khí Dinh Cố", "Dinh Co Gas Processing Plant", "CN Khí Đông Nam Bộ - TCT Khí Việt Nam - CTCP", "Petrovietnam Gas South East Branch"],
+    ["GPP", "Nhà máy xử lý Khí Dinh Cố", "Dinh Co Gas Processing Plant", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"],
     ["KLNG", "Kho LNG Thị Vải", "LNG Thi Vai Terminal", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
     ["Kho Đình Vũ", "Kho LPG Đình Vũ", "Dinh Vu LPG Storage", "Chi nhánh Khí Hải Phòng - TCT Khí Việt Nam - CTCP", "PVGAS Hai Phong"],
     ["Kho Gò Dầu", "Kho LPG Gò Dầu", "Go Dau LPG Storage", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
@@ -112,11 +114,11 @@ window.LabSeed = {
     ["NCS GPP", "Nhà máy xử lý Khí Nam Côn Sơn", "Nam Con Son Gas Processing Plant", "Công ty Đường Ống Khí Nam Côn Sơn", "NAMCONSON Pipeline Company."],
     ["Lab DVK", "Phòng Lab DVK", "VILAS 389", "TCT Khí Việt Nam - CTCP- Công ty Dịch Vụ Khí", "PetroVietnam Gas Services"],
     ["Xưởng ĐX", "Xưởng BDSC Đông Xuyên", "Dong Xuyen Maintenance WorkShop", "TCT Khí Việt Nam - CTCP- Công ty Dịch Vụ Khí", "PetroVietnam Gas Services"],
-    ["101 Lê Lợi", "Văn phòng 101 Lê Lợi", "101 Le Loi Head Office", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", ""],
+    ["101 Lê Lợi", "Văn phòng 101 Lê Lợi", "101 Le Loi Head Office", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"],
     ["Giàn DGCP", "Giàn nén khí Rồng (DGCP)", "Dragon Gas Compression Platform", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"],
     ["Giàn CCP", "Giàn nén Khí Trung tâm CCP", "Central Compression Platform", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"],
     ["Giàn TB", "Giàn Thái Bình (TBDP-A)", "Thai Binh Platform", "Chi nhánh Khí Hải Phòng - TCT Khí Việt Nam - CTCP", "PVGAS Hai Phong"],
-    ["Giàn TƯ", "Giàn Thiên Ưng", "Thien Ung Platform", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – Công ty cổ phần", "Petrovietnam Gas South East Branch"]
+    ["Giàn TƯ", "Giàn Thiên Ưng", "Thien Ung Platform", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"]
   ],
   settings: {
     ver: 3,

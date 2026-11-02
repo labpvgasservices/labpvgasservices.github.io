@@ -129,7 +129,9 @@
   function recLoc(r = rec) {
     const h = r.h;
     if (h.locMode === "free") return { code: "", locVN: h.locFree || "", locEN: "", custVN: h.custFree || "", custEN: "" };
-    const l = locInfo(h.location); if (h.custFree) l.custVN = h.custFree;   // chỉ còn ở hồ sơ cũ (trước 02/11/2026); app hiện ô để xoá
+    // Chọn sẵn: in đúng danh mục (sheet Location), KHÔNG dùng tên gõ tay. Lỗi cũ: ô custFree bị ẩn nhưng vẫn đè lên GCN
+    // (VD "Khí Đông Nam") và còn bị chép sang hồ sơ mới – NGOC báo 02/11/2026.
+    return locInfo(h.location);
     return l;
   }
   function makerSel(h, type = rec.type) { return h.makerSel || (makersFor(type).includes(h.maker) ? h.maker : (h.maker ? OTHER : "")); }
@@ -424,7 +426,6 @@
         ${h.locMode === "free"
           ? fld("Địa điểm 2 – nơi lắp đặt", "h.locFree", { wide: 1, ph: "Theo gói thầu, VD: Giàn …" }) + fld("Cơ sở sử dụng (Customer)", "h.custFree", { wide: 1, ph: "Tên đơn vị sử dụng in trên chứng chỉ" })
           : fld("Khách hàng (Customer)", "h.cust", { options: custOpts, wide: 1 }) + fld("Công trình khí (Location)", "h.location", { options: locOpts, wide: 1 })
-            + (h.custFree ? `<div class="f wide locold"><span>Hồ sơ cũ có Cơ sở sử dụng gõ tay: <b>${esc(h.custFree)}</b></span><button class="btn sm" data-act="clearcust">Bỏ, dùng theo danh mục</button></div>` : "")
             + (L0 ? `<div class="f wide locprint"><span>In trên chứng chỉ</span><div>Cơ sở sử dụng: <b>${esc(L0.custVN || "—")}</b><br>Địa điểm lắp đặt: <b>${esc(L0.locVN)}</b></div></div>` : "")}
         ${fld("Địa điểm thực hiện (in trên QTG)", "h.calPlace", { ph: h.locMode === "free" ? (h.locFree || "") : h.location })}
         ${fld("Số chứng chỉ", "certNo", { ph: autoCertNo(), ro: !A.can("certNo") })}`;
@@ -805,7 +806,7 @@
     }
     if (b.dataset.type) {
       if (b.dataset.type === rec.type) return;
-      const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.custFree, calDate: rec.h.calDate, issueDate: rec.h.issueDate };
+      const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.locMode === "free" ? rec.h.custFree : "", calDate: rec.h.calDate, issueDate: rec.h.issueDate };
       rec = newRecord(b.dataset.type); Object.assign(rec.h, keep); rec.certNo = autoCertNo();
       renderEntry(); persistCurrent(); return;
     }
@@ -843,8 +844,7 @@
     if (act === "rtdcopy") { rec.rtd.dut = rec.rtd.dut.map(a => a.map(() => a[0])); renderEntry(); toast("Đã chép lần 1 cho lần 2–5"); }
     if (act === "copy1") { rec.ps.set = rec.ps.set.map(() => rec.ps.set[0]); rec.ps.reset = rec.ps.reset.map(() => rec.ps.reset[0]); renderEntry(); toast("Đã chép lần 1 cho cả 5 lần"); }
     if (act === "save") saveRecord();
-    if (act === "clearcust") { rec.h.custFree = ""; touched(); renderEntry(); persistCurrent(); return; }
-    if (act === "new") { const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.custFree }; const t = rec.type; rec = newRecord(t); Object.assign(rec.h, keep); rec.certNo = autoCertNo(); renderEntry(); persistCurrent(); window.scrollTo(0, 0); }
+    if (act === "new") { const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.locMode === "free" ? rec.h.custFree : "" }; const t = rec.type; rec = newRecord(t); Object.assign(rec.h, keep); rec.certNo = autoCertNo(); renderEntry(); persistCurrent(); window.scrollTo(0, 0); }
     if (act === "preview") renderPreview("all");
     if (act === "viewqtg") renderPreview("qtg");
     if (act === "submit") submitReview();
