@@ -186,6 +186,37 @@
     if (s.kind === "p") { const f = C.factor(s.uncUnit && s.uncUnit !== "%" ? s.uncUnit : s.unit, unit); return (s.uncUnit === "%" ? (s.unc || 0) / 100 * Math.abs(v) : (s.unc || 0) * f) + (s.rdg || 0) / 100 * Math.abs(v); }
     return s.uncUnit === "%" ? (s.unc || 0) / 100 * Math.abs(v) : (s.unc || 0);
   }
+  /* Lọc danh sách chọn chuẩn (NGOC 03/11/2026): chỉ hiện chuẩn phủ hết dải cần đo và có U/MPE ≤ settings.turMax (mặc định 1/3);
+   * chuẩn không phù hợp bị loại khỏi danh sách cho tới khi nhập dải thiết bị khác phù hợp. Trả về null = phù hợp, hoặc lý do. */
+  function fitStand(s, unit, lo, hi, mpe) {
+    const f = s.kind === "p" ? C.factor(s.unit, unit) : 1; if (!isFinite(f)) return `không đổi được ${s.unit} → ${unit}`;
+    const smin = s.min * f, smax = (s.kind === "e" && s.certRange ? s.certRange : s.max) * f, r = x => C.xround(x, 6);
+    if (lo < smin - 1e-9 * Math.max(1, Math.abs(smin)) || hi > smax + 1e-9 * Math.max(1, Math.abs(smax))) return `dải ${r(smin)}÷${r(smax)} ${unit} không phủ ${r(lo)}÷${r(hi)}`;
+    if (!(mpe > 0) || s.name === "Deadweight Tester" && !s.unc) return null;
+    const U = stdU(s, unit, Math.max(Math.abs(lo), Math.abs(hi))), q = U / mpe, lim = Number(settings.turMax) || 1 / 3;
+    return q > lim ? `U ≈ ${r(U)} ${unit} = ${(q * 100).toFixed(0)}% sai số cho phép ${r(mpe)} ${unit}` : null;
+  }
+  // Ngữ cảnh lọc cho từng ô chọn chuẩn: [đơn vị, dải thấp, dải cao, MPE] theo loại thiết bị; null = chưa đủ số liệu để lọc
+  function standCtx(path) {
+    const h = rec.h, T = rec.type, mn = num(h.min), mx = num(h.max), acc = num(h.acc), mpe = acc / 100 * (mx - mn);
+    const okR = isFinite(mn) && isFinite(mx) && mx > mn && acc > 0;
+    if (path === "h.stand1" && (T === "PT" || T === "PG" || T === "DPG")) return okR ? [h.unit, mn, mx, mpe] : null;
+    if (path === "h.stand2" && T === "PT") return acc > 0 ? ["mA", 4, 20, acc / 100 * 16] : null;
+    if (T === "PS") { const ps = num(h.pset), v = rec.ps.set.concat(rec.ps.reset).map(num).filter(isFinite).concat(isFinite(ps) ? [ps] : []);
+      return v.length && acc > 0 && isFinite(ps) ? [h.unitPset, Math.min(...v), Math.max(...v), acc / 100 * Math.abs(ps)] : null; }
+    if (T === "TS") { const ts = num(h.tset), v = rec.ts.set.concat(rec.ts.reset).map(num).filter(isFinite).concat(isFinite(ts) ? [ts] : []);
+      return v.length && acc > 0 && isFinite(ts) ? ["°C", Math.min(...v), Math.max(...v), acc / 100 * Math.abs(ts)] : null; }
+    if (!okR) return null;
+    const s1 = standById(h.stand1), s2 = standById(h.stand2), split = mx > 150;
+    if (path === "h.stand1") return ["°C", mn, split && s2 && s2 !== s1 ? Math.min(mx, 150) : mx, mpe];
+    if (path === "h.stand2") return ["°C", split ? Math.max(mn, 150) : mn, mx, mpe];
+    if (path === "h.stand3") {
+      if (T === "TT") return ["mA", 4, 20, acc / 100 * 16];
+      if (T === "RTD") { const sens = num(h.sens) || 0.385; return ["Ω", C2.pt100(mn).R, C2.pt100(mx).R, mpe * sens]; }
+      if (T === "TC" && C2.ITS[h.tcType]) { const e1 = C2.tcEmf(h.tcType, mn), e2 = C2.tcEmf(h.tcType, mx); return ["mV", Math.min(e1, e2, 0), Math.max(e1, e2), mpe * C2.ITS[h.tcType].sens]; }
+    }
+    return null;
+  }
   function suit(s, unit, lo, hi, mpe, lab, W) {
     if (!s || !isFinite(lo) || !isFinite(hi)) return;
     const f = s.kind === "p" ? C.factor(s.unit, unit) : 1; if (!isFinite(f)) return;
@@ -405,9 +436,19 @@
     if (opt.sign) ctl = `<div class="pm">${ctl}<button type="button" class="pmb" data-neg="${path}" aria-label="Đổi dấu">±</button></div>`;
     return `<label class="f${opt.wide ? " wide" : ""}"><span>${label}</span>${ctl}</label>`;
   }
-  function standOptions(kind) {
-    const today = todayISO();
-    return [["", "— chọn —"]].concat(stands.filter(s => s.kind === kind).map(s => [s.id, `${s.key} · S/N ${s.serial}${s.loc ? " · " + s.loc : ""}${s.due && s.due < today ? " · HẾT HẠN" : ""}`]));
+  function standOptions(kind, path) {
+    const today = todayISO(), lab = s => `${s.key} · S/N ${s.serial}${s.loc ? " · " + s.loc : ""}${s.due && s.due < today ? " · HẾT HẠN" : ""}`;
+    const all = stands.filter(s => s.kind === kind), ctx = path ? standCtx(path) : null;
+    if (!ctx) return [["", path ? "— chọn (nhập dải đo / sai số để lọc chuẩn phù hợp) —" : "— chọn —"]].concat(all.map(s => [s.id, lab(s)]));
+    const [unit, lo, hi, mpe] = ctx, cur = getPath(rec, path);
+    const span = s => { const f = s.kind === "p" ? C.factor(s.unit, unit) : 1; return ((s.kind === "e" && s.certRange ? s.certRange : s.max) - s.min) * (isFinite(f) ? f : 1); };
+    const ok = all.filter(s => !fitStand(s, unit, lo, hi, mpe)).sort((a, b) => span(a) - span(b));
+    const hidden = all.length - ok.length;
+    const head = ok.length ? `— chọn chuẩn phù hợp${hidden ? ` (đã ẩn ${hidden} chuẩn không phù hợp)` : ""} —` : "— KHÔNG có chuẩn phù hợp dải / sai số này —";
+    const out = [["", head]].concat(ok.map(s => [s.id, lab(s)]));
+    const cs = cur && standById(cur);
+    if (cs && cs.kind === kind && !ok.includes(cs)) out.push([cs.id, `${lab(cs)} · KHÔNG PHÙ HỢP: ${fitStand(cs, unit, lo, hi, mpe)}`]);
+    return out;
   }
   function renderEntry() {
     const h = rec.h, PT = rec.type === "PT";
@@ -453,8 +494,8 @@
         ${fld("Tick ô môi trường trên QTG", "h.envOk", { wide: 1, options: [["1", `Có – ${PT ? settings.PT.qtgTemp + ", " + settings.PT.qtgHum : settings.PS.qtgTemp + ", " + settings.PS.qtgHum}`], ["", "Không tick"]] })}
       </div>`;
     let std = `<div class="grid">
-        ${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p"), wide: 1 })}
-        ${PT ? fld("Chuẩn điện (Stand2)", "h.stand2", { options: standOptions("e"), wide: 1 }) : ""}
+        ${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p", "h.stand1"), wide: 1 })}
+        ${PT ? fld("Chuẩn điện (Stand2)", "h.stand2", { options: standOptions("e", "h.stand2"), wide: 1 }) : ""}
         <div class="hint wide">Danh mục chuẩn 2026 (sheet Stand Ref). Hiệu chỉnh áp suất: <b>Yes</b> – số đọc chuẩn dùng trực tiếp như toàn bộ hồ sơ DGCP 10/2026.</div>
         ${decHint([[standById(h.stand1), PT ? h.unit : h.unitPset], [PT ? standById(h.stand2) : null, "mA", 20]])}
       </div>`;
@@ -577,25 +618,25 @@
         ${fld("Tick ô môi trường trên QTG", "h.envOk", { wide: 1, options: [["1", `Có – ${S0.qtgTemp}, ${S0.qtgHum}`], ["", "Không tick"]] })}
       </div>`;
     let std;
-    if (T === "PG") std = `<div class="grid">${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p"), wide: 1 })}
+    if (T === "PG") std = `<div class="grid">${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p", "h.stand1"), wide: 1 })}
         <div class="hint wide">Số đọc chuẩn nhập theo đơn vị của áp kế (${esc(u)}). Kiểm định theo ĐLVN 08:2011 – không tính độ KĐBĐ.</div>${decHint([[standById(h.stand1), u]])}</div>`;
-    if (T === "TS") std = `<div class="grid">${fld("Nhiệt kế chuẩn / thiết bị tạo nhiệt (Stand1)", "h.stand1", { options: standOptions("t"), wide: 1 })}
+    if (T === "TS") std = `<div class="grid">${fld("Nhiệt kế chuẩn / thiết bị tạo nhiệt (Stand1)", "h.stand1", { options: standOptions("t", "h.stand1"), wide: 1 })}
         <div class="hint wide">U của chuẩn (uch1) và độ ổn định / radial / axial của thiết bị tạo nhiệt (uch3) lấy từ thư viện chuẩn.</div>${decHint([[standById(h.stand1), "°C"]])}</div>`;
-    if (T === "TT") std = `<div class="grid">${fld("Chuẩn nhiệt dải thấp ≤150 °C (Stand1)", "h.stand1", { options: standOptions("t"), wide: 1 })}
-        ${fld("Chuẩn nhiệt dải trung / cao (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t"), wide: 1 })}
-        ${fld("Ampe kế (Stand3)", "h.stand3", { options: standOptions("e"), wide: 1 })}${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"], [standById(h.stand3), "mA", 20]])}</div>`;
-    if (T === "TG") std = `<div class="grid">${fld("Chuẩn nhiệt dải thấp ≤150 °C (Stand1)", "h.stand1", { options: standOptions("t"), wide: 1 })}
-        ${fld("Chuẩn nhiệt dải trung / cao >150 °C (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t"), wide: 1 })}
+    if (T === "TT") std = `<div class="grid">${fld("Chuẩn nhiệt dải thấp ≤150 °C (Stand1)", "h.stand1", { options: standOptions("t", "h.stand1"), wide: 1 })}
+        ${fld("Chuẩn nhiệt dải trung / cao (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t", "h.stand2"), wide: 1 })}
+        ${fld("Ampe kế (Stand3)", "h.stand3", { options: standOptions("e", "h.stand3"), wide: 1 })}${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"], [standById(h.stand3), "mA", 20]])}</div>`;
+    if (T === "TG") std = `<div class="grid">${fld("Chuẩn nhiệt dải thấp ≤150 °C (Stand1)", "h.stand1", { options: standOptions("t", "h.stand1"), wide: 1 })}
+        ${fld("Chuẩn nhiệt dải trung / cao >150 °C (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t", "h.stand2"), wide: 1 })}
         <div class="hint wide">Như DLVN138.2-1: điểm ≤150 °C dùng U và độ ổn định / radial / axial của Stand1, điểm >150 °C dùng Stand2.</div>${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"]])}</div>`;
-    if (T === "RTD") std = `<div class="grid">${fld("Chuẩn nhiệt dải thấp (Stand1)", "h.stand1", { options: standOptions("t"), wide: 1 })}
-        ${fld("Chuẩn nhiệt dải cao ≥150 °C (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t"), wide: 1 })}
-        ${fld("Thiết bị đo điện trở (Stand3)", "h.stand3", { options: standOptions("r"), wide: 1 })}${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"], [standById(h.stand3), "Ω", 150]])}</div>`;
-    if (T === "TC") std = `<div class="grid">${fld("Chuẩn nhiệt + lò dải thấp ≤155 °C (Stand1)", "h.stand1", { options: standOptions("t"), wide: 1 })}
-        ${fld("Chuẩn nhiệt + lò dải cao (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t"), wide: 1 })}
-        ${fld("Milivôn kế (Stand3)", "h.stand3", { options: standOptions("v"), wide: 1 })}
+    if (T === "RTD") std = `<div class="grid">${fld("Chuẩn nhiệt dải thấp (Stand1)", "h.stand1", { options: standOptions("t", "h.stand1"), wide: 1 })}
+        ${fld("Chuẩn nhiệt dải cao ≥150 °C (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t", "h.stand2"), wide: 1 })}
+        ${fld("Thiết bị đo điện trở (Stand3)", "h.stand3", { options: standOptions("r", "h.stand3"), wide: 1 })}${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"], [standById(h.stand3), "Ω", 150]])}</div>`;
+    if (T === "TC") std = `<div class="grid">${fld("Chuẩn nhiệt + lò dải thấp ≤155 °C (Stand1)", "h.stand1", { options: standOptions("t", "h.stand1"), wide: 1 })}
+        ${fld("Chuẩn nhiệt + lò dải cao (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t", "h.stand2"), wide: 1 })}
+        ${fld("Milivôn kế (Stand3)", "h.stand3", { options: standOptions("v", "h.stand3"), wide: 1 })}
         <div class="hint wide">Như DLVN161: uch1 lấy U của Stand2 khi Max ≥ 155 °C, uch8 lấy ổn định / radial / axial của lò dải cao khi Max > 140 °C. uch7 (bù đầu tự do) = ${esc(settings.TC.uCJ)} °C / 2 theo file anh Khai (đổi trong Cài đặt).</div>
         ${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"], [standById(h.stand3), "mV", 50]])}</div>`;
-    if (T === "DPG") std = `<div class="grid">${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p"), wide: 1 })}
+    if (T === "DPG") std = `<div class="grid">${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p", "h.stand1"), wide: 1 })}
         <div class="hint wide">Số đọc chuẩn nhập theo đơn vị của đồng hồ (${esc(u)}). U chuẩn và %Rdg lấy theo GCN của chuẩn trong thư viện.</div>${decHint([[standById(h.stand1), u]])}</div>`;
     const inp = (p, v, ph) => `<input data-p="${p}" inputmode="decimal" value="${esc(v)}"${ph ? ` placeholder="${ph}"` : ""}>`;
     const sgn = (p, v) => `<div class="pm">${inp(p, v)}<button type="button" class="pmb sm" data-neg="${p}" aria-label="Đổi dấu">±</button></div>`;
@@ -763,7 +804,7 @@
     if (p.startsWith("pt.points") || p.startsWith("pg.std") || p.startsWith("dpg.std") || p.startsWith("tt.nom")) rec.ptAuto = false;
     if (["PT", "PG", "TT", "TG", "DPG"].includes(rec.type) && (p === "h.min" || p === "h.max") && rec.ptAuto) { genPoints(); renderEntry(); focusPath(p); }
     else if (p === "h.psType" && rec.type === "TS") { renderEntry(); focusPath(p); }
-    else if (p === "h.unit" || p === "h.unitPset" || p === "h.description" || p === "h.calDate" || p === "h.dirQTG" || p === "h.location" || p === "h.cust" || p === "h.locFree" || p.startsWith("h.stand")) {
+    else if (p === "h.unit" || p === "h.unitPset" || p === "h.description" || p === "h.calDate" || p === "h.dirQTG" || p === "h.location" || p === "h.cust" || p === "h.locFree" || p.startsWith("h.stand") || ["h.min", "h.max", "h.acc", "h.pset", "h.tset", "h.tcType", "h.sens"].includes(p)) {
       if (p === "h.calDate" && rec.certAuto) rec.certNo = autoCertNo();
       if (p === "h.cust") { const c = CUSTS.find(x => x.key === rec.h.cust); rec.h.location = c && c.locs.length === 1 ? c.locs[0][0] : ""; persistCurrent(); }
       renderEntry(); focusPath(p === "h.cust" && !rec.h.location ? "h.location" : p);
