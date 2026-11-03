@@ -478,7 +478,7 @@
     if (NEWT.includes(rec.type)) ({ dev, std, pts, ptsTitle } = buildNew(locHtml));
     const sig = `<div class="grid">
         ${fld("Người thực hiện (Kiểm định viên)", "sig.inspector", { list: "names", ro: !A.can("users") })}
-        ${fld("Người soát lại / kiểm tra (Người kiểm soát)", "sig.controller", { list: "names", ro: true, ph: "Điền khi duyệt" })}
+        ${fld("Người soát lại / kiểm tra (Người kiểm soát)", "sig.controller", { list: "names", ph: "Chọn hoặc nhập tên người soát lại" })}
         ${fld("Ngày cấp chứng chỉ", "h.issueDate", { type: "date" })}
         ${fld("Ghi chú QTG", "h.note", { wide: 1 })}
         <div class="hint wide">Trang 1 chứng chỉ ký: ${esc(settings.sig1Title)} <b>${esc(settings.sig1Name)}</b> và ${esc(settings.sig2Title)} <b>${esc(settings.sig2Name)}</b> (đổi trong Cài đặt).</div>
