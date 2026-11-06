@@ -113,7 +113,7 @@
     const h = rec.h, T = rec.type, cal = toDate(h.calDate);
     let table, mid;
     if (T === "TS") {
-      const U = vn(res.Uprint, 2);
+      const U = D.uV(res, res.U, vn(res.Uprint, 2));
       const rows = res.set.map((v, i) => `<tr><td>${p2(i + 1)}</td>${i === 0 ? `<td rowspan="5">${vnTxt(h.tset)}</td>` : ""}<td>${vn(v, 3)}</td><td>${vn(res.reset[i], 3)}</td><td>${vn(res.setDev[i], 3)}</td><td>${vn(res.resetDev[i], 3)}</td>${i === 0 ? `<td rowspan="5">${U}</td>` : ""}</tr>`).join("");
       table = `<table class="res cres tsr"><thead><tr><th>TT<br>${it("(N<sup>o</sup>)")}</th><th>Nhiệt độ đặt<br>${it("(Set point)")}<br>${deg}</th><th>Nhiệt độ mở<br>${it("(Set-temp)")}<br>${deg}</th><th>Nhiệt độ đóng<br>${it("(Reset-temp)")}<br>${deg}</th>
         <th>Chênh mở<br>${it("(Set-deviation)")}<br>${deg}</th><th>Chênh đóng<br>${it("(Reset-deviation)")}<br>${deg}</th><th>Độ KĐBĐ<br>${it("(Uncertainty)")}<br>${deg}</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -129,7 +129,7 @@
       mid = K2 + lines;
     } else if (T === "TG") {
       // Data138: standard ROUND 2 shown "0,000"; reading and correction "#.##0,0" (2 decimals when the division has 2, e.g. 1,25 °C)
-      const dd = tgDec(h), U2 = l => vn(C.xround(l.U, 2), 2);
+      const dd = tgDec(h), U2 = l => D.uV(res, l.U, vn(C.xround(l.U, 2), 2));
       const rows = res.pt.map((p, i) => `<tr><td>${p2(i + 1)}</td><td>${vn(C.xround(p.stdT, 2), 3)}</td><td>${vn(p.rise, dd)}</td><td>${vn(p.fall, dd)}</td><td>${vn(p.corr, dd)}</td></tr>`).join("");
       table = `<table class="res cres"><thead><tr><th rowspan="2">TT<br>${it("(N<sup>o</sup>)")}</th><th rowspan="2">Nhiệt độ chuẩn<br>${it("(Standard)")}<br>${deg}</th><th colspan="2">Giá trị đọc ${it("(Indicator)")}<br>${deg}</th><th rowspan="2">Số hiệu chính<br>${it("(Correction)")}<br>${deg}</th></tr>
         <tr><th>Tăng ${it("(Increasing)")}</th><th>Giảm ${it("(Decreasing)")}</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -164,7 +164,7 @@
       mid = `<p>Hàm tương quan nhiệt độ - điện trở ${it("(Characteristic function)")}: R(t) = R(0<sup>o</sup>C)[1+A.t+B.t<sup>2</sup>+C.t<sup>3</sup>(t-100)]</p>
         <p>Với các hệ số ${it("(with coefficients)")}: R0 = ${vn(res.R0, 3)} &nbsp;(Ω)</p>
         <table class="coef"><tr><td>A = ${vn(res.A, 6)}</td></tr><tr><td>B = ${sci(res.B)}</td></tr><tr><td>C = ${sci(res.C)}</td></tr></table>
-        ${K2}<p class="c">U = ${vn(res.U, 2)}${deg}</p>`;
+        ${K2}<p class="c">U = ${D.uV(res, res.U, vn(res.U, 2))}${deg}</p>`;
     }
     const pf = res.pass ? "Đạt (Pass)" : "Không đạt (Fail)";
     const en = res.pass ? "(The calibration result meets the accuracy requirement)." : "(The calibration result does not meet the accuracy requirement).";
@@ -496,14 +496,15 @@
     const mono = /^[-+]?[\d.]+(e[-+]?\d+)?$/i.test(String(val).replace(/<[^>]+>/g, ""));
     return `<tr><td class="ref">${ref}</td><td>${lab}</td>${unit ? `<td class="${mono ? "num" : "txt"}">${val}</td><td>${unit}</td>` : `<td class="${mono ? "num" : "txt"}" colspan="2">${val}</td>`}</tr>`;
   }
-  function uWrap(rec, st, info, title, sub, body, src) {
+  const uWrapR = (res, rec, st, info, title, sub, body, src) => uWrap(rec, st, info, title, sub, body, src, res);
+  function uWrap(rec, st, info, title, sub, body, src, res) {
     const h = rec.h;
     return `<section class="a4 unc">${draft(info)}
       <div class="uhead"><div><b>${title}</b><br>No.: ${esc(rec.certNo)} · Tag: <b>${esc(h.tag)}</b> · ${dVN(toDate(h.calDate))}<br>${it(sub)}</div><div class="fc">${esc(S(st, rec.type).form || "")}</div></div>
-      ${body}
+      ${body}${D.fvBox(rec.type, res)}
       <table class="qsig u"><tr><td><b>Người kiểm tra</b><br>${it("(Quality Checker)")}</td><td><b>Người thực hiện</b><br>${it("(Calibrated by)")}</td></tr>
         <tr class="sp"><td></td><td></td></tr><tr><td><b>${esc(rec.sig.controller)}</b></td><td><b>${esc(rec.sig.inspector)}</b></td></tr></table>
-      <div class="ufoot">${src}</div></section>`;
+      <div class="ufoot">${res && res.fv === 2 ? "Gốc: " + src + " Bản công thức đã sửa 06/11/2026 khác file Excel ở các điểm nêu trên." : src}</div></section>`;
   }
   const verdict = p => `<b>${p ? "Đạt (Pass)" : "Không đạt (Fail)"}</b>`;
 
@@ -520,7 +521,7 @@
     const out = `<table class="res ug"><thead><tr><th>Điểm</th><th>Chuẩn (AI..AM)</th><th>Tăng (AN..AR)</th><th>Giảm (AS..AW)</th><th>SHC tăng = chuẩn − tăng</th><th>SHC giảm = chuẩn − giảm</th><th>|SHC| / sai số cho phép</th></tr></thead><tbody>
       ${res.rows.map((r, i) => { const q = Math.max(Math.abs(r.cR), Math.abs(r.cF)) / res.lim; return `<tr><td>${i + 1}</td><td>${f2(r.x)}</td><td>${f2(r.rise)}</td><td>${f2(r.fall)}</td><td>${f2(r.cR)}</td><td>${f2(r.cF)}</td><td class="${q > 1 ? "bad" : ""}">${(q * 100).toFixed(1)}%</td></tr>`; }).join("")}</tbody></table>`;
     const red = res.red ? `<div class="unote">Sụt áp chuẩn: ${g(res.red.d, 6)} ${u} (${res.red.pct.toFixed(2)}%) → ${res.red.ok ? "Đạt" : "Không đạt"} (giới hạn &lt; 5% theo mẫu QTG).</div>` : "";
-    return uWrap(rec, st, info, "BẢNG TÍNH KIỂM ĐỊNH ÁP KẾ (PRESSURE GAUGE)", "ĐLVN 08:2011 – kiểm định, không tính độ KĐBĐ", inp + `<div class="ulbl">Kết quả kiểm định:</div>` + out + red,
+    return uWrapR(res, rec, st, info, "BẢNG TÍNH KIỂM ĐỊNH ÁP KẾ (PRESSURE GAUGE)", "ĐLVN 08:2011 – kiểm định, không tính độ KĐBĐ", inp + `<div class="ulbl">Kết quả kiểm định:</div>` + out + red,
       "Công thức theo file PG_08_Data_Rev2026_Oct-2026.xlsm, sheet Data08. Số hiệu chính chiều tăng dùng số đọc chiều tăng (sheet tháng 10 đang trỏ nhầm sang cột Falling).");
   }
 
@@ -541,11 +542,11 @@
         ${r3("F33", "2.1 uch1 = U/k", g(res.F33, 6), deg)}${r3("F34", "2.2 uch2 chỉ thị (×0)", g(res.F34, 6), deg)}${r3("F35", "2.4 uch3 thiết bị tạo MT", g(res.F35, 6), deg)}
       </table><table class="ukv">
         ${r3("F36", "2.5 uch", g(res.F36, 6), deg)}${r3("F38 / F39", "3. ucm / ucd", `${g(res.F38, 6)} / ${g(res.F39, 6)}`)}
-        ${r3("F41 / F42", "4. Um / Ud = k·uc", `${g(res.F41, 6)} / ${g(res.F42, 6)}`)}${r3("I46", "U báo cáo", g(res.U, 6), deg)}${r3("CH", "In chứng chỉ (ROUND 2 số)", `<b>${vn(res.Uprint, 2)}</b>`, deg)}
+        ${r3("F41 / F42", "4. Um / Ud = k·uc", `${g(res.F41, 6)} / ${g(res.F42, 6)}`)}${r3("I46", "U báo cáo", g(res.U, 6), deg)}${r3("CH", res.fv === 2 ? "In chứng chỉ (2 CSCN, làm tròn lên)" : "In chứng chỉ (ROUND 2 số)", `<b>${D.uV(res, res.U, vn(res.Uprint, 2))}</b>`, deg)}
       </table></div>`;
     const chk = `<table class="res ug chk"><thead><tr><th>Chiều</th><th>Sai số cho phép = Acc·Tset/100</th><th>Max |Set − Tset|</th><th>Tỉ lệ</th><th>Kết luận (D51)</th></tr></thead>
       <tbody><tr><td>${res.rising ? "Rising" : "Falling"}</td><td>${g(res.lim, 6)}</td><td>${g(res.maxDev, 6)}</td><td class="${res.maxDev > res.lim ? "bad" : ""}">${(res.maxDev / res.lim * 100).toFixed(1)}%</td><td>${verdict(res.pass)}</td></tr></tbody></table>`;
-    return uWrap(rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO – TEMPERATURE SWITCH", "Uncertainty calculation – DLVNTM13 (DVK.LAB.TM.13)", inp + `<div class="ulbl">Số liệu đo (hàng 23–28):</div>` + grid + calc + `<div class="ulbl">Kiểm tra:</div>` + chk,
+    return uWrapR(res, rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO – TEMPERATURE SWITCH", "Uncertainty calculation – DLVNTM13 (DVK.LAB.TM.13)", inp + `<div class="ulbl">Số liệu đo (hàng 23–28):</div>` + grid + calc + `<div class="ulbl">Kiểm tra:</div>` + chk,
       "Công thức theo file LFS_TS 09 2026.xls, sheet DLVNTM13 + DataTM13. U in chứng chỉ theo DataTM13!CH (làm tròn thường 2 số lẻ).");
   }
 
@@ -576,7 +577,7 @@
     const chk = `<table class="res ug chk"><thead><tr><th>Max sai lệch %</th><th>Max U (°C)</th><th>Max |SHC| (mA)</th><th>Giới hạn FJ = Acc/100·span (°C)</th><th>Kết luận (FI)</th></tr></thead>
       <tbody><tr><td>${g(res.maxErr, 4)}</td><td>${g(res.Umax, 4)}</td><td>${g(res.maxSHC, 4)}</td><td>${g(res.lim, 4)}</td><td>${verdict(res.pass)}</td></tr></tbody></table>
       <div class="unote">Data188!FI so sánh chung sai lệch (%), U (°C) và SHC (mA) với một giới hạn tính bằng °C – giữ nguyên như file, cần xác nhận.</div>`;
-    return uWrap(rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO – TEMPERATURE TRANSMITTER", "Temperature Transmitter calculation report – DLVN188.2-2 (DVK.LAB.TM.12)",
+    return uWrapR(res, rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO – TEMPERATURE TRANSMITTER", "Temperature Transmitter calculation report – DLVN188.2-2 (DVK.LAB.TM.12)",
       inp + `<div class="ulbl">Theo điểm (hàng 28–64):</div>` + grid + `<div class="ulbl">Ngân sách độ KĐBĐ theo dải:</div>` + ut + `<div class="ulbl">Kiểm tra:</div>` + chk,
       "Công thức theo file 1.TT_LFS_CM_26.xls, sheets DLVN188.2-2, STDEV calc, Data188. Đã đối chiếu với số mẫu trong sheet (dải thấp 0,146166 / trung 0,281006 °C).");
   }
@@ -605,11 +606,11 @@
       ${rr("uch2 chỉ thị chuẩn (36)", x => g(x.uch2, 4))}${rr("uch3 thiết bị tạo MT (37)", x => g(x.uch3, 4))}${rr("uch (38)", x => g(x.uch, 4))}
       ${rr("Ultb DUT (45)", x => g(x.UltbD, 4))}${rr("ubk2 tản mạn = Ultb/√n (46)", x => g(x.ubk2, 4))}${rr("ubk1 hồi trễ = hyst/(2√3) (47)", x => g(x.ubk1, 4))}
       ${rr("ubk3 phân giải = F7·d/√3 (48)", x => g(x.ubk3, 4))}${rr("uDUT (49)", x => g(x.uDUT, 4))}${rr("uc (50)", x => g(x.uc, 4))}${rr("Uexp = 2·uc (51)", x => g(x.U, 6))}
-      ${rr("In chứng chỉ (Data138 ROUND 2)", x => `<b>${vn(C.xround(x.U, 2), 2)}</b>`)}${rr("Nếu theo quy tắc 2 CSCN làm tròn lên", x => uTxt("TT", x.U))}</tbody></table>`;
+      ${rr(res.fv === 2 ? "In chứng chỉ (2 CSCN, làm tròn lên)" : "In chứng chỉ (Data138 ROUND 2)", x => `<b>${D.uV(res, x.U, vn(C.xround(x.U, 2), 2))}</b>`)}${rr("Nếu theo quy tắc 2 CSCN làm tròn lên", x => uTxt("TT", x.U))}</tbody></table>`;
     const chk = `<table class="res ug chk"><thead><tr><th>Max U (°C)</th><th>Max |SHC| (°C)</th><th>Giới hạn DZ = Acc/100·span (°C)</th><th>Kết luận (EG)</th></tr></thead>
       <tbody><tr><td>${g(res.Umax, 4)}</td><td>${g(res.maxSHC, 4)}</td><td>${g(res.lim, 4)}</td><td>${verdict(res.pass)}</td></tr></tbody></table>
       <div class="unote">Data138!EG so sánh cả U và |SHC| với sai số cho phép – giữ nguyên như file. U in chứng chỉ theo ROUND 2 của Data138 (có thể nhỏ hơn U tính, ví dụ 0,5829 → 0,58) – chờ NGOC chốt có áp dụng quy tắc làm tròn lên hay không.</div>`;
-    return uWrap(rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO CỦA PHÉP HIỆU CHUẨN – TEMPERATURE GAUGE", "Digital and analog thermometer – DLVN138.2-1 (ĐLVN 138:2004)",
+    return uWrapR(res, rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO CỦA PHÉP HIỆU CHUẨN – TEMPERATURE GAUGE", "Digital and analog thermometer – DLVN138.2-1 (ĐLVN 138:2004)",
       inp + `<div class="ulbl">Theo điểm (hàng 28–59):</div>` + grid + `<div class="ulbl">Ngân sách độ KĐBĐ theo dải:</div>` + ut + `<div class="ulbl">Kiểm tra:</div>` + chk,
       "Công thức theo file TG_GPP 08-2026_Phuoc_.xlsm, sheets DLVN138.2-1, STDEV Calc, Data138. Đã đối chiếu 45/45 hồ sơ GPP 08/2026 (U và kết luận khớp).");
   }
@@ -634,12 +635,12 @@
         ${r3("G34", "uch5 tản mạn chuẩn", g(res.G34, 6), deg)}${r3("G35", "uch1 nhiệt kế chuẩn", g(res.G35, 6), deg)}${r3("G36", "uch2 thiết bị đo điện trở", g(res.G36, 6), deg)}
         ${r3("G37", "uch3 thiết bị tạo MT", g(res.G37, 6), deg)}${r3("G38", "uch", g(res.G38, 6), deg)}
         ${r3("Q34", "uDUT5 = O33/(√n·F8)", g(res.Q34, 6), deg)}${r3("Q35", "uDUT4 hồi trễ điểm 3", g(res.Q35, 6), deg)}${r3("Q36", "uDUT6 = √(Σres²/((n−3)·F8))", g(res.Q36, 6), deg)}
-        ${r3("Q38 / G39", "uDUT / uc", `${g(res.Q38, 6)} / ${g(res.G39, 6)}`)}${r3("G40", "Uexp = 2·uc", g(res.U, 6), deg)}${r3("EO", "In chứng chỉ", `<b>${vn(res.U, 2)}</b>`, deg)}
+        ${r3("Q38 / G39", "uDUT / uc", `${g(res.Q38, 6)} / ${g(res.G39, 6)}`)}${r3("G40", "Uexp = 2·uc", g(res.U, 6), deg)}${r3("EO", "In chứng chỉ", `<b>${D.uV(res, res.U, vn(res.U, 2))}</b>`, deg)}
       </table></div>`;
     const chk = `<table class="res ug chk"><thead><tr><th>Max |lệch °C| (2 số)</th><th>U (2 số)</th><th>Tổng EU</th><th>Giới hạn EV = Acc·span/100</th><th>Kết luận (ET)</th></tr></thead>
-      <tbody><tr><td>${g(res.maxE, 4)}</td><td>${vn(res.U, 2)}</td><td>${g(res.maxE + C.xround(res.U, 2), 4)}</td><td>${g(res.lim, 4)}</td><td>${verdict(res.pass)}</td></tr></tbody></table>
+      <tbody><tr><td>${g(res.maxE, 4)}</td><td>${D.uV(res, res.U, vn(res.U, 2))}</td><td>${g(res.maxE + res.Uprint, 4)}</td><td>${g(res.lim, 4)}</td><td>${verdict(res.pass)}</td></tr></tbody></table>
       <div class="unote">* giá trị không có trong "Bảng giá trị chuẩn" của file – dùng IEC 60751. O33 trong file không lấy căn bậc hai – giữ nguyên như file, cần xác nhận.</div>`;
-    return uWrap(rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO – PLATINUM RESISTANCE THERMOMETER", "Industrial Platinum Resistance Thermometer – DLVN125 NK chuẩn + đo Ohm",
+    return uWrapR(res, rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO – PLATINUM RESISTANCE THERMOMETER", "Industrial Platinum Resistance Thermometer – DLVN125 NK chuẩn + đo Ohm",
       inp + `<div class="ulbl">Theo điểm (hàng 26–50):</div>` + grid + calc + `<div class="ulbl">Kiểm tra:</div>` + chk,
       "Công thức theo file RTD_DK_CM_2026_.xls, sheet \"DLVN125 NK chuan + do Ohm\" + Data125. Đã đối chiếu với số mẫu trong sheet (U = 0,411506 °C).");
   }
@@ -668,7 +669,7 @@
     const chk = `<table class="res ug chk"><thead><tr><th>a0 / a1 / a2 (ΔE = a0 + a1·t + a2·t²)</th><th>Max |Δt| (°C)</th><th>U + max|Δt|</th><th>Giới hạn = Acc·span/100</th><th>Kết luận (HE)</th></tr></thead>
       <tbody><tr><td>${res.a.map(x => g(x, 5)).join(" / ")}</td><td>${g(res.maxErr, 4)}</td><td>${g(res.U + res.maxErr, 4)}</td><td>${g(res.lim, 4)}</td><td>${verdict(res.pass)}</td></tr></tbody></table>
       <div class="unote">Giữ nguyên như file: hồi quy ΔE luôn dùng bảng loại K (Ref!D21:E34); uch7 dùng U thiết bị bù đầu tự do trong Cài đặt (file anh Khai: Fluke 1620A, U 0,2 °C); điểm âm dùng dải 1 của hàm ngược bỏ C1 (ô Ref!$JH$37 trống).</div>`;
-    return uWrap(rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO – INDUSTRIAL THERMOCOUPLES", "Cặp nhiệt điện công nghiệp – DLVN161 (ĐLVN 161:2005)",
+    return uWrapR(res, rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO – INDUSTRIAL THERMOCOUPLES", "Cặp nhiệt điện công nghiệp – DLVN161 (ĐLVN 161:2005)",
       inp + `<div class="ulbl">Theo điểm:</div>` + grid + `<div class="ulbl">Ngân sách độ KĐBĐ:</div>` + bud + `<div class="ulbl">Kiểm tra:</div>` + chk,
       "Công thức theo file TC_GPP_2026_.xlsm, sheets DLVN161, Ref, Data161. Đã đối chiếu 66/66 hồ sơ GPP 2026 (U, Δt, hệ số a, kết luận khớp).");
   }
@@ -690,7 +691,7 @@
       <tbody><tr><td>${g(res.Umax, 6)}</td><td><b>${tcU(res)}</b></td><td>${g(res.maxSHC, 4)}</td><td>${g(res.lim, 4)}</td><td>${verdict(res.pass)}</td></tr></tbody></table>
       ${res.red ? `<div class="unote">Sụt áp chuẩn: ${g(res.red.d, 6)} ${u} (${res.red.pct.toFixed(2)}%) → ${res.red.ok ? "Đạt" : "Không đạt"} (giới hạn &lt; 5%).</div>` : ""}
       <div class="unote">Giữ nguyên như file: uA (đơn vị đồng hồ) cộng chung với các thành phần % ở hàng 23. GCN mẫu PDI-0101 in U = 1,05 do ô GI bị sửa tay (ROUNDUP); công thức chuẩn của file cho ${tcU(res)}.</div>`;
-    return uWrap(rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO – PRESSURE DIFF INDICATOR", "Đồng hồ chênh áp – DLVN76_2001 (hiệu chỉnh áp suất: Yes)",
+    return uWrapR(res, rec, st, info, "BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO – PRESSURE DIFF INDICATOR", "Đồng hồ chênh áp – DLVN76_2001 (hiệu chỉnh áp suất: Yes)",
       inp + `<div class="ulbl">Theo điểm:</div>` + grid + `<div class="ulbl">Kiểm tra:</div>` + chk,
       "Công thức theo file DVK_ĐVT_PG GPP_2026_KNV.xls, sheets DLVN76_2001, Data76. Đã đối chiếu 8/8 hồ sơ PDI GPP 2026 (U và kết luận khớp).");
   }

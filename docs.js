@@ -29,6 +29,33 @@
     return type === "TT" ? s.replace(".", ",") : s;
   }
   const uTxt = (type, u) => { const p = C.uPub(u); return nTxt(type, p.v, p.d); };
+  // Bản công thức đã sửa 06/11/2026 (res.fv = 2, mục B3): mọi bộ in U 2 chữ số có nghĩa, làm tròn lên. Hồ sơ cũ giữ cách in cũ (legacy).
+  const uV = (res, U, legacy) => res && res.fv === 2 ? uTxt(res.type, U) : legacy;
+  const FV = { 1: "Excel 2026 (bản cũ)", 2: "Đã sửa 06/11/2026" };
+  // Các điểm của báo cáo rà soát Uncer 01/11/2026 mà bản sửa áp dụng cho từng bộ
+  const FVCH = {
+    PT: ["B1 quy tắc |SHC|·span/16 + U ≤ MPE, xét từng điểm", "B2 k = t95,45(ν_eff)", "B4 U lấy chiều lớn hơn (không trung bình)", "B6 %Rdg chuẩn chia √3, cộng RSS"],
+    PS: ["B2 k = t95,45(ν_eff)", "B6 %Rdg chuẩn chia √3, cộng RSS"],
+    PG: ["A10 app vốn dùng đúng cột Rising – không đổi"],
+    TS: ["B1 |sai số| + U ≤ MPE", "B2 k = t95,45(ν_eff)", "B3 U 2 CSCN làm tròn lên", "B4 thêm độ phân giải nhiệt kế chuẩn"],
+    TT: ["A9 + B1 SHC quy về °C (×span/16), |sai số| + U dải ≤ MPE", "B2 k = t95,45(ν_eff)", "B8 ranh giới dải ≤ 400 cho mọi điểm"],
+    TG: ["B1 |sai số| (2 chiều) + U dải ≤ MPE", "B2 k = t95,45(ν_eff)", "B3 U 2 CSCN làm tròn lên"],
+    RTD: ["A1 u_DUT6 = √[Σdư²/(n − p)] / S", "A2 O33 lấy căn", "B2 k = t95,45(ν_eff)", "B3 U 2 CSCN làm tròn lên"],
+    TC: ["A3 u_bk7 = √[Σdư²/(N − 3)] / S", "A4 U_ltb chia 4", "A5 STDEV chỉ 5 lần đọc", "A6 hồi quy theo hàm chuẩn đúng loại", "A7 đủ hệ số C1 dải âm", "B2 k = t95,45(ν_eff)", "B3 U 2 CSCN làm tròn lên", "B7 S = dE/dt nhỏ nhất tại các điểm đo"],
+    DPG: ["A8 u_A quy về % span", "B1 |SHC| + U ≤ MPE, xét từng điểm", "B2 k = t95,45(ν_eff)", "B3 U 2 CSCN làm tròn lên", "B4 U lấy chiều lớn hơn", "B5 độ phân giải chia √3", "B6 %Rdg chuẩn chia √3, cộng RSS"]
+  };
+  const nuTxt = v => isFinite(v) ? (v > 999 ? ">999" : Number(v).toFixed(1)) : "∞";
+  function fvBox(type, res) {
+    if (!res || res.fv !== 2) return `<div class="unote">Phiên bản công thức: <b>${FV[1]}</b> – tính giống hệt file Excel của anh Khai.</div>`;
+    const nus = [];
+    if (res.nu !== undefined) nus.push(nuTxt(res.nu));
+    (res.rows || []).forEach(r => { if (r.nu !== undefined && isFinite(r.nu)) nus.push(nuTxt(r.nu)); });
+    if (res.R) Object.values(res.R).forEach(r => { if (r.cnt) nus.push(nuTxt(r.nu)); });
+    return `<div class="unote">Phiên bản công thức: <b>${FV[2]}</b> (rà soát Uncer 01/11/2026). Áp dụng: ${(FVCH[type] || []).join("; ")}.
+      ${type === "PG" ? "" : `ν<sub>eff</sub> = ${nus.length ? nus.join(" / ") : "∞"} → k = ${Number(res.k || 2).toFixed(2)}.`}
+      ${res.decRule != null ? ` Giá trị so với MPE: ${g(res.decRule, 6)}.` : ""} Quy tắc quyết định chung: |sai số| + U ≤ MPE (NGOC chọn 06/11/2026).
+      Bản này chưa có biên bản xác nhận bảng tính (ISO/IEC 17025 mục 7.11.2).</div>`;
+  }
   const dot = s => String(s == null ? "" : s).replace(/(\d),(\d)/g, "$1.$2");
   const vnTxt = s => String(s == null ? "" : s).replace(/(\d)\.(\d)/g, "$1,$2");   // "0.0001 bar" -> "0,0001 bar"
   const num = v => (v === "" || v == null) ? NaN : Number(String(v).replace(",", "."));
@@ -320,10 +347,10 @@
     }
     return `<section class="a4 unc">${draft(info)}
       <div class="uhead"><div><b>BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO CỦA PHÉP HIỆU CHUẨN</b><br>No.: ${esc(rec.certNo)} · Tag: <b>${esc(h.tag)}</b> · ${dVN(toDate(h.calDate))}<br>${it(PT ? "Pressure transmitter Uncertainty Calculation Report – DLVN112-2002_Rev2" : "Uncertainty Calculation Form – DLVN133 - 2004")}</div><div class="fc">${esc(S.form)}</div></div>
-      ${body}
+      ${body}${fvBox(rec.type, res)}
       <table class="qsig u"><tr><td><b>Người kiểm tra</b><br>${it("(Quality Checker)")}</td><td><b>Người thực hiện</b><br>${it("(Calibrated by)")}</td></tr>
         <tr class="sp"><td></td><td></td></tr><tr><td><b>${esc(rec.sig.controller)}</b></td><td><b>${esc(rec.sig.inspector)}</b></td></tr></table>
-      <div class="ufoot">Công thức và ô Excel theo file ${PT ? "PT_DGCP_10_2026.xls" : "PS_DGCP_10_2026.xls"} (macro khainv). Đối chiếu 2026-10-29: ${PT ? "31/31" : "13/13"} thiết bị DGCP trùng khớp.</div></section>`;
+      <div class="ufoot">${res.fv === 2 ? "Bản công thức đã sửa 06/11/2026 – khác file Excel ở các điểm nêu trên. Gốc: " : ""}Công thức và ô Excel theo file ${PT ? "PT_DGCP_10_2026.xls" : "PS_DGCP_10_2026.xls"} (macro khainv). Đối chiếu 2026-10-29: ${PT ? "31/31" : "13/13"} thiết bị DGCP trùng khớp.</div></section>`;
   }
 
   /* ================= QC LIST (sheet "Kiểm tra", many records) ================= */
@@ -350,5 +377,5 @@
     return pages.join("");
   }
 
-  window.LabDocs = { nTxt, uTxt, dot, f2, g2, certPage1, certPage2, qtgPage, uncPage, qcPages, dVN, dEN, toDate, esc, vn, vnTxt, decimalsOf, g, cb, it, draft, wmImg, certHeader, certFooter, qtgSig, envHtml, qModel, qRange, p2 };
+  window.LabDocs = { nTxt, uTxt, uV, FV, FVCH, fvBox, dot, f2, g2, certPage1, certPage2, qtgPage, uncPage, qcPages, dVN, dEN, toDate, esc, vn, vnTxt, decimalsOf, g, cb, it, draft, wmImg, certHeader, certFooter, qtgSig, envHtml, qModel, qRange, p2 };
 })();

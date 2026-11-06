@@ -168,6 +168,22 @@
         ${f(R`u_c=\sqrt{\sum_i u_i^2},\qquad U=k\cdot u_c,\quad k=2\;(\approx95\%)`, "")}
         ${p("U của chuẩn: lấy U lớn nhất trên toàn dải của GCN chuẩn (quyết định NGOC 31/10/2026) – vì vậy U có thể lớn hơn file Excel cũ.")}
       </details>
+      <details class="fsec" id="f-v2"><summary><b>Bản công thức đã sửa 06/11/2026</b><br><small class="mut">Theo báo cáo rà soát Uncer 01/11/2026 (nhóm A + B). Hồ sơ tạo trước 06/11/2026 giữ bản Excel 2026; hồ sơ mới dùng bản này. Cấp 3 đổi được trong từng hồ sơ.</small></summary>
+        ${h("Chung cho mọi bộ")}
+        ${f(R`\nu_{\text{eff}}=\frac{u_c^4}{\sum_i u_i^4/\nu_i},\qquad k=t_{95,45}(\nu_{\text{eff}})`, "B2 – GUM G.4.1, bảng hệ số k của EA-4/02 M (ν = 8 → 2,37; 20 → 2,13; 50 → 2,05; ∞ → 2,00); thành phần loại B có ν = ∞")}
+        ${f(R`U_{\text{in}}\ge U:\ \text{2 chữ số có nghĩa, làm tròn lên}`, "B3 – GUM 7.2.6, áp cho cả TS, TG, RTD, TC, DPG")}
+        ${f(R`\text{ĐẠT}\iff\max_i\left(|\text{sai số}_i|+U_i\right)\le\text{MPE}`, "B1 – quy tắc chung 9 bộ (NGOC chọn 06/11/2026); sai số và U cùng đơn vị; PG không có U nên giữ |sai số| ≤ MPE")}
+        ${f(R`u_{\%\text{Rdg}}=\frac{E_{13}\,|x|}{\sqrt3\,\text{span}},\qquad u_s=\sqrt{\left(\frac{E_{12}(\text{Max}_{\text{chuẩn}}-\text{Min}_{\text{chuẩn}})}{2\,\text{span}}\right)^2+u_{\%\text{Rdg}}^2}`, "B6 – PT, PS, DPG: %Rdg là cấp chính xác của nhà sản xuất → phân bố chữ nhật")}
+        ${h("PT, DPG")}
+        ${f(R`U_i=k_i\cdot\max\left(u_{c,\text{tăng}},u_{c,\text{giảm}}\right)`, "B4 – lấy chiều lớn hơn thay cho trung bình hai chiều")}
+        ${f(R`u_{A,\%}=\frac{100}{\text{span}}\sqrt{S_a^2+x^2S_b^2+2xS_aS_b r},\qquad u_v=\frac{d\cdot100/\text{span}}{2\sqrt3}`, "DPG: A8 quy u_A về % span; B5 độ phân giải chữ nhật √3")}
+        ${h("TS")}${f(R`u_{\text{res}}=\frac{d_{\text{chuẩn}}}{2\sqrt3}`, "B4 – độ phân giải nhiệt kế chuẩn (ô mới trong hồ sơ TS)")}
+        ${h("TT")}${f(R`\text{sai số}_i\,(°C)=\max\left(|SHC_\uparrow|,|SHC_\downarrow|\right)\cdot\frac{\text{span}}{16}`, "A9 – quy mA về °C trước khi so với MPE; B8 mọi điểm dùng ≤ 400")}
+        ${h("RTD")}${f(R`u_{DUT6}=\frac{1}{S}\sqrt{\frac{\sum(R_{fit}-\bar R)^2}{n-p}},\qquad O_{33}=\sqrt{\frac{1}{5}\sum s_i^2}`, "A1 (p = 3 bậc 2, p = 4 bậc 3), A2")}
+        ${h("TC")}${f(R`u_{bk7}=\frac{1}{S}\sqrt{\frac{\sum\text{dư}^2}{N-3}},\qquad U_{ltb}=\sqrt{\frac{s_1^2+s_3^2+s_5^2+s_7^2}{4}}`, "A3, A4; A5 STDEV chỉ 5 lần đọc; A6 hồi quy ΔE theo hàm chuẩn đúng loại J/K; A7 đủ hệ số C1 dải âm")}
+        ${f(R`S=\min_i\left.\frac{dE}{dt}\right|_{t_i}`, "B7 – độ nhạy theo hàm chuẩn ITS-90 tại các điểm đo, lấy giá trị nhỏ nhất (an toàn)")}
+        ${p("Chưa sửa vì cần nguồn: B7 nguồn của u<sub>ch7</sub> = 0,2 °C (Fluke 1620A) và u<sub>bk8</sub> = 0,1 % Max (BoA 2022) – giữ giá trị như file. A10 (PG) và A11 (DPG sửa tay) app vốn đã đúng. Nhóm C chờ bản gốc ĐLVN / DVK.LAB.TM.")}
+      </details>
       ${SECTIONS.map(s => `<details class="fsec" id="f-${s.id}"><summary><b>${s.t}</b><br><small class="mut">${s.src}</small></summary>${s.body}</details>`).join("")}
     </div>`;
   }
