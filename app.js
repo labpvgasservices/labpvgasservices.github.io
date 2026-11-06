@@ -44,6 +44,8 @@
       const keep = {}; ["sig1Name", "sig2Name", "dueMonths", "warnExpired", "showLogo"].forEach(k => { if (k in o) keep[k] = o[k]; });
       o = keep; store.set("settings", o);
     }
+    // v4 (NGOC 06/11/2026): GCN in đủ ngày cấp theo ô "Ngày cấp chứng chỉ" – bỏ chế độ để trống ngày đã lưu trên máy
+    if ((o.ver || 1) < 4) { o.issueDayBlank = false; o.ver = 4; store.set("settings", o); }
     const m = deepMerge(SEED.settings, o); m.ver = SEED.settings.ver; return m;
   }
   // Danh mục chuẩn: khi đổi phiên bản seed thì thay chuẩn gốc, giữ chuẩn người dùng tự thêm (id bắt đầu bằng "s")
