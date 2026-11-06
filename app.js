@@ -244,10 +244,22 @@
   function getPath(o, p) { return p.split(".").reduce((a, k) => a == null ? a : a[k], o); }
   function setPath(o, p, v) { const ks = p.split("."); const last = ks.pop(); const t = ks.reduce((a, k) => a[k], o); t[last] = v; }
   function isExpired(s, dateISO) { return !s || !s.due || (dateISO || todayISO()) > s.due; }
+  // NGOC 06/11/2026: chuẩn hết hạn (tính đến ngày hiệu chuẩn) → không được duyệt, GCN luôn đóng dấu nháp, ẩn khỏi danh sách chọn
+  function usedStands(r) { const h = r.h, T = r.type, s1 = standById(h.stand1), s2 = standById(h.stand2), s3 = standById(h.stand3);
+    return (T === "PT" || T === "TG" ? [s1, s2] : ["TT", "RTD", "TC"].includes(T) ? [s1, s2, s3] : [s1]).filter(Boolean); }
+  const expiredOn = (s, d) => !!(s && s.due && (d || todayISO()) > s.due);
+  const expiredUsed = r => usedStands(r).filter(s => expiredOn(s, r.h.calDate));
 
   /* ---------- compute + validate ---------- */
   const curRec = () => rec;
   function compute(target) {
+    const out = compute0(target), r = target || curRec(), ex = expiredUsed(r);
+    // gom cảnh báo hết hạn cũ (có thể lặp 2 lần) thành 1 dòng rõ ràng cho mỗi chuẩn
+    out.warns = out.warns.filter(w => !/hết hạn/.test(w));
+    ex.forEach(s => out.warns.unshift(`Chuẩn ${s.key} (S/N ${s.serial}) HẾT HẠN ${s.due}, trước ngày hiệu chuẩn – không được duyệt, GCN đóng dấu BẢN NHÁP cho tới khi cập nhật GCN mới của chuẩn`));
+    return out;
+  }
+  function compute0(target) {
     const rec = target || curRec();   // hồ sơ đang nhập, hoặc hồ sơ đã lưu (bảng kiểm tra QC)
     // Hồ sơ đã lưu (danh sách QC) vẫn tính được: lỗi số chữ số thập phân chỉ thành cảnh báo
     const h = rec.h, out = { errors: [], warns: [], res: null, strict: !target };
@@ -426,29 +438,148 @@
     return type === "PT" ? D.uTxt("PT", r.Umax) : type === "PS" ? r.Utext.text : type === "PG" ? "—" : type === "TS" ? D.vn(r.Uprint, 2) : type === "TT" ? D.uTxt("TT", r.Umax) : type === "TG" ? D.vn(C.xround(r.Umax, 2), 2) : type === "TC" || type === "DPG" ? r.Utext.replace(".", ",") : D.vn(r.U, 2);
   }
 
+  /* ---------- Danh sách thiết bị theo công trình ("bệnh án") – yêu cầu NGOC 06/11/2026 ----------
+     Nguồn: devices.js (Phụ lục kế hoạch KĐ/HC 2026 các công trình). Gõ Tag → gợi ý theo chữ đầu như Excel → chọn → tự điền.
+     Cấp 1–3 đều sửa tay được các ô đã điền (thiết bị có thể đã thay). Hồ sơ đã lưu cùng công trình + tag mới hơn danh sách gốc → điền theo hồ sơ. */
+  const DEVS = (() => {
+    const D = window.LabDevices || { f: [], rows: [] };
+    return D.rows.map((r, i) => { const o = { i }; D.f.forEach((k, j) => o[k] = r[j] == null ? "" : String(r[j])); o.key = tagKey(o.t); return o; });
+  })();
+  function tagKey(t) { return String(t || "").toUpperCase().replace(/[\s\-_./]/g, ""); }
+  const siteName = code => { const l = SEED.locations.find(x => x[0] === code); return l ? (SEED.locations.filter(x => x[1] === l[1]).length > 1 ? `${l[1]} (${code})` : l[1]) : `${code} (chưa có trong danh mục Công trình)`; };
+  const devRange = d => d.mn !== "" || d.mx !== "" ? `${d.mn}÷${d.mx} ${d.u}` : (d.ps ? `Set ${d.ps} ${d.pu || d.u}` : "");
+  // Hồ sơ đã lưu gần nhất của 1 thiết bị (cùng công trình + tag)
+  const devRecs = d => records.filter(r => r.h.location === d.s && tagKey(r.h.tag) === d.key).sort((a, b) => (b.h.calDate || "").localeCompare(a.h.calDate || "") || (b.updated || "").localeCompare(a.updated || ""));
+  function suggestTags(q, site) {
+    const k = tagKey(q); if (!k) return [];
+    const hasSite = site && DEVS.some(d => d.s === site);
+    const score = d => (d.key.startsWith(k) ? 0 : 2) + (hasSite && d.s !== site ? 1 : 0) + (d.T === rec.type ? 0 : 0.5);
+    return DEVS.filter(d => d.key.includes(k)).map(d => [score(d), d]).sort((a, b) => a[0] - b[0] || a[1].t.localeCompare(b[1].t, "en", { numeric: true })).slice(0, 12).map(x => x[1]);
+  }
+  let sugList = [], sugIdx = -1;
+  function showSuggest(inp) {
+    hideSuggest();
+    const h = rec.h, site = h.locMode !== "free" ? h.location : "";
+    sugList = suggestTags(inp.value, site); sugIdx = -1;
+    if (!sugList.length) return;
+    const multi = new Set(sugList.map(d => d.s)).size > 1 || !DEVS.some(d => d.s === site);
+    const box = document.createElement("div"); box.id = "tagsug"; box.className = "sug"; box.setAttribute("role", "listbox");
+    box.innerHTML = sugList.map((d, i) => `<div class="sugi" data-sug="${i}" role="option"><b>${esc(d.t)}</b> <span class="tag">${d.T}</span>${d.T !== rec.type ? ` <small class="warn">khác loại</small>` : ""}
+      <small class="mut">${esc([d.mk, d.md, d.sn && "S/N " + d.sn, devRange(d)].filter(Boolean).join(" · "))}</small>${multi || d.s !== site ? `<small class="sugs">${esc(siteName(d.s))}</small>` : ""}</div>`).join("");
+    inp.closest("label").appendChild(box);
+    const r = box.getBoundingClientRect(), lim = innerHeight - 80, top = inp.getBoundingClientRect().top - 70;   // điện thoại: kéo lên cho thấy gợi ý
+    if (r.bottom > lim && top > 0) window.scrollBy(0, Math.min(r.bottom - lim, top));
+  }
+  function hideSuggest() { const b = $("#tagsug"); if (b) b.remove(); sugList = []; sugIdx = -1; }
+  function moveSuggest(dx) {
+    const its = $$("#tagsug .sugi"); if (!its.length) return;
+    sugIdx = (sugIdx + dx + its.length) % its.length; its.forEach((x, i) => x.classList.toggle("on", i === sugIdx)); its[sugIdx].scrollIntoView({ block: "nearest" });
+  }
+  // Điền "bệnh án" thiết bị vào hồ sơ đang mở
+  function applyDevice(d, opt = {}) {
+    if (!canEdit()) { toast(`Hồ sơ của ${rec.owner.name}: cấp 1 chỉ sửa hồ sơ mình tạo`); return; }
+    if (d.T !== rec.type) {
+      if (rec.saved && !opt.force) { toast(`${d.t} là ${d.T}, hồ sơ đang mở là ${rec.type} – tạo hồ sơ ${d.T} mới để dùng thiết bị này`); return; }
+      const keep = { calDate: rec.h.calDate, issueDate: rec.h.issueDate };
+      rec = newRecord(d.T); Object.assign(rec.h, keep);
+    }
+    const h = rec.h, T = rec.type, last = devRecs(d)[0];
+    const inCat = SEED.locations.some(x => x[0] === d.s);
+    let msg = [];
+    if (inCat && (h.locMode === "free" || h.location !== d.s)) { h.locMode = "list"; h.location = d.s; h.cust = CUSTS.keyOf(d.s); msg.push(`công trình → ${siteName(d.s)}`); }
+    if (!inCat) msg.push(`công trình "${d.s}" chưa có trong danh mục – chọn tay`);
+    h.tag = d.t;
+    if (last) {   // hồ sơ đã lưu mới nhất của thiết bị này: lấy thông số đã được người dùng sửa / xác nhận
+      ["description", "model", "serial", "maker", "makerSel", "mfgYear", "acc", "min", "max", "unit", "pset", "unitPset", "tset", "tcType", "scale", "res", "typeEN", "sens", "indType", "micro", "dirQTG"].forEach(k => { if (last.h[k] !== undefined && last.type === T) h[k] = last.h[k]; });
+      msg.unshift(`theo hồ sơ ${last.certNo || ""} ngày ${last.h.calDate || "?"}`);
+    } else {
+      if (T === "PT") h.description = /Differential/i.test(d.d) ? "Differential Pressure Transmitter" : "Pressure Transmitter";
+      else if (T === "PS") h.description = /Differential/i.test(d.d) ? "Differential Pressure Switch" : "Pressure Switch";
+      h.model = d.md; h.serial = d.sn;
+      const mk = makersFor(T).find(m => m.toLowerCase() === d.mk.toLowerCase());
+      h.maker = mk || d.mk; h.makerSel = mk || (d.mk ? OTHER : "");
+      if (d.a !== "") h.acc = d.a;
+      h.min = d.mn; h.max = d.mx;
+      if (!TEMP.includes(T) && PUNITS.includes(d.u)) h.unit = d.u;
+      if (T === "PS") { h.pset = d.ps; const pu = PUNITS.includes(d.pu) ? d.pu : PUNITS.includes(d.u) ? d.u : ""; if (pu) h.unitPset = pu; }
+      if (T === "TS") h.tset = d.ps;
+      msg.unshift("theo danh sách thiết bị");
+    }
+    if (rec.certAuto) rec.certNo = autoCertNo();
+    if (rec.ptAuto) genPoints();
+    touched(); hideSuggest(); renderEntry(); persistCurrent();
+    toast(`Đã điền ${d.t} ${msg.join(", ")}. Sửa tay nếu thiết bị đã thay.`);
+  }
+  let devQ = { site: "", type: "", q: "", n: 150 };
+  function renderDevices() {
+    const el = $("#v-devices");
+    const sites = [...new Set(DEVS.map(d => d.s))];
+    const cnt = s => DEVS.filter(d => d.s === s).length;
+    const types = [...new Set(DEVS.map(d => d.T))];
+    el.innerHTML = `<div class="card"><h2>Danh sách thiết bị theo công trình <small>(${DEVS.length} thiết bị · ${sites.length} công trình)</small></h2>
+      <p class="hint">Nguồn: ${esc((window.LabDevices || {}).note || "—")}. Bấm <b>Nhập hồ sơ</b> để mở hồ sơ mới đã điền sẵn thông số; mọi ô vẫn sửa tay được.</p>
+      <div class="grid">
+        <label class="f"><span>Công trình</span><select id="dvS"><option value="">Tất cả công trình</option>${sites.map(s => `<option value="${esc(s)}"${devQ.site === s ? " selected" : ""}>${esc(siteName(s))} (${cnt(s)})</option>`).join("")}</select></label>
+        <label class="f"><span>Loại</span><select id="dvT"><option value="">Tất cả loại</option>${types.map(t => `<option${devQ.type === t ? " selected" : ""}>${t}</option>`).join("")}</select></label>
+        <label class="f wide"><span>Tìm</span><input id="dvQ" value="${esc(devQ.q)}" placeholder="Tag, serial, model, hãng, khu vực…" autocomplete="off"></label>
+      </div><div id="dvL"></div></div>`;
+    $("#dvS").onchange = e => { devQ.site = e.target.value; devQ.n = 150; devList(); };
+    $("#dvT").onchange = e => { devQ.type = e.target.value; devQ.n = 150; devList(); };
+    $("#dvQ").oninput = e => { devQ.q = e.target.value; devQ.n = 150; devList(); };
+    devList();
+  }
+  function devList() {
+    const q = devQ.q.toLowerCase().trim(), k = tagKey(devQ.q);
+    const L = DEVS.filter(d => (!devQ.site || d.s === devQ.site) && (!devQ.type || d.T === devQ.type) && (!q || d.key.includes(k) || [d.sn, d.md, d.mk, d.ar, d.d].join(" ").toLowerCase().includes(q)));
+    const G = new Map(); L.slice(0, devQ.n).forEach(d => { if (!G.has(d.s)) G.set(d.s, []); G.get(d.s).push(d); });
+    const row = d => { const r = devRecs(d)[0];
+      const prev = r ? `Hồ sơ app: <b>${esc(r.certNo || "—")}</b> ${esc(r.h.calDate || "")}${r.summary ? ` <span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Đạt" : "Không đạt"}</span>` : ""}`
+        : d.c || d.cd ? `GCN trước: ${esc([d.c, d.cd && "ngày " + d.cd, d.du && "hạn " + d.du, d.r].filter(Boolean).join(" · "))}` : "";
+      return `<div class="rec dv"><div><b>${esc(d.t)}</b> <span class="tag">${d.T}</span> <small class="mut">${esc(d.d)}</small><br>
+        <small>${esc([d.mk, d.md, d.sn && "S/N " + d.sn, devRange(d), d.a && "±" + d.a + "%"].filter(Boolean).join(" · ") || "—")}</small>
+        ${d.ar || d.n ? `<br><small class="mut">${esc([d.ar && "Khu vực: " + d.ar, d.n].filter(Boolean).join(" · "))}</small>` : ""}
+        ${prev ? `<br><small class="mut">${prev}</small>` : ""}</div>
+        <div class="ra"><button class="btn sm" data-dv="${d.i}">Nhập hồ sơ</button></div></div>`; };
+    $("#dvL").innerHTML = (L.length ? [...G].map(([s, a]) => `<h3 class="dvh">${esc(siteName(s))} <small class="mut">(${L.filter(d => d.s === s).length})</small></h3>${a.map(row).join("")}`).join("") : `<p class="mut">Không có thiết bị khớp.</p>`)
+      + (L.length > devQ.n ? `<div class="btns"><button class="btn" data-dvmore="1">Hiện thêm (${L.length - devQ.n} thiết bị còn lại)</button></div>` : "");
+  }
+  function onDevicesClick(e) {
+    const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.dvmore) { devQ.n += 300; devList(); return; }
+    if (b.dataset.dv == null) return;
+    const d = DEVS[Number(b.dataset.dv)]; if (!d) return;
+    rec = newRecord(d.T); go("entry"); applyDevice(d);
+  }
+
   /* ---------- render: entry ---------- */
   const TYPES = [["PT", "PT / DPT", "Transmitter áp suất"], ["PS", "PS / DPS", "Công tắc áp suất"], ["TT", "TT", "Transmitter nhiệt"], ["PG", "PG", "Đồng hồ áp suất"], ["TG", "TG", "Đồng hồ nhiệt"], ["RTD", "RTD", "Nhiệt điện trở"], ["TC", "TC", "Cặp nhiệt"], ["DPG", "DPG", "Đồng hồ chênh áp"], ["TS", "TS", "Công tắc nhiệt"]];
   function fld(label, path, opt = {}) {
     const v = getPath(rec, path); const id = "f_" + path.replace(/\./g, "_");
     let ctl;
-    if (opt.options) ctl = `<select id="${id}" data-p="${path}">${opt.options.map(o => { const [val, txt] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}"${String(val) === String(v) ? " selected" : ""}>${esc(txt)}</option>`; }).join("")}</select>`;
+    if (opt.options) ctl = `<select id="${id}" data-p="${path}">${opt.options.map(o => { const [val, txt, dis] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}"${String(val) === String(v) ? " selected" : ""}${dis ? ' disabled class="optx"' : ""}>${esc(txt)}</option>`; }).join("")}</select>`;
     else ctl = `<input id="${id}" data-p="${path}" value="${esc(v)}" ${opt.type ? `type="${opt.type}"` : ""} ${opt.num ? 'inputmode="decimal"' : ""} ${opt.list ? `list="${opt.list}"` : ""} placeholder="${esc(opt.ph || "")}" autocomplete="off"${opt.ro ? " readonly" : ""}>`;
     if (opt.sign) ctl = `<div class="pm">${ctl}<button type="button" class="pmb" data-neg="${path}" aria-label="Đổi dấu">±</button></div>`;
     return `<label class="f${opt.wide ? " wide" : ""}"><span>${label}</span>${ctl}</label>`;
   }
+  // Chuẩn hết hạn (theo Ngày HC): hiện xám, không chọn được, ghi "hết hạn – chờ cập nhật" (NGOC 06/11/2026). Cấp 3 cập nhật hạn mới ở tab Chuẩn.
   function standOptions(kind, path) {
-    const today = todayISO(), lab = s => `${s.key} · S/N ${s.serial}${s.loc ? " · " + s.loc : ""}${s.due && s.due < today ? " · HẾT HẠN" : ""}`;
-    const all = stands.filter(s => s.kind === kind), ctx = path ? standCtx(path) : null;
-    if (!ctx) return [["", path ? "— chọn (nhập dải đo / sai số để lọc chuẩn phù hợp) —" : "— chọn —"]].concat(all.map(s => [s.id, lab(s)]));
-    const [unit, lo, hi, mpe] = ctx, cur = getPath(rec, path);
+    const day = rec.h.calDate || todayISO(), lab = s => `${s.key} · S/N ${s.serial}${s.loc ? " · " + s.loc : ""}`;
+    const cur = path ? getPath(rec, path) : "", kindAll = stands.filter(s => s.kind === kind);
+    const exp = kindAll.filter(s => expiredOn(s, day));
+    const expOpts = exp.map(s => [s.id, `⛔ ${lab(s)} · HẾT HẠN ${s.due} – chờ cập nhật (cấp 3)`, s.id !== cur]);
+    const all = kindAll.filter(s => !expiredOn(s, day)), ctx = path ? standCtx(path) : null;
+    const curExp = cur && exp.some(s => s.id === cur);
+    const tail = out => out.concat(expOpts.map(o => o[0] === cur ? [o[0], o[1] + " · KHÔNG ĐƯỢC DÙNG"] : o));
+    if (!ctx) return tail([["", path ? "— chọn (nhập dải đo / sai số để lọc chuẩn phù hợp) —" : "— chọn —"]].concat(all.map(s => [s.id, lab(s)])));
+    const [unit, lo, hi, mpe] = ctx;
     const span = s => { const f = s.kind === "p" ? C.factor(s.unit, unit) : 1; return ((s.kind === "e" && s.certRange ? s.certRange : s.max) - s.min) * (isFinite(f) ? f : 1); };
     const ok = all.filter(s => !fitStand(s, unit, lo, hi, mpe)).sort((a, b) => span(a) - span(b));
     const hidden = all.length - ok.length;
     const head = ok.length ? `— chọn chuẩn phù hợp${hidden ? ` (đã ẩn ${hidden} chuẩn không phù hợp)` : ""} —` : "— KHÔNG có chuẩn phù hợp dải / sai số này —";
     const out = [["", head]].concat(ok.map(s => [s.id, lab(s)]));
     const cs = cur && standById(cur);
-    if (cs && cs.kind === kind && !ok.includes(cs)) out.push([cs.id, `${lab(cs)} · KHÔNG PHÙ HỢP: ${fitStand(cs, unit, lo, hi, mpe)}`]);
-    return out;
+    if (cs && cs.kind === kind && !ok.includes(cs) && !curExp) out.push([cs.id, `${lab(cs)} · KHÔNG PHÙ HỢP: ${fitStand(cs, unit, lo, hi, mpe)}`]);
+    return tail(out);
   }
   function renderEntry() {
     const h = rec.h, PT = rec.type === "PT";
@@ -468,12 +599,11 @@
           ? fld("Địa điểm 2 – nơi lắp đặt", "h.locFree", { wide: 1, ph: "Theo gói thầu, VD: Giàn …" }) + fld("Cơ sở sử dụng (Customer)", "h.custFree", { wide: 1, ph: "Tên đơn vị sử dụng in trên chứng chỉ" })
           : fld("Khách hàng (Customer)", "h.cust", { options: custOpts, wide: 1 }) + fld("Công trình khí (Location)", "h.location", { options: locOpts, wide: 1 })
             + (L0 ? `<div class="f wide locprint"><span>In trên chứng chỉ</span><div>Cơ sở sử dụng: <b>${esc(L0.custVN || "—")}</b><br>Địa điểm lắp đặt: <b>${esc(L0.locVN)}</b></div></div>` : "")}
-        ${fld("Địa điểm thực hiện (in trên QTG)", "h.calPlace", { ph: h.locMode === "free" ? (h.locFree || "") : h.location })}
         ${fld("Số chứng chỉ", "certNo", { ph: autoCertNo(), ro: !A.can("certNo") })}`;
     let dev = `
       <div class="grid">
         ${locHtml}
-        ${fld("Tag", "h.tag", { ph: PT ? "PT-1430A" : "PDSH-1106" })}
+        ${fld("Tag (gõ để gợi ý từ danh sách thiết bị)", "h.tag", { ph: PT ? "PT-1430A" : "PDSH-1106", wide: 1 })}
         ${fld("Mô tả (Description)", "h.description", { options: descOpts })}
         ${fld("Kiểu / Model", "h.model")}
         ${fld("Số serial", "h.serial")}
@@ -608,7 +738,7 @@
       + fld("Phạm vi đo – Min", "h.min", { num: 1, sign: 1 }) + fld("Phạm vi đo – Max", "h.max", { num: 1, sign: 1 }) + fld("Đơn vị", "h.unit", { options: PUNITS })
       + fld("Vạch chia (Scale interval)", "h.scale", { num: 1 }) + fld("Độ chia nhỏ nhất (Definition)", "h.res", { num: 1 }) + asf;
     const dev = `<div class="grid">${locHtml}
-        ${fld("Tag", "h.tag")}${fld("Kiểu / Model", "h.model")}${fld("Số serial", "h.serial")}
+        ${fld("Tag (gõ để gợi ý từ danh sách thiết bị)", "h.tag", { wide: 1 })}${fld("Kiểu / Model", "h.model")}${fld("Số serial", "h.serial")}
         ${fld("Hãng sản xuất", "h.makerSel", { options: [["", "— chọn hãng —"], [OTHER, "KHÁC (nhập tay)"]].concat(makersFor(rec.type)) })}
         ${makerSel(h) === OTHER ? fld("Hãng (nhập tay)", "h.maker") : ""}
         ${spec}
@@ -798,6 +928,7 @@
     if (e.target.readOnly) return;
     if (!canEdit()) { toast(`Hồ sơ của ${rec.owner.name}: cấp 1 chỉ sửa hồ sơ mình tạo`); renderEntry(); return; }
     setPath(rec, p, e.target.value);
+    if (p === "h.tag") showSuggest(e.target);
     const wasApproved = touched();
     if (p === "certNo") rec.certAuto = false;
     if (p === "h.makerSel") { rec.h.maker = e.target.value === OTHER ? "" : e.target.value; renderEntry(); if (e.target.value === OTHER) focusPath("h.maker"); persistCurrent(); return; }
@@ -930,6 +1061,7 @@
       if (!rec.h.tag) { toast("Nhập Tag trước khi duyệt"); return; }
       const c = compute(); if (!c.res) { toast(c.errors[0] || "Chưa đủ số liệu"); return; }
       if (!rec.sig.inspector) { toast("Chưa có tên Kiểm định viên"); return; }
+      const ex = expiredUsed(rec); if (ex.length) { toast(`Không duyệt được: chuẩn ${ex.map(s => s.key).join(", ")} đã hết hạn`); return; }
       const m = A.me();
       if (rec.sig.inspector.trim().toLowerCase() === m.name.toLowerCase()) toast("Lưu ý: người duyệt trùng Kiểm định viên");
       rec.sig.controller = m.name; rec.approved = { by: m.name, role: m.role, at: new Date().toISOString() }; delete rec.submitted; logAct("Duyệt");
@@ -952,6 +1084,12 @@
     if (!rec.owner && A.me()) rec.owner = { id: A.me().id, name: A.me().name };
     if (quiet !== true) logAct(rec.saved ? "Lưu" : "Tạo");
     const c = compute(); syncCertNo(c);
+    // NGOC 06/11/2026: trên một máy không được có 2 hồ sơ trùng số chứng chỉ (chống trùng giữa các máy cần máy chủ chung)
+    const dupNo = rec.certNo && records.find(r => r.id !== rec.id && (r.certNo || "").trim().toUpperCase() === rec.certNo.trim().toUpperCase());
+    if (dupNo) {
+      if (rec.certAuto) { rec.certNo = autoCertNo(); const f = $("#f_certNo"); if (f) f.value = rec.certNo; }
+      else { toast(`Không lưu: số ${rec.certNo} đã dùng cho ${dupNo.h.tag || "hồ sơ khác"} – nhập số khác`); return; }
+    }
     rec.saved = true; rec.updated = new Date().toISOString();
     rec.summary = c.res ? { pass: c.res.pass, U: summaryU(rec.type, c.res) } : null;
     const i = records.findIndex(r => r.id === rec.id);
@@ -963,9 +1101,8 @@
   function docInfo() {
     const c = compute();
     const s1 = standById(rec.h.stand1), s2 = standById(rec.h.stand2), s3 = standById(rec.h.stand3), T = rec.type;
-    const used = T === "PT" || T === "TG" ? [s1, s2] : ["TT", "RTD", "TC"].includes(T) ? [s1, s2, s3] : [s1];
-    const exp = settings.warnExpired ? used.filter(Boolean).filter(s => isExpired(s, rec.h.calDate)) : [];
-    return { c, info: { stand1: s1, stand2: ["PT", "TT", "RTD", "TG", "TC"].includes(T) ? s2 : null, stand3: s3, heat: T === "TS" ? s1 : null, loc: recLoc(), draft: exp.length ? "CHUẨN HẾT HẠN, CẦN CẬP NHẬT" : (c.warns.some(w => w.startsWith("Chưa nhập")) ? "CHƯA ĐỦ CHỮ KÝ" : (rec.approved ? "" : "CHƯA DUYỆT")) } };
+    const exp = expiredUsed(rec);   // luôn đóng dấu, không phụ thuộc Cài đặt (NGOC 06/11/2026)
+    return { c, info: { stand1: s1, stand2: ["PT", "TT", "RTD", "TG", "TC"].includes(T) ? s2 : null, stand3: s3, heat: T === "TS" ? s1 : null, loc: recLoc(), draft: exp.length ? "CHUẨN HẾT HẠN, CẦN CẬP NHẬT" : (!rec.sig.inspector || !rec.sig.controller ? "CHƯA ĐỦ CHỮ KÝ" : (rec.approved ? "" : "CHƯA DUYỆT")) } };
   }
   function pagesHtml(which) {
     const { c, info } = docInfo();
@@ -1177,13 +1314,13 @@
     let n = 0;
     list.forEach(r => {
       const c = compute(r);
-      if (!r.h.tag || !c.res || !r.sig.inspector) { skip.push(r.h.tag || r.certNo || "?"); return; }
+      if (!r.h.tag || !c.res || !r.sig.inspector || expiredUsed(r).length) { skip.push(r.h.tag || r.certNo || "?"); return; }
       r.sig.controller = m.name; r.approved = { by: m.name, role: m.role, at: now, batch: true }; delete r.submitted;
       (r.log = r.log || []).push({ at: now, by: m.name, act: "Duyệt (cả gói)" }); r.updated = now; n++;
       if (rec && rec.id === r.id) rec = normalize(clone(r));
     });
     store.set("records", records); persistCurrent(); renderRecords();
-    toast(`Đã duyệt ${n} hồ sơ${skip.length ? ` · bỏ qua ${skip.length} (thiếu số liệu): ${skip.join(", ")}` : ""}`);
+    toast(`Đã duyệt ${n} hồ sơ${skip.length ? ` · bỏ qua ${skip.length} (thiếu số liệu / chuẩn hết hạn): ${skip.join(", ")}` : ""}`);
   }
   async function saveFile(blob, name) {
     const file = new File([blob], name, { type: blob.type });
@@ -1195,14 +1332,17 @@
     f.text().then(t => {
       const d = JSON.parse(t); let n = 0;
       // Hồ sơ mới: thêm; hồ sơ đã có (cùng id): thay bằng bản mới hơn – để Gửi duyệt / trả kết quả duyệt qua lại giữa các máy
-      let u = 0;
+      let u = 0; const dupSkip = [];
       (d.records || []).forEach(r => {
         const i = records.findIndex(x => x.id === r.id);
         if (i >= 0 && !((r.updated || "") > (records[i].updated || ""))) return;
+        const cn = (r.certNo || "").trim().toUpperCase();
+        if (cn && records.some(x => x.id !== r.id && (x.certNo || "").trim().toUpperCase() === cn)) { dupSkip.push(r.certNo); return; }   // không nhận hồ sơ trùng số GCN
+
         if (i >= 0) { records[i] = normalize(r); u++; } else { records.push(normalize(r)); n++; }
         Object.keys(d.photos || {}).forEach(k => { if (k.startsWith(r.id + ":")) P.put(k, d.photos[k]).catch(() => { }); });
       });
-      store.set("records", records); renderRecords(); toast(`Đã nhập ${n} hồ sơ mới${u ? `, cập nhật ${u} hồ sơ` : ""}`);
+      store.set("records", records); renderRecords(); toast(`Đã nhập ${n} hồ sơ mới${u ? `, cập nhật ${u} hồ sơ` : ""}${dupSkip.length ? ` · bỏ qua ${dupSkip.length} hồ sơ trùng số GCN: ${dupSkip.join(", ")}` : ""}`);
     }).catch(() => toast("File không hợp lệ"));
   }
 
@@ -1211,7 +1351,7 @@
   const KINDS = { p: "Áp suất", e: "Điện (mA)", t: "Nhiệt độ", r: "Điện trở", v: "Điện áp (mV)" };
   function renderStands() {
     const today = todayISO();
-    const row = s => `<div class="rec"><div><b>${esc(s.key)}</b> <span class="tag">${KINDS[s.kind] || s.kind}</span>${s.loc ? ` <span class="tag loc">${esc(s.loc)}</span>` : ""} <span class="${s.due && s.due >= today ? "ok" : "bad"}">${s.due && s.due >= today ? "Còn hạn " + s.due : "Hết hạn " + (s.due || "?")}</span><br>
+    const row = s => `<div class="rec${s.due && s.due < today ? " stx" : ""}"><div><b>${esc(s.key)}</b> <span class="tag">${KINDS[s.kind] || s.kind}</span>${s.loc ? ` <span class="tag loc">${esc(s.loc)}</span>` : ""} <span class="${s.due && s.due >= today ? "ok" : "bad"}">${s.due && s.due >= today ? "Còn hạn " + s.due : "⛔ Hết hạn " + (s.due || "?") + " – không được dùng, chờ cấp 3 cập nhật GCN mới"}</span><br>
       <small class="mut">${esc(s.name)} · ${esc(s.maker)} ${esc(s.model)} · S/N ${esc(s.serial)} · (${s.min}÷${s.max}) ${esc(s.unit)} · U = ${s.unc} ${esc(s.uncUnit)}${s.rdg ? (s.kind === "p" ? ` + ${s.rdg}%Rdg` : ` · sai số ${s.rdg} ${esc(s.unit)}`) : ""}${s.err && s.kind === "r" ? ` · sai số ${s.err} Ω` : ""}${s.cert ? ` · GCN ${esc(s.cert)}` : ""} · ${esc(s.trace || "")}</small>${dispTxt(s) ? `<br><small class="mut">Hiển thị (số chữ số thập phân): ${esc(dispTxt(s))}</small>` : ""}${s.note ? `<br><small class="${/CHỈ DÙNG|nghi|cần chốt/.test(s.note) ? "bad" : "mut"}">${esc(s.note)}</small>` : ""}</div>
       ${A.can("editStands") ? `<div class="ra"><button class="btn sm" data-s="edit" data-id="${s.id}">Sửa</button></div>` : ""}</div>`;
     const form = editStand ? standForm(editStand) : "";
@@ -1325,7 +1465,7 @@
     el.onclick = e => { const b = e.target.closest("[data-fj]"); if (!b) return; const d = $("#f-" + b.dataset.fj); d.open = true; d.scrollIntoView({ behavior: "smooth", block: "start" }); };
   }
   function renderRefs() { const m = A.me(); $("#v-refs").innerHTML = window.LabRefs.render(settings, m ? m.role : 0); }
-  const VIEWS = { entry: renderEntry, records: renderRecords, stands: renderStands, formulas: renderFormulas, refs: renderRefs, settings: renderSettings };
+  const VIEWS = { entry: renderEntry, records: renderRecords, devices: renderDevices, stands: renderStands, formulas: renderFormulas, refs: renderRefs, settings: renderSettings };
   let curView = "entry";
   function go(v) {
     curView = v;
@@ -1342,6 +1482,15 @@
     $("#v-entry").addEventListener("change", e => { if (e.target.dataset.photo != null) onPhotoChange(e); });
     $("#v-entry").addEventListener("click", e => { const im = e.target.closest("img[data-phview]"); if (im) { const w = window.open(); if (w) w.document.write(`<title>Ảnh</title><img src="${im.src}" style="max-width:100%">`); } });
     $("#v-records").addEventListener("click", onRecordsClick);
+    $("#v-devices").addEventListener("click", onDevicesClick);
+    // Gợi ý Tag (như Excel): bàn phím ↑ ↓ Enter Esc, chuột / chạm chọn; rời ô thì ẩn
+    $("#v-entry").addEventListener("keydown", e => { if (e.target.dataset.p !== "h.tag" || !$("#tagsug")) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); moveSuggest(e.key === "ArrowDown" ? 1 : -1); }
+      else if (e.key === "Enter" && sugIdx >= 0) { e.preventDefault(); applyDevice(sugList[sugIdx]); }
+      else if (e.key === "Escape") hideSuggest(); });
+    $("#v-entry").addEventListener("pointerdown", e => { const it = e.target.closest("[data-sug]"); if (!it) return; e.preventDefault(); applyDevice(sugList[Number(it.dataset.sug)]); });
+    $("#v-entry").addEventListener("focusout", e => { if (e.target.dataset.p === "h.tag") setTimeout(hideSuggest, 150); });
+    $("#v-entry").addEventListener("focusin", e => { if (e.target.dataset.p === "h.tag" && e.target.value) showSuggest(e.target); });
     $("#v-stands").addEventListener("click", onStandsClick);
     $("#v-stands").addEventListener("change", e => {
       if (e.target.dataset.k !== "kind" || !editStand) return;
