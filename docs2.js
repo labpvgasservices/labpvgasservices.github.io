@@ -213,12 +213,12 @@
         ${row("Nơi sử dụng:", "Place:", esc(L.locVN), esc(L.locEN))}
         ${row("Đơn vị sử dụng:", "User:", `<b>${esc(L.custVN)}</b>`, `<b>${esc(L.custEN)}</b>`, { lb: 1 })}
         ${row("Phương pháp thực hiện:", "Method of verification:", esc(S0.procVN || h.procedure), esc(S0.procEN || ""))}
-        ${row("Chế độ kiểm định:", "Type of verification:", `<span class="red">${esc(h.verType)}</span>`, `<span class="red">${esc(VT[h.verType] || "")}</span>`, { red: 1 })}
+        ${row("Chế độ kiểm định:", "Type of verification:", `<b>${esc(h.verType)}</b>`, esc(VT[h.verType] || ""), { lb: 1 })}
         ${row("Kết luận:", "Conclusion:", `<b>${pass ? "Đạt yêu cầu kỹ thuật đo lường" : "Không đạt yêu cầu kỹ thuật đo lường"}</b>`, pass ? "Pass" : "Fail", { lb: 1 })}
         ${row("Số tem kiểm định:", "Verification stamp N<sup>o</sup>:", `<b>${esc(h.stamp || rec.certNo)}</b>`, null, { lb: 1 })}
         ${row("Thời hạn đến: (*)", "Valid until:", `<i>${pass ? dVN(dd) : "—"}</i>`, pass ? dENY(dd) : "")}
       </table>
-      <div class="issue pgi">${it(`${esc(st.place)}, <span class="red">ngày ${p2(iss.getDate())} tháng ${p2(iss.getMonth() + 1)}</span> năm ${iss.getFullYear()}`)}<br>${it("Date of issue")}</div>
+      <div class="issue pgi">${it(`${esc(st.place)}, ngày ${p2(iss.getDate())} tháng ${p2(iss.getMonth() + 1)} năm ${iss.getFullYear()}`)}<br>${it("Date of issue")}</div>
       <table class="csig pgsig"><tr><td><b>Kiểm định viên</b><br>${it("Verified by")}</td><td><b>${esc(st.sig2Title)}</b><br>${it(esc(st.sig2TitleEn))}</td></tr>
         <tr class="sp"><td></td><td></td></tr><tr><td><b>${esc(rec.sig.inspector)}</b></td><td><b>${esc(st.sig2Name)}</b></td></tr></table>
       <div class="pgfoot">(*) Với điều kiện tôn trọng các quy định về sử dụng và bảo quản.<br><i>(With respectfulness of rules of use and maintenance)</i></div></section>`;
