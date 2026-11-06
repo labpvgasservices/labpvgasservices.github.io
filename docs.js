@@ -35,6 +35,10 @@
   function decimalsOf(arr) { let d = 0; arr.forEach(v => { const s = String(v == null ? "" : v).replace(",", "."); const i = s.indexOf("."); if (i >= 0) d = Math.max(d, s.length - i - 1); }); return d; }
   const pDec = arr => Math.min(3, Math.max(2, decimalsOf(arr)));
   const g = (v, d = 6) => isFinite(v) ? Number(v.toPrecision(d)).toString() : "—";
+  // NGOC 06/11/2026: bảng kết quả theo điểm của trang Uncer (cả 9 loại) in tối thiểu 2 chữ số thập phân (VD 62.5 → 62.50, 0 → 0.00);
+  // số thật sự có nhiều số lẻ hơn thì giữ đủ (tối đa 6), không làm mất số đọc.
+  const f2 = v => { v = Number(v); if (!isFinite(v)) return "—"; const x = Number(v.toPrecision(12)); const d = Math.max(2, Math.min(6, (String(x).split(".")[1] || "").length)); return x.toFixed(d); };
+  const g2 = (v, d = 6) => isFinite(v) ? f2(Number(Number(v).toPrecision(d))) : "—";
   const cb = on => `<span class="cb${on ? " on" : ""}"></span>`;
   const it = s => `<i>${s}</i>`;
 
@@ -261,8 +265,8 @@
       const hd = c.map((_, j) => `<th>${j < n ? "R" : "F"}${(j % n) + 1}</th>`).join("");
       const row = (ref, lab, f) => `<tr><td class="ref">${ref}</td><td class="l">${lab}</td>${c.map(x => `<td>${f(x)}</td>`).join("")}</tr>`;
       const grid = `<table class="res ug"><thead><tr><th class="ref">Hàng</th><th class="l">Đại lượng</th>${hd}</tr></thead><tbody>
-        ${row("19", "Standard Pressure (xi)", x => g(x.x))}${row("20", "Correct Pressure (xi)", x => g(x.x))}${row("21", "Standard Current (mA)", x => g(x.I))}
-        ${row("22", "Instrument Yi (mA)", x => g(x.y))}${row("23", "u<sub>A,i</sub> (mA)", x => g(x.uAmA, 4))}${row("24", "u<sub>A,i</sub> (%)", x => g(x.uA, 4))}
+        ${row("19", "Standard Pressure (xi)", x => g2(x.x))}${row("20", "Correct Pressure (xi)", x => g2(x.x))}${row("21", "Standard Current (mA)", x => g2(x.I))}
+        ${row("22", "Instrument Yi (mA)", x => g2(x.y))}${row("23", "u<sub>A,i</sub> (mA)", x => g(x.uAmA, 4))}${row("24", "u<sub>A,i</sub> (%)", x => g(x.uA, 4))}
         ${row("38", "u<sub>s,i</sub> chuẩn (%)", x => g(x.us, 4))}${row("25", "U<sub>c,i</sub> (%)", x => g(x.uc, 4))}</tbody></table>`;
       const reg = `<div class="ucols"><table class="ukv">
           ${r3("F28", "1. Hệ số b = LINEST", g(res.b, 8))}${r3("F29", "Hệ số a = LINEST", g(res.a, 8))}
@@ -274,7 +278,7 @@
         </table></div>`;
       const pd = pDec(rec.pt.points);
       const out = `<table class="res ug"><thead><tr><th>Áp suất chuẩn<br>B46</th><th>Quy đổi mA<br>C46</th><th>DUT tăng<br>D46</th><th>DUT giảm<br>E46</th><th>SHC tăng<br>F46</th><th>SHC giảm<br>G46</th><th>SHC TB<br>H46</th><th>Uc,i(tb) %<br>I46</th><th>Uexp ${esc(h.unit)}<br>J46</th><th>Uexp %<br>K46</th><th>In CC<br>${esc(h.unit)}</th></tr></thead><tbody>
-        ${res.rows.map(r => `<tr><td>${g(r.x)}</td><td>${g(r.ideal)}</td><td>${r.rise}</td><td>${r.fall}</td><td>${g(r.shcR, 4)}</td><td>${g(r.shcF, 4)}</td><td>${g(r.shcAvg, 4)}</td><td>${g(r.ucAvg, 6)}</td><td>${g(r.U, 6)}</td><td>${g(r.Upct, 6)}</td><td><b>${uTxt("PT", r.U)}</b></td></tr>`).join("")}</tbody></table>`;
+        ${res.rows.map(r => `<tr><td>${g2(r.x)}</td><td>${g2(r.ideal)}</td><td>${f2(r.rise)}</td><td>${f2(r.fall)}</td><td>${g2(r.shcR, 4)}</td><td>${g2(r.shcF, 4)}</td><td>${g2(r.shcAvg, 4)}</td><td>${g(r.ucAvg, 6)}</td><td>${g(r.U, 6)}</td><td>${g(r.Upct, 6)}</td><td><b>${uTxt("PT", r.U)}</b></td></tr>`).join("")}</tbody></table>`;
       const ratioI = res.shcMax / res.limI, ratioU = res.Umax / res.limU;
       const chk = `<table class="res ug chk"><thead><tr><th>Max |SHC| (mA)</th><th>Giới hạn SHC = acc%×16</th><th>SHC / giới hạn</th><th>U lớn nhất (${esc(h.unit)})</th><th>Giới hạn U = acc%×span</th><th>U / giới hạn</th><th>Kết luận</th></tr></thead>
         <tbody><tr><td>${g(res.shcMax, 4)}</td><td>${g(res.limI, 4)}</td><td class="${ratioI > 1 ? "bad" : ""}">${(ratioI * 100).toFixed(1)}%</td><td>${g(res.Umax, 6)}</td><td>${g(res.limU, 6)}</td><td class="${ratioU > 1 ? "bad" : ""}">${(ratioU * 100).toFixed(1)}%</td><td><b>${res.pass ? "Đạt (Pass)" : "Không đạt (Fail)"}</b></td></tr></tbody></table>
@@ -295,7 +299,7 @@
           ${r3("E13", "ĐKĐBĐ (Uncer)", g(res.E13), esc(h.unitPset))}${r3("E14", "ĐKĐBĐ quy đổi", g(res.E14), "%")}${r3("G14", "% of Rdg", g(res.G14), "%")}
           ${r3("", "Hạn HC Stand1", esc(s1.due || "?"))}
         </table></div>`;
-      const rows = res.hi.map((v, i) => `<tr><td>${i + 1}</td><td>${i === 0 ? esc(h.pset) : ""}</td><td>${v}</td><td>${res.lo[i]}</td><td>${g(res.G[i], 6)}</td><td>${g(res.H[i], 6)}</td><td>${g((v - res.F28) ** 2, 6)}</td><td>${g((res.lo[i] - res.F29) ** 2, 6)}</td></tr>`).join("");
+      const rows = res.hi.map((v, i) => `<tr><td>${i + 1}</td><td>${i === 0 ? esc(h.pset) : ""}</td><td>${f2(v)}</td><td>${f2(res.lo[i])}</td><td>${g2(res.G[i], 6)}</td><td>${g2(res.H[i], 6)}</td><td>${g((v - res.F28) ** 2, 6)}</td><td>${g((res.lo[i] - res.F29) ** 2, 6)}</td></tr>`).join("");
       const grid = `<table class="res ug"><thead><tr><th>Lần<br>A</th><th>Pset<br>B</th><th>Pm Rising<br>C/E</th><th>Pđ Falling<br>D/F</th><th>DPcm = Pset−Pm<br>G</th><th>DPcđ = Pset−Pđ<br>H</th><th>(Pm−Pm tb)²<br>K</th><th>(Pđ−Pđ tb)²<br>L</th></tr></thead><tbody>${rows}</tbody></table>`;
       const calc = `<div class="ucols"><table class="ukv">
           ${r3("F28", "Pm trung bình", g(res.F28, 8))}${r3("F29", "Pđ trung bình", g(res.F29, 8))}
@@ -346,5 +350,5 @@
     return pages.join("");
   }
 
-  window.LabDocs = { nTxt, uTxt, dot, certPage1, certPage2, qtgPage, uncPage, qcPages, dVN, dEN, toDate, esc, vn, vnTxt, decimalsOf, g, cb, it, draft, wmImg, certHeader, certFooter, qtgSig, envHtml, qModel, qRange, p2 };
+  window.LabDocs = { nTxt, uTxt, dot, f2, g2, certPage1, certPage2, qtgPage, uncPage, qcPages, dVN, dEN, toDate, esc, vn, vnTxt, decimalsOf, g, cb, it, draft, wmImg, certHeader, certFooter, qtgSig, envHtml, qModel, qRange, p2 };
 })();

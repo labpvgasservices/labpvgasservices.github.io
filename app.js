@@ -537,7 +537,7 @@
         : d.c || d.cd ? `GCN trước: ${esc([d.c, d.cd && "ngày " + d.cd, d.du && "hạn " + d.du, d.r].filter(Boolean).join(" · "))}` : "";
       return `<div class="rec dv"><div><b>${esc(d.t)}</b> <span class="tag">${d.T}</span> <small class="mut">${esc(d.d)}</small><br>
         <small>${esc([d.mk, d.md, d.sn && "S/N " + d.sn, devRange(d), d.a && "±" + d.a + "%"].filter(Boolean).join(" · ") || "—")}</small>
-        ${d.ar || d.by ? `<br><small class="mut">${esc([d.ar && "Khu vực: " + d.ar, d.by && "ĐV thực hiện: " + d.by, d.n].filter(Boolean).join(" · "))}</small>` : ""}
+        ${d.ar || d.n ? `<br><small class="mut">${esc([d.ar && "Khu vực: " + d.ar, d.n].filter(Boolean).join(" · "))}</small>` : ""}
         ${prev ? `<br><small class="mut">${prev}</small>` : ""}</div>
         <div class="ra"><button class="btn sm" data-dv="${d.i}">Nhập hồ sơ</button></div></div>`; };
     $("#dvL").innerHTML = (L.length ? [...G].map(([s, a]) => `<h3 class="dvh">${esc(siteName(s))} <small class="mut">(${L.filter(d => d.s === s).length})</small></h3>${a.map(row).join("")}`).join("") : `<p class="mut">Không có thiết bị khớp.</p>`)
@@ -556,27 +556,30 @@
   function fld(label, path, opt = {}) {
     const v = getPath(rec, path); const id = "f_" + path.replace(/\./g, "_");
     let ctl;
-    if (opt.options) ctl = `<select id="${id}" data-p="${path}">${opt.options.map(o => { const [val, txt] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}"${String(val) === String(v) ? " selected" : ""}>${esc(txt)}</option>`; }).join("")}</select>`;
+    if (opt.options) ctl = `<select id="${id}" data-p="${path}">${opt.options.map(o => { const [val, txt, dis] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}"${String(val) === String(v) ? " selected" : ""}${dis ? ' disabled class="optx"' : ""}>${esc(txt)}</option>`; }).join("")}</select>`;
     else ctl = `<input id="${id}" data-p="${path}" value="${esc(v)}" ${opt.type ? `type="${opt.type}"` : ""} ${opt.num ? 'inputmode="decimal"' : ""} ${opt.list ? `list="${opt.list}"` : ""} placeholder="${esc(opt.ph || "")}" autocomplete="off"${opt.ro ? " readonly" : ""}>`;
     if (opt.sign) ctl = `<div class="pm">${ctl}<button type="button" class="pmb" data-neg="${path}" aria-label="Đổi dấu">±</button></div>`;
     return `<label class="f${opt.wide ? " wide" : ""}"><span>${label}</span>${ctl}</label>`;
   }
+  // Chuẩn hết hạn (theo Ngày HC): hiện xám, không chọn được, ghi "hết hạn – chờ cập nhật" (NGOC 06/11/2026). Cấp 3 cập nhật hạn mới ở tab Chuẩn.
   function standOptions(kind, path) {
-    const day = rec.h.calDate || todayISO(), lab = s => `${s.key} · S/N ${s.serial}${s.loc ? " · " + s.loc : ""}${expiredOn(s, day) ? ` · HẾT HẠN ${s.due}` : ""}`;
+    const day = rec.h.calDate || todayISO(), lab = s => `${s.key} · S/N ${s.serial}${s.loc ? " · " + s.loc : ""}`;
     const cur = path ? getPath(rec, path) : "", kindAll = stands.filter(s => s.kind === kind);
-    const nExp = kindAll.filter(s => expiredOn(s, day)).length, expNote = nExp ? `, ẩn ${nExp} chuẩn hết hạn` : "";
+    const exp = kindAll.filter(s => expiredOn(s, day));
+    const expOpts = exp.map(s => [s.id, `⛔ ${lab(s)} · HẾT HẠN ${s.due} – chờ cập nhật (cấp 3)`, s.id !== cur]);
     const all = kindAll.filter(s => !expiredOn(s, day)), ctx = path ? standCtx(path) : null;
-    const keepCur = out => { const cs = cur && standById(cur); if (cs && cs.kind === kind && !out.some(o => o[0] === cs.id)) out.push([cs.id, `${lab(cs)}${expiredOn(cs, day) ? " · KHÔNG ĐƯỢC DÙNG" : ""}`]); return out; };
-    if (!ctx) return keepCur([["", path ? `— chọn (nhập dải đo / sai số để lọc chuẩn phù hợp${expNote}) —` : "— chọn —"]].concat(all.map(s => [s.id, lab(s)])));
+    const curExp = cur && exp.some(s => s.id === cur);
+    const tail = out => out.concat(expOpts.map(o => o[0] === cur ? [o[0], o[1] + " · KHÔNG ĐƯỢC DÙNG"] : o));
+    if (!ctx) return tail([["", path ? "— chọn (nhập dải đo / sai số để lọc chuẩn phù hợp) —" : "— chọn —"]].concat(all.map(s => [s.id, lab(s)])));
     const [unit, lo, hi, mpe] = ctx;
     const span = s => { const f = s.kind === "p" ? C.factor(s.unit, unit) : 1; return ((s.kind === "e" && s.certRange ? s.certRange : s.max) - s.min) * (isFinite(f) ? f : 1); };
     const ok = all.filter(s => !fitStand(s, unit, lo, hi, mpe)).sort((a, b) => span(a) - span(b));
     const hidden = all.length - ok.length;
-    const head = ok.length ? `— chọn chuẩn phù hợp${hidden || nExp ? ` (đã ẩn ${hidden} chuẩn không phù hợp${expNote})` : ""} —` : `— KHÔNG có chuẩn phù hợp dải / sai số này${expNote} —`;
+    const head = ok.length ? `— chọn chuẩn phù hợp${hidden ? ` (đã ẩn ${hidden} chuẩn không phù hợp)` : ""} —` : "— KHÔNG có chuẩn phù hợp dải / sai số này —";
     const out = [["", head]].concat(ok.map(s => [s.id, lab(s)]));
     const cs = cur && standById(cur);
-    if (cs && cs.kind === kind && !ok.includes(cs)) out.push([cs.id, `${lab(cs)} · KHÔNG PHÙ HỢP: ${expiredOn(cs, day) ? "hết hạn" : fitStand(cs, unit, lo, hi, mpe)}`]);
-    return out;
+    if (cs && cs.kind === kind && !ok.includes(cs) && !curExp) out.push([cs.id, `${lab(cs)} · KHÔNG PHÙ HỢP: ${fitStand(cs, unit, lo, hi, mpe)}`]);
+    return tail(out);
   }
   function renderEntry() {
     const h = rec.h, PT = rec.type === "PT";
@@ -1348,7 +1351,7 @@
   const KINDS = { p: "Áp suất", e: "Điện (mA)", t: "Nhiệt độ", r: "Điện trở", v: "Điện áp (mV)" };
   function renderStands() {
     const today = todayISO();
-    const row = s => `<div class="rec"><div><b>${esc(s.key)}</b> <span class="tag">${KINDS[s.kind] || s.kind}</span>${s.loc ? ` <span class="tag loc">${esc(s.loc)}</span>` : ""} <span class="${s.due && s.due >= today ? "ok" : "bad"}">${s.due && s.due >= today ? "Còn hạn " + s.due : "Hết hạn " + (s.due || "?")}</span><br>
+    const row = s => `<div class="rec${s.due && s.due < today ? " stx" : ""}"><div><b>${esc(s.key)}</b> <span class="tag">${KINDS[s.kind] || s.kind}</span>${s.loc ? ` <span class="tag loc">${esc(s.loc)}</span>` : ""} <span class="${s.due && s.due >= today ? "ok" : "bad"}">${s.due && s.due >= today ? "Còn hạn " + s.due : "⛔ Hết hạn " + (s.due || "?") + " – không được dùng, chờ cấp 3 cập nhật GCN mới"}</span><br>
       <small class="mut">${esc(s.name)} · ${esc(s.maker)} ${esc(s.model)} · S/N ${esc(s.serial)} · (${s.min}÷${s.max}) ${esc(s.unit)} · U = ${s.unc} ${esc(s.uncUnit)}${s.rdg ? (s.kind === "p" ? ` + ${s.rdg}%Rdg` : ` · sai số ${s.rdg} ${esc(s.unit)}`) : ""}${s.err && s.kind === "r" ? ` · sai số ${s.err} Ω` : ""}${s.cert ? ` · GCN ${esc(s.cert)}` : ""} · ${esc(s.trace || "")}</small>${dispTxt(s) ? `<br><small class="mut">Hiển thị (số chữ số thập phân): ${esc(dispTxt(s))}</small>` : ""}${s.note ? `<br><small class="${/CHỈ DÙNG|nghi|cần chốt/.test(s.note) ? "bad" : "mut"}">${esc(s.note)}</small>` : ""}</div>
       ${A.can("editStands") ? `<div class="ra"><button class="btn sm" data-s="edit" data-id="${s.id}">Sửa</button></div>` : ""}</div>`;
     const form = editStand ? standForm(editStand) : "";

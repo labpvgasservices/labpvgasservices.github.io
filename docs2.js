@@ -11,7 +11,7 @@
 (function () {
   "use strict";
   const C = window.LabCalc, D = window.LabDocs;
-  const { nTxt, uTxt, esc, vn, vnTxt, dVN, dEN, toDate, decimalsOf, g, cb, it, draft, wmImg, certHeader, certFooter, qtgSig, envHtml, qModel, p2 } = D;
+  const { f2, g2, nTxt, uTxt, esc, vn, vnTxt, dVN, dEN, toDate, decimalsOf, g, cb, it, draft, wmImg, certHeader, certFooter, qtgSig, envHtml, qModel, p2 } = D;
   const num = v => (v === "" || v == null) ? NaN : Number(String(v).replace(",", "."));
   const clampDec = (arr, lo, hi) => Math.min(hi, Math.max(lo, decimalsOf(arr)));
   const MONEN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -507,8 +507,6 @@
   }
   const verdict = p => `<b>${p ? "Đạt (Pass)" : "Không đạt (Fail)"}</b>`;
 
-  // NGOC 06/11/2026: bảng "Kết quả kiểm định" của PG in thống nhất 2 chữ số thập phân (số nào thật sự có nhiều hơn 2 số lẻ thì giữ đủ, không làm mất số đọc)
-  const f2 = v => { if (!isFinite(v)) return ""; const x = Number(Number(v).toPrecision(12)); const d = Math.max(2, Math.min(6, (String(x).split(".")[1] || "").length)); return x.toFixed(d); };
   function pgUnc(rec, res, st, info) {
     const h = rec.h, u = esc(h.unit), s1 = info.stand1;
     const inp = `<div class="ucols"><table class="ukv">
@@ -536,7 +534,7 @@
         ${r3("E6", "Thiết bị tạo MT", esc(hs ? hs.key : ""))}${r3("F17–F19", "Ổn định / Radial / Axial", hs ? `${hs.stab || 0} / ${hs.radial || 0} / ${hs.axial || 0}` : "0", deg)}
         ${r3("", "Hạn chuẩn", esc(s1 ? s1.due || "?" : "?"))}
       </table></div>`;
-    const rows = res.set.map((v, i) => { const Tm = res.rising ? v : res.reset[i], Td = res.rising ? res.reset[i] : v; return `<tr><td>${i + 1}</td><td>${g(Tm)}</td><td>${g(Td)}</td><td>${g(res.setDev[i], 6)}</td><td>${g(res.resetDev[i], 6)}</td><td>${g((Tm - res.C28) ** 2, 6)}</td><td>${g((Td - res.D28) ** 2, 6)}</td></tr>`; }).join("");
+    const rows = res.set.map((v, i) => { const Tm = res.rising ? v : res.reset[i], Td = res.rising ? res.reset[i] : v; return `<tr><td>${i + 1}</td><td>${g2(Tm)}</td><td>${g2(Td)}</td><td>${g2(res.setDev[i], 6)}</td><td>${g2(res.resetDev[i], 6)}</td><td>${g((Tm - res.C28) ** 2, 6)}</td><td>${g((Td - res.D28) ** 2, 6)}</td></tr>`; }).join("");
     const grid = `<table class="res ug"><thead><tr><th>Lần</th><th>Tm (Rising) C</th><th>Tđ (Falling) D</th><th>Set − Tset</th><th>Reset − Tset</th><th>(Tm − Tm tb)² G</th><th>(Tđ − Tđ tb)² H</th></tr></thead><tbody>${rows}</tbody></table>`;
     const calc = `<div class="ucols"><table class="ukv">
         ${r3("C28 / D28", "Tm tb / Tđ tb", `${g(res.C28, 8)} / ${g(res.D28, 8)}`)}${r3("F30", "1.1 utm = √(ΣG/(n(n−1)))", g(res.F30, 6), deg)}${r3("F31", "1.2 utd", g(res.F31, 6), deg)}
@@ -565,9 +563,9 @@
     const P = res.pt;
     const row = (lab, f) => `<tr><td class="l">${lab}</td>${P.map(p => `<td>${f(p)}</td>`).join("")}</tr>`;
     const grid = `<table class="res ug"><thead><tr><th class="l">Đại lượng</th>${P.map((p, i) => `<th>Điểm ${i + 1} (${res.cls[i]})</th>`).join("")}</tr></thead><tbody>
-      ${row("Chuẩn TB E60 (°C)", p => g(p.stdT, 7))}${row("Si chuẩn tăng / giảm", p => `${g(p.sSr, 3)} / ${g(p.sSf, 3)}`)}
-      ${row("DUT TB tăng / giảm (mA)", p => `${g(p.rise, 7)} / ${g(p.fall, 7)}`)}${row("Si DUT tăng / giảm", p => `${g(p.sDr, 3)} / ${g(p.sDf, 3)}`)}
-      ${row("Hồi trễ |giảm − tăng|", p => g(p.hyst, 4))}${row("SHC tăng / giảm (mA)", p => `${g(p.cR, 4)} / ${g(p.cF, 4)}`)}${row("Sai lệch %", p => g(p.err, 4))}</tbody></table>`;
+      ${row("Chuẩn TB E60 (°C)", p => g2(p.stdT, 7))}${row("Si chuẩn tăng / giảm", p => `${g(p.sSr, 3)} / ${g(p.sSf, 3)}`)}
+      ${row("DUT TB tăng / giảm (mA)", p => `${g2(p.rise, 7)} / ${g2(p.fall, 7)}`)}${row("Si DUT tăng / giảm", p => `${g(p.sDr, 3)} / ${g(p.sDf, 3)}`)}
+      ${row("Hồi trễ |giảm − tăng|", p => g(p.hyst, 4))}${row("SHC tăng / giảm (mA)", p => `${g2(p.cR, 4)} / ${g2(p.cF, 4)}`)}${row("Sai lệch %", p => g(p.err, 4))}</tbody></table>`;
     const R = res.R, keys = [["low", "thấp"], ["mid", "trung"], ["high", "cao"]];
     const rr = (lab, f) => `<tr><td class="l">${lab}</td>${keys.map(([k]) => `<td>${R[k].cnt ? f(R[k]) : "—"}</td>`).join("")}</tr>`;
     const ut = `<table class="res ug"><thead><tr><th class="l">Thành phần (cột F / H / J)</th>${keys.map(([, t]) => `<th>Dải ${t}</th>`).join("")}</tr></thead><tbody>
@@ -597,9 +595,9 @@
     const P = res.pt;
     const row = (lab, f) => `<tr><td class="l">${lab}</td>${P.map(p => `<td>${f(p)}</td>`).join("")}</tr>`;
     const grid = `<table class="res ug"><thead><tr><th class="l">Đại lượng</th>${P.map((p, i) => `<th>Điểm ${i + 1} (${res.cls[i]})</th>`).join("")}</tr></thead><tbody>
-      ${row("Chuẩn TB G55 (°C)", p => g(p.stdT, 7))}${row("Si chuẩn tăng / giảm", p => `${g(p.sSr, 3)} / ${g(p.sSf, 3)}`)}
-      ${row("DUT TB tăng / giảm (°C)", p => `${g(p.rise, 7)} / ${g(p.fall, 7)}`)}${row("Si DUT tăng / giảm", p => `${g(p.sDr, 3)} / ${g(p.sDf, 3)}`)}
-      ${row("Hồi trễ |giảm − tăng|", p => g(p.hyst, 4))}${row("Số hiệu chính M55 = chuẩn − tăng", p => g(p.corr, 4))}</tbody></table>`;
+      ${row("Chuẩn TB G55 (°C)", p => g2(p.stdT, 7))}${row("Si chuẩn tăng / giảm", p => `${g(p.sSr, 3)} / ${g(p.sSf, 3)}`)}
+      ${row("DUT TB tăng / giảm (°C)", p => `${g2(p.rise, 7)} / ${g2(p.fall, 7)}`)}${row("Si DUT tăng / giảm", p => `${g(p.sDr, 3)} / ${g(p.sDf, 3)}`)}
+      ${row("Hồi trễ |giảm − tăng|", p => g(p.hyst, 4))}${row("Số hiệu chính M55 = chuẩn − tăng", p => g2(p.corr, 4))}</tbody></table>`;
     const R = res.R, keys = [["low", "thấp"], ["mid", "trung"], ["high", "cao"]];
     const rr = (lab, f) => `<tr><td class="l">${lab}</td>${keys.map(([k]) => `<td>${R[k].cnt ? f(R[k]) : "—"}</td>`).join("")}</tr>`;
     const ut = `<table class="res ug"><thead><tr><th class="l">Thành phần (cột F / H / J)</th>${keys.map(([, t]) => `<th>Dải ${t}</th>`).join("")}</tr></thead><tbody>
@@ -627,7 +625,7 @@
       </table></div>`;
     const lbl = ["1", "2", "3", "4", "5", "3 giảm"];
     const grid = `<table class="res ug"><thead><tr><th>Điểm</th><th>Chuẩn TB (°C)</th><th>DUT TB (Ω)</th><th>Si DUT</th><th>R đặc tuyến (Ω)</th><th>R đặc tuyến − R đo</th><th>R hàm chuẩn (Ω)</th><th>Lệch Ω</th><th>Lệch °C</th></tr></thead><tbody>
-      ${res.rows.map((r, i) => `<tr><td>${lbl[i]}</td><td>${g(r.std)}</td><td>${g(r.dut, 8)}</td><td>${i < 5 ? g(res.Si[i], 3) : ""}</td><td>${g(r.Rfit, 9)}</td><td>${i < 5 ? g(res.res[i], 4) : ""}</td><td>${g(r.ref, 6)}${r.refSrc === "iec" ? "*" : ""}</td><td>${g(r.eO, 5)}</td><td>${g(r.eC, 5)}</td></tr>`).join("")}</tbody></table>`;
+      ${res.rows.map((r, i) => `<tr><td>${lbl[i]}</td><td>${g2(r.std)}</td><td>${g2(r.dut, 8)}</td><td>${i < 5 ? g(res.Si[i], 3) : ""}</td><td>${g(r.Rfit, 9)}</td><td>${i < 5 ? g(res.res[i], 4) : ""}</td><td>${g(r.ref, 6)}${r.refSrc === "iec" ? "*" : ""}</td><td>${g(r.eO, 5)}</td><td>${g(r.eC, 5)}</td></tr>`).join("")}</tbody></table>`;
     const co = res.fit;
     const calc = `<div class="ucols"><table class="ukv">
         ${r3(res.neg ? "AL39:AL42" : "AB38:AB40", "Nghiệm (R0, R0·A, R0·B" + (res.neg ? ", −100·C·R0)" : ")"), co.map(c => g(c, 9)).join("<br>"))}
@@ -657,7 +655,7 @@
         ${r3("Lò", "Lò dùng cho uch8: ổn định / radial / axial", (() => { const x = Number(h.max) <= 140 ? s1 : s2; return x ? `${g(x.stab || 0)} / ${g(x.radial || 0)} / ${g(x.axial || 0)}` : ""; })(), deg)}
       </table></div>`;
     const grid = `<table class="res ug"><thead><tr><th>Điểm</th><th>Chuẩn TB (°C)</th><th>Si chuẩn</th><th>E đo TB (mV)</th><th>Si DUT</th><th>E chuẩn ITS-90 (mV)</th><th>ΔE (mV)</th><th>Δt (°C)</th><th>V = E − E<sub>K</sub>(t)</th></tr></thead><tbody>
-      ${res.pt.map((p, i) => `<tr><td>${i + 1}</td><td>${g(p.t, 7)}</td><td>${g(p.sStd, 3)}</td><td>${g(p.E, 7)}</td><td>${g(p.sDut, 3)}</td><td>${g(p.Eref, 7)}</td><td>${g(p.dE, 5)}</td><td>${g(p.dT, 5)}</td><td>${g(p.V, 5)}</td></tr>`).join("")}</tbody></table>`;
+      ${res.pt.map((p, i) => `<tr><td>${i + 1}</td><td>${g2(p.t, 7)}</td><td>${g(p.sStd, 3)}</td><td>${g2(p.E, 7)}</td><td>${g(p.sDut, 3)}</td><td>${g(p.Eref, 7)}</td><td>${g(p.dE, 5)}</td><td>${g(p.dT, 5)}</td><td>${g(p.V, 5)}</td></tr>`).join("")}</tbody></table>`;
     const bud = `<div class="ucols"><table class="ukv">
         ${r3("F35", "Ultb chuẩn (điểm 1,3,5,7)", g(res.Ultb, 6), deg)}${r3("F36", "uch9 tản mạn = Ultb/√5", g(res.uch9, 6), deg)}${r3("F37", "uch7 bù đầu tự do = uCJ/k", g(res.uch7, 6), deg)}
         ${r3("F38", "uch8 lò (√Σ(x/√3)²)", g(res.uch8, 6), deg)}${r3("F41", "uch1 nhiệt kế chuẩn = U/k", g(res.uch1, 6), deg)}${r3("F42", "uch", g(res.uch, 6), deg)}
@@ -687,7 +685,7 @@
       </table></div>`;
     const m = res.rows.length;
     const grid = `<table class="res ug"><thead><tr><th>Điểm</th><th>x chuẩn</th><th>Tăng / Giảm</th><th>uA ↑ / ↓ (${u})</th><th>us ↑ / ↓ (%)</th><th>uc ↑ / ↓</th><th>U% = ½(uc↑+uc↓)·k</th><th>U (${u})</th></tr></thead><tbody>
-      ${res.rows.map((r, i) => { const a = res.cols[i], b = res.cols[i + m]; return `<tr><td>${i + 1}</td><td>${g(r.x)}</td><td>${g(r.rise)} / ${g(r.fall)}</td><td>${g(a.uA, 4)} / ${g(b.uA, 4)}</td><td>${g(a.us, 4)} / ${g(b.us, 4)}</td><td>${g(a.uc, 5)} / ${g(b.uc, 5)}</td><td>${g(r.Upct, 5)}</td><td>${g(r.U, 6)}</td></tr>`; }).join("")}</tbody></table>`;
+      ${res.rows.map((r, i) => { const a = res.cols[i], b = res.cols[i + m]; return `<tr><td>${i + 1}</td><td>${g2(r.x)}</td><td>${g2(r.rise)} / ${g2(r.fall)}</td><td>${g(a.uA, 4)} / ${g(b.uA, 4)}</td><td>${g(a.us, 4)} / ${g(b.us, 4)}</td><td>${g(a.uc, 5)} / ${g(b.uc, 5)}</td><td>${g(r.Upct, 5)}</td><td>${g(r.U, 6)}</td></tr>`; }).join("")}</tbody></table>`;
     const chk = `<table class="res ug chk"><thead><tr><th>Max U (CR)</th><th>In chứng chỉ</th><th>Max |SHC|</th><th>Giới hạn IA = Acc·span/100</th><th>Kết luận (HX)</th></tr></thead>
       <tbody><tr><td>${g(res.Umax, 6)}</td><td><b>${tcU(res)}</b></td><td>${g(res.maxSHC, 4)}</td><td>${g(res.lim, 4)}</td><td>${verdict(res.pass)}</td></tr></tbody></table>
       ${res.red ? `<div class="unote">Sụt áp chuẩn: ${g(res.red.d, 6)} ${u} (${res.red.pct.toFixed(2)}%) → ${res.red.ok ? "Đạt" : "Không đạt"} (giới hạn &lt; 5%).</div>` : ""}
