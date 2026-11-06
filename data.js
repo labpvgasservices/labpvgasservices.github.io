@@ -90,8 +90,8 @@ window.LabSeed = {
   locations: [
     ["KCTV", "Kho Cảng PVGAS Vũng Tàu", "PVGAS Vung Tau Terminal", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
     ["TNTV", "Kho Cảng PVGAS Vũng Tàu", "PVGAS Vung Tau Terminal", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
-    // KLTV = Kho LPG Lạnh Thị Vải, thuộc Chi nhánh Logistics (NGOC 06/11/2026). Tên EN đặt theo mẫu, chờ NGOC xác nhận.
-    ["KLTV", "Kho LPG Lạnh Thị Vải", "Thi Vai Refrigerated LPG Terminal", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
+    // KLTV = Kho LPG Lạnh Thị Vải, thuộc Chi nhánh Logistics (NGOC 06/11/2026). Tên EN theo tài liệu dự án NGOC gửi: "PVGAS LPG REFRIGERATED STORAGE".
+    ["KLTV", "Kho LPG Lạnh Thị Vải", "PVGAS LPG Refrigerated Storage", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
     ["GPP", "Nhà máy xử lý Khí Dinh Cố", "Dinh Co Gas Processing Plant", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"],
     ["KLNG", "Kho LNG Thị Vải", "LNG Thi Vai Terminal", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
     ["Kho Đình Vũ", "Kho LPG Đình Vũ", "Dinh Vu LPG Storage", "Chi nhánh Khí Hải Phòng - TCT Khí Việt Nam - CTCP", "PVGAS Hai Phong"],
