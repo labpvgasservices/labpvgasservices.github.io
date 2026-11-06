@@ -97,8 +97,8 @@ window.LabSeed = {
     ["Kho Đình Vũ", "Kho LPG Đình Vũ", "Dinh Vu LPG Storage", "Chi nhánh Khí Hải Phòng - TCT Khí Việt Nam - CTCP", "PVGAS Hai Phong"],
     ["Kho Gò Dầu", "Kho LPG Gò Dầu", "Go Dau LPG Storage", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
     ["Kho Dung Quất", "Kho LPG Dung Quất", "Dung Quat LPG Storage", "Chi nhánh Logistics – Tổng Công ty Khí Việt Nam - CTCP", "PetroVietnam Gas Joint Stock Corporation - Logistics Branch"],
-    // Hội Bài thuộc Chi nhánh Khí Đông Nam Bộ (NGOC 06/11/2026). Tên VN theo file TTPPK 2026 ("Đường ống LNG - Hội Bài"); tên EN đặt theo mẫu, chờ xác nhận.
-    ["LNG Hội Bài", "Đường ống LNG - Hội Bài", "LNG Pipeline - Hoi Bai", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"],
+    // Hội Bài thuộc Chi nhánh Khí Đông Nam Bộ (NGOC 06/11/2026). Mã / tên VN / tên EN theo bảng NGOC gửi 06/11/2026.
+    ["Trạm van Hội Bài", "Trạm Hội Bài – Tuyến ống LNG Thị Vải – Phú Mỹ", "Hoi Bai Valve Station", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"],
     ["Trạm GDS PM", "Trạm GDS Phú Mỹ", "Phu My Gas Distribution Station", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"],
     ["Trạm GDS BR", "Trạm GDS Bà Rịa", "Bà Rịa Gas Distribution Station", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"],
     ["GDC PM", "Trạm GDC Phú Mỹ", "Phu My Gas Distribution Center", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"],
