@@ -19,6 +19,12 @@
   const S3 = Math.sqrt(3);
   // ĐKĐBĐ of a heat source (Stand!Stability/Radial/Axial), rectangular
   const uHeat = h => h ? Math.sqrt(((h.stab || 0) / S3) ** 2 + ((h.radial || 0) / S3) ** 2 + ((h.axial || 0) / S3) ** 2) : 0;
+  /* Bản công thức đã sửa 06/11/2026 (fv = 2) – theo báo cáo rà soát Uncer 01/11/2026 (A1–A9, B1–B8).
+   * fv = 1 (mặc định, hồ sơ cũ) giữ nguyên cách tính của file Excel 2026. Mọi chỗ khác nhau đều ghi "V2" ở dưới.
+   * Chung cho V2: U chuẩn (theo GCN chuẩn, k = 2) chia 2; k báo cáo = t95,45(ν_eff) (B2, C.kEff);
+   * U in = 2 chữ số có nghĩa làm tròn lên (B3, C.uPub); quy tắc quyết định |sai số| + U ≤ MPE (B1, NGOC 06/11/2026). */
+  const KS = 2;                                                       // k trên GCN của chuẩn
+  const uUp = U => C.uPub(U).v;
 
   /* ---------------- PG – ĐLVN 08:2011 (Data08) ---------------- */
   function calcPG(inp) {
@@ -38,36 +44,43 @@
 
   /* ---------------- TS – DVK.LAB.TM.13 (DLVNTM13) ---------------- */
   function calcTS(inp) {
-    const { tset, acc, k = 2 } = inp;
+    const { tset, acc } = inp;
+    const V2 = inp.fv === 2;
+    let k = inp.k || 2;
     const rising = inp.dir !== "Falling";
     const set = inp.set.map(Number), reset = inp.reset.map(Number), n = set.length;
     const Tm = rising ? set : reset, Td = rising ? reset : set;           // C23:C27 open (Rising), D23:D27 closed (Falling)
     const C28 = mean(Tm), D28 = mean(Td);
     const F30 = Math.sqrt(Tm.reduce((s, v) => s + (v - C28) ** 2, 0) / (n * (n - 1)));   // utm
     const F31 = Math.sqrt(Td.reduce((s, v) => s + (v - D28) ** 2, 0) / (n * (n - 1)));   // utd
-    const F33 = (inp.stand.unc || 0) / k;                                // uch1 = U/k
+    const F33 = (inp.stand.unc || 0) / (V2 ? KS : k);                    // uch1 = U/k
     const F34 = 0;                                                       // uch2 BlackStack ×0 (no SPRT)
     const F35 = uHeat(inp.heat);                                         // uch3
-    const F36 = Math.sqrt(F33 ** 2 + F34 ** 2 + F35 ** 2);
+    const uRes = V2 ? (inp.res || 0) / (2 * S3) : 0;                     // V2 (B4): độ phân giải số đọc chuẩn, chữ nhật
+    const F36 = Math.sqrt(F33 ** 2 + F34 ** 2 + F35 ** 2 + uRes ** 2);
     const F38 = Math.sqrt(F30 ** 2 + F36 ** 2), F39 = Math.sqrt(F31 ** 2 + F36 ** 2);
+    const ke = V2 ? C.kEff([[rising ? F30 : F31, n - 1]], rising ? F38 : F39) : { nu: Infinity, k };
+    k = ke.k;
     const F41 = k * F38, F42 = k * F39;
     const U = rising ? F41 : F42;                                        // I46
     const setDev = set.map(v => v - tset), resetDev = reset.map(v => v - tset);   // DataTM13!BM..BV = T − Tset
     const maxDev = Math.max(...setDev.map(Math.abs));
     const lim = acc * tset / 100;                                        // D51: F4*F5/100
-    const pass = U > 0 && !(maxDev > lim);
-    return { type: "TS", k, n, rising, set, reset, setDev, resetDev, C28, D28, F30, F31, F33, F34, F35, F36, F38, F39, F41, F42, U, maxDev, lim, pass, Uprint: xr(U, 2) };
+    const Uprint = V2 ? uUp(U) : xr(U, 2);
+    const pass = U > 0 && !((V2 ? maxDev + Uprint : maxDev) > lim);      // V2 (B1): |sai số| + U ≤ MPE
+    return { type: "TS", fv: V2 ? 2 : 1, nu: ke.nu, uRes, k, n, rising, set, reset, setDev, resetDev, C28, D28, F30, F31, F33, F34, F35, F36, F38, F39, F41, F42, U, maxDev, lim, pass, Uprint };
   }
 
   /* ---------------- TT – DVK.LAB.TM.12 (DLVN188.2-2) ---------------- */
   function calcTT(inp) {
-    const { min, max, acc, k = 2 } = inp;
+    const { min, max, acc } = inp;
+    const V2 = inp.fv === 2, k = 2;
     const span = max - min, Cj = span / 16;                               // F7
     const n = 3;                                                          // F24
     const P = inp.pts.map(p => ({ sr: p.sr.map(Number), sf: p.sf.map(Number), dr: p.dr.map(Number), df: p.df.map(Number) }));
     const m = P.length;
     // F21:F23 – range of each point from its 1st standard reading (row 28); point 1 uses "<400", the others "<=400"
-    const cls = P.map((p, i) => { const t = p.sr[0]; if (t <= 150) return "low"; if (t > 400) return "high"; return (i === 0 ? t < 400 : t <= 400) ? "mid" : "none"; });
+    const cls = P.map((p, i) => { const t = p.sr[0]; if (t <= 150) return "low"; if (t > 400) return "high"; return (V2 || i !== 0 ? t <= 400 : t < 400) ? "mid" : "none"; });   // V2 (B8): mọi điểm dùng "≤ 400"
     const nL = cls.filter(c => c === "low").length, nM = cls.filter(c => c === "mid").length, nH = cls.filter(c => c === "high").length;
     // 'STDEV calc' tables: low = first nL points, mid = next nM points, high = last nH points
     const idx = { low: [...Array(nL).keys()], mid: [...Array(nM).keys()].map(i => i + nL), high: [...Array(nH).keys()].map(i => m - nH + i) };
@@ -95,7 +108,8 @@
       const ubk1 = UltbD * Cj / Math.sqrt(n), ubk2 = hyst * Cj / (2 * S3);
       const uDUT = Math.sqrt(ubk1 ** 2 + ubk2 ** 2 + F52 ** 2);
       const uc = Math.sqrt(uch ** 2 + uDUT ** 2);
-      return { cnt, UltbS, UltbD, hyst, uch4, uch1, uch5, uch3, uch, ubk1, ubk2, uDUT, uc, U: 2 * uc };
+      const ke = V2 ? C.kEff([[uch4, 2 * cnt * (n - 1)], [ubk1, 2 * cnt * (n - 1)]], uc) : { nu: Infinity, k: 2 };   // V2 (B2)
+      return { cnt, UltbS, UltbD, hyst, uch4, uch1, uch5, uch3, uch, ubk1, ubk2, uDUT, uc, nu: ke.nu, k: ke.k, U: ke.k * uc };
     };
     const s1 = inp.s1 || {}, s2 = inp.s2 || {};
     const R = { low: rng("low", nL, s1.unc, s1), mid: rng("mid", nM, s2.unc, s2), high: rng("high", nH, s2.unc, s2) };
@@ -110,9 +124,11 @@
     const maxErr = Math.max(...pt.map(p => p.err));                       // FK
     const maxSHC = Math.max(...pt.map(p => Math.max(Math.abs(p.cR), Math.abs(p.cF))));   // FL (mA)
     const lim = acc / 100 * span;                                         // FJ (°C)
-    const pass = !(Math.max(maxErr, R.low.U, R.mid.U, R.high.U, maxSHC) > lim);   // FI
     const Umax = Math.max(R.low.U, R.mid.U, R.high.U);
-    return { type: "TT", k, n, Cj, cls, nL, nM, nH, pt, L17, N17, F40, F52, R, lines, maxErr, maxSHC, lim, pass, Umax, lowSingle: nL === 1 };
+    // V2 (A9 + B1): sai số quy về °C (mA × span/16), cộng U của dải chứa điểm đó, so với MPE (°C)
+    const decRule = V2 ? Math.max(...pt.map((p, i) => Math.max(Math.abs(p.cR), Math.abs(p.cF)) * Cj + uUp((R[cls[i]] || { U: Umax }).U))) : null;
+    const pass = V2 ? !(decRule > lim) : !(Math.max(maxErr, R.low.U, R.mid.U, R.high.U, maxSHC) > lim);   // FI
+    return { type: "TT", fv: V2 ? 2 : 1, decRule, k: V2 ? Math.max(...Object.values(R).map(r => r.cnt ? r.k : 0)) : k, n, Cj, cls, nL, nM, nH, pt, L17, N17, F40, F52, R, lines, maxErr, maxSHC, lim, pass, Umax, lowSingle: nL === 1 };
   }
 
   /* ---------------- RTD – ĐLVN 125:2003 ---------------- */
@@ -137,7 +153,9 @@
   }
   const peval = (co, t) => co.reduce((s, c, i) => s + c * t ** i, 0);
   function calcRTD(inp) {
-    const { min, max, acc, k = 2 } = inp;
+    const { min, max, acc } = inp;
+    const V2 = inp.fv === 2;
+    let k = inp.k || 2;
     const sens = inp.sens || 0.385;                                       // F8 (Ω/°C)
     const n = 5, F21 = 5;                                                 // F22 readings, F21 points in the fit
     const P = inp.pts.map(p => ({ std: Number(p.std), dut: p.dut.map(Number) }));
@@ -151,21 +169,28 @@
     const Rfit = T.map(t => peval(fit, t));                               // H45:H50
     const res = Rfit.slice(0, 5).map((r, i) => r - Rm[i]);
     const ss = res.reduce((s, v) => s + v * v, 0);
-    const Q36 = Math.sqrt(ss / ((F21 - 3) * sens));                       // uDUT6 = AF39 / AQ39
-    const O33 = Si.slice(0, 5).reduce((s, v) => s + v * v, 0) / F21;      // S(DUT) – no square root in the sheet
+    const pfit = fit.length;                                              // 3 (bậc 2) hoặc 4 (bậc 3)
+    const Q36 = V2 ? Math.sqrt(ss / (F21 - pfit)) / sens                  // V2 (A1): √[Σ dư²/(n − p)] / S – S ra ngoài căn
+      : Math.sqrt(ss / ((F21 - 3) * sens));                               // uDUT6 = AF39 / AQ39
+    const O33 = V2 ? Math.sqrt(Si.slice(0, 5).reduce((s, v) => s + v * v, 0) / F21)   // V2 (A2): độ lệch chuẩn gộp (Ω)
+      : Si.slice(0, 5).reduce((s, v) => s + v * v, 0) / F21;              // S(DUT) – no square root in the sheet
     const Q34 = O33 / (Math.sqrt(n) * sens);                              // uDUT5
     const Q35 = Math.abs(Rm[5] - Rm[2]) / (2 * S3 * sens);                // uDUT4 hysteresis at point 3
     const Q38 = Math.sqrt(Q34 ** 2 + Q35 ** 2 + Q36 ** 2);
     const s1 = inp.s1 || {}, s2 = inp.s2 || {}, mt = inp.meter || {};
     const G34 = 0;                                                        // uch5: one standard value per point -> S(chuẩn) = 0
-    const G35 = (max >= 150 ? (s2.unc || 0) : (s1.unc || 0)) / k;         // uch1
+    const kS = V2 ? KS : k;
+    const G35 = (max >= 150 ? (s2.unc || 0) : (s1.unc || 0)) / kS;        // uch1
     const M14 = mt.unc || 0, M13 = mt.max || 0, O14 = mt.err || 0;
-    const G36 = mt.uncUnit === "%" ? Math.sqrt((((M14 * M13) / 100) / (sens * k)) ** 2 + ((O14 / sens) / (2 * S3)) ** 2)
-      : mt.uncUnit === "ppm" ? Math.sqrt((M14 * M13 * 1e-6 / (sens * k)) ** 2 + ((O14 / sens) / (2 * S3)) ** 2)
-        : Math.sqrt((M14 / (sens * k)) ** 2 + ((O14 / sens) / (2 * S3)) ** 2);
+    const G36 = mt.uncUnit === "%" ? Math.sqrt((((M14 * M13) / 100) / (sens * kS)) ** 2 + ((O14 / sens) / (2 * S3)) ** 2)
+      : mt.uncUnit === "ppm" ? Math.sqrt((M14 * M13 * 1e-6 / (sens * kS)) ** 2 + ((O14 / sens) / (2 * S3)) ** 2)
+        : Math.sqrt((M14 / (sens * kS)) ** 2 + ((O14 / sens) / (2 * S3)) ** 2);
     const G37 = max < 140 ? uHeat(s1) : uHeat(s2);                        // uch3
     const G38 = Math.sqrt(G34 ** 2 + G35 ** 2 + G36 ** 2 + G37 ** 2);
-    const G39 = Math.sqrt(G38 ** 2 + Q38 ** 2), U = 2 * G39;
+    const G39 = Math.sqrt(G38 ** 2 + Q38 ** 2);
+    const ke = V2 ? C.kEff([[Q34, F21 * (n - 1)], [Q36, F21 - pfit]], G39) : { nu: Infinity, k: 2 };   // V2 (B2)
+    k = ke.k;
+    const U = k * G39;
     const R0 = neg ? cu[0] : q[0];                                        // AO53
     const useCu = neg && max <= 200;                                      // AL53/AM53
     const A = useCu ? cu[1] / cu[0] : q[1] / q[0], B = useCu ? cu[2] / cu[0] : q[2] / q[0];
@@ -173,14 +198,17 @@
     const rows = P.map((p, i) => { const ref = pt100(p.std); const eO = Rfit[i] - ref.R; return { nom: p.std, std: p.std, dut: Rm[i], Rfit: Rfit[i], ref: ref.R, refSrc: ref.src, eO, eC: eO / sens }; });
     const maxE = Math.max(...rows.map(r => Math.abs(xr(r.eC, 2))));
     const lim = acc * (max - min) / 100;                                  // EV
-    const pass = !(maxE + xr(U, 2) > lim);                                // ET: MAX|Error °C| + U
-    return { type: "RTD", k, n, sens, T, Rm, Si, q, cu, fit, Rfit, res, ss, Q34, Q35, Q36, Q38, O33, G34, G35, G36, G37, G38, G39, U, R0, A, B, C: Cc, rows, maxE, lim, pass, neg, useCu };
+    const Uprint = V2 ? uUp(U) : xr(U, 2);                                // V2 (B3): 2 CSCN làm tròn lên
+    const maxEv = V2 ? Math.max(...rows.map(r => Math.abs(r.eC))) : maxE;
+    const pass = !(maxEv + Uprint > lim);                                 // ET: MAX|Error °C| + U
+    return { type: "RTD", fv: V2 ? 2 : 1, nu: ke.nu, pfit, Uprint, k, n, sens, T, Rm, Si, q, cu, fit, Rfit, res, ss, Q34, Q35, Q36, Q38, O33, G34, G35, G36, G37, G38, G39, U, R0, A, B, C: Cc, rows, maxE, lim, pass, neg, useCu };
   }
 
   /* ---------------- TG – ĐLVN 138:2004 (DLVN138.2-1 + 'STDEV Calc' + Data138) ----------------
    * TG_GPP 08-2026_Phuoc_.xlsm. 5 points × 3 readings, standard and DUT both in °C, rising and falling. */
   function calcTG(inp) {
-    const { min, max, acc, k = 2 } = inp;
+    const { min, max, acc } = inp;
+    const V2 = inp.fv === 2, k = 2;
     const n = 3;                                                          // F24
     const F7 = inp.analog === false ? 0.5 : 1;                            // F7: 1 = Analog, 0.5 = Digital
     const res = inp.res || 0;                                             // F6 smallest division
@@ -209,7 +237,8 @@
       const ubk2 = UltbD / Math.sqrt(n), ubk1 = hyst / (2 * S3);          // F46 / F47
       const uDUT = Math.sqrt(ubk2 ** 2 + ubk1 ** 2 + ubk3 ** 2);
       const uc = Math.sqrt(uch ** 2 + uDUT ** 2);
-      return { cnt, UltbS, UltbD, hyst, uch4, uch1, uch2, uch3, uch, ubk2, ubk1, ubk3, uDUT, uc, U: 2 * uc };   // F51 = 2·F50
+      const ke = V2 ? C.kEff([[uch4, 2 * cnt * (n - 1)], [ubk2, 2 * cnt * (n - 1)]], uc) : { nu: Infinity, k: 2 };   // V2 (B2)
+      return { cnt, UltbS, UltbD, hyst, uch4, uch1, uch2, uch3, uch, ubk2, ubk1, ubk3, uDUT, uc, nu: ke.nu, k: ke.k, U: ke.k * uc };   // F51 = 2·F50
     };
     const s1 = inp.s1 || {}, s2 = inp.s2 || {};
     // low: Stand1 (F14) + heat source 1 (F17); mid and high: Stand2 (G14) + heat source 2 (G17/H17)
@@ -225,8 +254,10 @@
     const maxSHC = Math.max(...pt.map(p => Math.abs(p.corr)));            // EB = MAX(ABS(SHC))
     const lim = acc / 100 * (max - min);                                  // DZ = M/100·(G−F)
     const Umax = Math.max(R.low.U, R.mid.U, R.high.U);
-    const pass = !(Math.max(Umax, maxSHC) > lim);                         // EG
-    return { type: "TG", k, n, F7, res, cls, nL, nM, nH, pt, ubk3, R, lines, maxSHC, lim, pass, Umax, lowSingle: nL === 1 };
+    // V2 (B1): từng điểm, |sai số| (cả hai chiều) + U của dải chứa điểm ≤ MPE
+    const decRule = V2 ? Math.max(...pt.map((p, i) => Math.max(Math.abs(p.corr), Math.abs(p.cF)) + uUp(R[cls[i]].U))) : null;
+    const pass = V2 ? !(decRule > lim) : !(Math.max(Umax, maxSHC) > lim);  // EG
+    return { type: "TG", fv: V2 ? 2 : 1, decRule, k: V2 ? Math.max(...Object.values(R).map(r => r.cnt ? r.k : 0)) : k, n, F7, res, cls, nL, nM, nH, pt, ubk3, R, lines, maxSHC, lim, pass, Umax, lowSingle: nL === 1 };
   }
 
   /* ---------------- TC – ĐLVN 161:2005 (DLVN161 + Ref + Data161) ---------------- */
@@ -251,45 +282,55 @@
   // T38: the ΔE regression always uses the type K table (Ref!D21:E34), whatever the DUT type – kept as in the workbook
   const emfK = t => t < 0 ? eIts(ITS.K, t, ITS.K.a1, ITS.K.e1) : eIts(ITS.K, t, ITS.K.a2, ITS.K.e2);
   function calcTC(inp) {
-    const { type = "J", max, min = 0, acc, k = 2 } = inp;
+    const { type = "J", max, min = 0, acc } = inp;
+    const V2 = inp.fv === 2;
+    let k = inp.k || 2;
     const R = ITS[type]; if (!R) throw new Error("Chỉ có hệ số cho cặp nhiệt loại J và K");
     const N = 8, n = 5;                                                   // F22, F23
-    const S = R.sens;                                                     // F9 (Ref!C37:C38)
+    // F9 (Ref!C37:C38). V2 (B7): S = dE/dt của hàm chuẩn ITS-90 đúng loại, lấy giá trị nhỏ nhất trong các điểm đo (an toàn)
+    const S = V2 ? Math.min(...inp.pts.map(p => { const t = mean(p.std.map(Number)); return (emf(type, t + 0.5) - emf(type, t - 0.5)); }).filter(v => v > 0)) : R.sens;
     const P = inp.pts.map(p => ({ std: p.std.map(Number), dut: p.dut.map(Number) }));
-    const stdev6 = a => stdev(a.concat([mean(a)]));                       // F34 = STDEV(F28:F33) – the average row is inside the range
+    const stdev6 = a => V2 ? stdev(a) : stdev(a.concat([mean(a)]));      // F34 = STDEV(F28:F33) – the average row is inside the range; V2 (A5): chỉ 5 lần đọc
     const pt = P.map(p => {
       const t = mean(p.std), E = mean(p.dut), Eref = emf(type, t), dE = E - Eref;
       const lab = Math.round(t);                                          // E62
       const m = Math.abs(dE);
       // O62: |ΔE| through the inverse table; E62 < 0 uses range 1 where Ref!$JH$37 (blank) drops C1
-      const c = lab < 0 ? R.t1.map((v, i) => i === 1 ? 0 : v) : R.t2;
+      const c = lab < 0 ? (V2 ? R.t1 : R.t1.map((v, i) => i === 1 ? 0 : v)) : R.t2;   // V2 (A7): đủ hệ số C1
       const dT = dE < 0 ? -poly(c, m) : poly(c, m);
-      return { t, E, Eref, dE, dT, tDut: t + dT, sStd: stdev6(p.std), sDut: stdev(p.dut), V: E - emfK(t) };
+      return { t, E, Eref, dE, dT, tDut: t + dT, sStd: stdev6(p.std), sDut: stdev(p.dut), V: E - (V2 ? Eref : emfK(t)) };   // V2 (A6): hàm chuẩn đúng loại
     });
     const sq = v => (v || 0) ** 2;
     const s1 = inp.s1 || {}, s2 = inp.s2 || {}, h1 = inp.h1 || s1, h2 = inp.h2 || s2, mv = inp.mv || {};
-    const Ultb = Math.sqrt((sq(pt[0] && pt[0].sStd) + sq(pt[2] && pt[2].sStd) + sq(pt[4] && pt[4].sStd) + sq(pt[6] && pt[6].sStd)) / N);   // F35: points 1,3,5,7 only
+    const odd = [0, 2, 4, 6].filter(i => pt[i]), Nd = V2 ? odd.length : N;  // V2 (A4): cộng 4 điểm thì chia 4
+    const Ultb = Math.sqrt((sq(pt[0] && pt[0].sStd) + sq(pt[2] && pt[2].sStd) + sq(pt[4] && pt[4].sStd) + sq(pt[6] && pt[6].sStd)) / Nd);   // F35: points 1,3,5,7 only
     const uch9 = Ultb / Math.sqrt(n);
-    const uch7 = (inp.uCJ || 0) / k;                                      // F37 = M20/F24 (Fluke 1620A, đầu tự do)
+    const kS = V2 ? KS : k;
+    const uch7 = (inp.uCJ || 0) / kS;                                      // F37 = M20/F24 (Fluke 1620A, đầu tự do)
     const uch8 = max <= 140 ? uHeat(h1) : uHeat(h2);                      // F38 (Max ≤ 140: heat source 1, else 2)
     const uch11 = 0;                                                      // F40 (BlackStack/SPRT readout only)
-    const uch1 = (max >= 155 ? s2.unc : s1.unc) / k;                      // F41
+    const uch1 = (max >= 155 ? s2.unc : s1.unc) / kS;                     // F41
     const uch = Math.sqrt(sq(uch9) + sq(uch7) + sq(uch8) + sq(uch11) + sq(uch1));
-    const UltbD = Math.sqrt((sq(pt[0] && pt[0].sDut) + sq(pt[2] && pt[2].sDut) + sq(pt[4] && pt[4].sDut) + sq(pt[6] && pt[6].sDut)) / N);   // F51
+    const UltbD = Math.sqrt((sq(pt[0] && pt[0].sDut) + sq(pt[2] && pt[2].sDut) + sq(pt[4] && pt[4].sDut) + sq(pt[6] && pt[6].sDut)) / Nd);   // F51
     const ubk6 = UltbD / Math.sqrt(n);
-    const ubk1 = ((mv.unc || 0) * pt[pt.length - 1].E / 100) / (k * S);   // F53 = (M15·M49/100)/(F24·F9) – mV meter U in %, at point 8
+    const ubk1 = ((mv.unc || 0) * pt[pt.length - 1].E / 100) / (kS * S);   // F53 = (M15·M49/100)/(F24·F9) – mV meter U in %, at point 8
     const ubk2 = 0.5 * (inp.mvRes || 0.001) / (S3 * S);                   // F54
     // S38:Y59 – least squares ΔE = a0 + a1·t + a2·t² with ΔE = E_DUT − E_K(t)
     const q = polyfit(pt.map(p => p.t), pt.map(p => p.V), 2);
     const res2 = pt.reduce((s, p) => s + (p.V - (q[0] + q[1] * p.t + q[2] * p.t ** 2)) ** 2, 0);
-    const ubk7 = Math.sqrt(res2 / (5 * S));                               // F55 = SQRT(ΣY/(5·F9))
+    const ubk7 = V2 ? Math.sqrt(res2 / (pt.length - 3)) / S                // V2 (A3): √[Σ dư²/(N − 3)] / S
+      : Math.sqrt(res2 / (5 * S));                                        // F55 = SQRT(ΣY/(5·F9))
     const ubk8 = max / 100 * 0.1;                                         // M55 (BoA 2022: 0,1 % of Max)
     const uDUT = Math.sqrt(sq(ubk6) + sq(ubk1) + sq(ubk2) + sq(ubk7) + sq(ubk8));
-    const uc = Math.sqrt(uch ** 2 + uDUT ** 2), U = 2 * uc;              // F57, F58
+    const uc = Math.sqrt(uch ** 2 + uDUT ** 2);                           // F57
+    const ke = V2 ? C.kEff([[uch9, odd.length * (n - 1)], [ubk6, odd.length * (n - 1)], [ubk7, pt.length - 3]], uc) : { nu: Infinity, k: 2 };   // V2 (B2)
+    k = ke.k;
+    const U = k * uc;                                                     // F58
     const maxErr = Math.max(...pt.map(p => Math.abs(p.dT)));
     const lim = acc * (max - min) / 100;
-    const pass = !(U + maxErr > lim);                                     // Data161!HE
-    return { type: "TC", tcType: type, S, pt, a: q, Ultb, uch9, uch7, uch8, uch11, uch1, uch, UltbD, ubk6, ubk1, ubk2, ubk7, ubk8, uDUT, uc, U, Utext: tcUText(U), maxErr, lim, pass, its: R };
+    const Utext = V2 ? (p => p.v.toFixed(p.d))(C.uPub(U)) : tcUText(U);   // V2 (B3)
+    const pass = !((V2 ? Number(Utext) : U) + maxErr > lim);              // Data161!HE
+    return { type: "TC", fv: V2 ? 2 : 1, nu: ke.nu, k, tcType: type, S, pt, a: q, Ultb, uch9, uch7, uch8, uch11, uch1, uch, UltbD, ubk6, ubk1, ubk2, ubk7, ubk8, uDUT, uc, U, Utext, maxErr, lim, pass, its: R };
   }
   // F59: decimals from the digit count of ROUND(frac,4)·10⁴; adds a half step before rounding (≈ round up)
   // NGOC 06/11/2026: U in ra không bao giờ nhỏ hơn U tính được. Giữ đúng cách in của Excel (F59) khi kết quả đó ≥ U;
@@ -311,7 +352,9 @@
 
   /* ---------------- DPG / PDI – ĐLVN 76:2001 (DLVN76_2001 + Data76), "hiệu chỉnh P" = Yes ---------------- */
   function calcDPG(inp) {
-    const { min: mn, max: mx, unit, acc, k = 2 } = inp;
+    const { min: mn, max: mx, unit, acc } = inp;
+    const V2 = inp.fv === 2;
+    let k = inp.k || 2;
     const s1 = inp.stand1, span = mx - mn;
     const xs = inp.std.map(Number), rise = inp.rise.map(Number), fall = inp.fall.map(Number), m = xs.length;
     const f = C.factor(s1.unit, unit);
@@ -324,22 +367,33 @@
     const K32 = X.reduce((s, v, i, A) => s + (v - A.reduce((t, w) => t + w, 0) / A.length) ** 2, 0);
     const L32 = X.reduce((s, v) => s + v * v, 0), M32 = X.length, N32 = X.reduce((s, v) => s + v, 0);
     const Sa = Sy * Math.sqrt(L32 / M32 / K32), Sb = Sy * Math.sqrt(1 / K32), r = -N32 / Math.sqrt(M32 * L32);   // F32:F34
-    const uv = ((inp.res || 0) * 100 / span) / Math.sqrt(6) / 2;                           // F37 (%)
+    const uv = V2 ? ((inp.res || 0) * 100 / span) / (2 * S3)                              // V2 (B5): chữ nhật √3
+      : ((inp.res || 0) * 100 / span) / Math.sqrt(6) / 2;                                   // F37 (%)
     const cols = X.map(x => {
-      const uA = Math.sqrt(Math.max(0, Sa * Sa + x * x * Sb * Sb + 2 * x * Sa * Sb * r));  // row 22 – in the DUT unit
-      const us = s1.deadweight ? (E12 * Math.abs(x)) / (2 * span) : (E12 * (E10 - E9) + E13 * Math.abs(x)) / (2 * span);   // row 36 (%)
-      return { x, uA, us, uc: Math.sqrt(uA * uA + us * us + uv * uv) };                    // row 23: uA added to the % terms as in the sheet
+      const uA0 = Math.sqrt(Math.max(0, Sa * Sa + x * x * Sb * Sb + 2 * x * Sa * Sb * r)); // row 22 – in the DUT unit
+      const uA = V2 ? uA0 * 100 / span : uA0;                                              // V2 (A8): quy về % span trước khi cộng
+      const us = s1.deadweight ? (E12 * Math.abs(x)) / (2 * span)
+        : V2 ? Math.sqrt((E12 * (E10 - E9) / (2 * span)) ** 2 + (E13 * Math.abs(x) / (S3 * span)) ** 2)   // V2 (B6)
+          : (E12 * (E10 - E9) + E13 * Math.abs(x)) / (2 * span);                            // row 36 (%)
+      const uc = Math.sqrt(uA * uA + us * us + uv * uv);                                    // row 23: uA added to the % terms as in the sheet
+      const ke = V2 ? C.kEff([[uA, M32 - 2]], uc) : { nu: Infinity, k };
+      return { x, uA, uA0, us, uc, nu: ke.nu, kj: ke.k };
     });
     const rows = xs.map((x, i) => {
-      const ucAvg = (cols[i].uc + cols[i + m].uc) / 2;                                      // I44 = ½(E23 + J23)
-      const Upct = ucAvg * k, U = Upct * span / 100;                                        // K44, J44
-      return { x, rise: rise[i], fall: fall[i], cR: x - rise[i], cF: x - fall[i], ucAvg, Upct, U: s1.deadweight ? Upct : U };   // Data76 CD: deadweight prints %
+      const cw = cols[i].uc >= cols[i + m].uc ? cols[i] : cols[i + m];
+      const ucAvg = V2 ? cw.uc : (cols[i].uc + cols[i + m].uc) / 2;                        // I44 = ½(E23 + J23); V2 (B4): chiều lớn hơn
+      const ki = V2 ? cw.kj : k;
+      const Upct = ucAvg * ki, U = Upct * span / 100;                                       // K44, J44
+      return { x, rise: rise[i], fall: fall[i], cR: x - rise[i], cF: x - fall[i], ucAvg, Upct, k: ki, nu: V2 ? cw.nu : Infinity, Uu: U, U: s1.deadweight ? Upct : U };   // Data76 CD: deadweight prints %
     });
+    if (V2) k = Math.max(...rows.map(q => q.k));
     const Umax = Math.max(...rows.map(q => q.U));                                           // Data76!CR
     const maxSHC = Math.max(...rows.map(q => Math.max(Math.abs(q.cR), Math.abs(q.cF))));
     const lim = acc * span / 100;                                                           // IA
-    const pass = !(Umax + maxSHC > lim);                                                    // HX: CR + max|SHC| > IA → Fail
-    return { type: "DPG", a, b, Sy, Sa, Sb, r, uv, E9, E10, E11, E12, E13, cols, rows, Umax, Utext: tcUText(Umax), maxSHC, lim, pass, k, n: M32 };
+    // V2 (B1): từng điểm |SHC| + U (đơn vị đồng hồ, kể cả khi chuẩn là quả cân) ≤ MPE
+    const decRule = V2 ? Math.max(...rows.map(q => Math.max(Math.abs(q.cR), Math.abs(q.cF)) + uUp(q.Uu))) : null;
+    const pass = V2 ? !(decRule > lim) : !(Umax + maxSHC > lim);                            // HX: CR + max|SHC| > IA → Fail
+    return { type: "DPG", fv: V2 ? 2 : 1, decRule, a, b, Sy, Sa, Sb, r, uv, E9, E10, E11, E12, E13, cols, rows, Umax, Utext: V2 ? (p => p.v.toFixed(p.d))(C.uPub(Umax)) : tcUText(Umax), maxSHC, lim, pass, k, n: M32 };
   }
 
   const api = { calcPG, calcDPG, calcTS, calcTT, calcRTD, calcTG, calcTC, tcEmf: emf, ITS, pt100, polyfit };
