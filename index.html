@@ -114,7 +114,7 @@ details{margin-top:10px} summary{cursor:pointer;color:var(--clay);font-weight:60
 .pdfready{background:var(--result);border-radius:12px;padding:12px;margin-top:12px;display:flex;flex-direction:column;gap:2px;overflow-wrap:anywhere}
 .pv{overflow:hidden;position:relative;background:var(--sunk);border-radius:10px}
 .pv-in{transform-origin:0 0;width:794px}
-nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,1fr);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(7,1fr);padding-bottom:env(safe-area-inset-bottom,0px)}
 nav.tabs button{height:var(--tabbar-h);border:0;background:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:500 11px var(--f-ui);cursor:pointer}
 nav.tabs button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
 nav.tabs button.on{color:var(--clay)}
@@ -344,6 +344,12 @@ details.phcard>summary h2{margin:0}details.phcard[open]>summary h2{margin-bottom
 .locprint>div{background:var(--result);border:1px solid var(--line,#d9d9d9);border-radius:10px;padding:8px 10px;line-height:1.5;font-size:14px}
 .locold{flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap;background:#fff4e0;border-radius:10px;padding:6px 10px}
 .locold span,.locold b{color:#5a3600}
+label.f{position:relative}
+.sug{position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--surface);border:1px solid var(--brand);border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.18);max-height:320px;overflow-y:auto;margin-top:2px}
+.sugi{padding:9px 10px;border-top:1px solid var(--line);cursor:pointer;display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline;font-size:14px}
+.sugi:first-child{border-top:0}.sugi small{font-size:12px}.sugi .mut{flex-basis:100%}.sugs{flex-basis:100%;color:var(--brand)}
+.sugi.on,.sugi:hover{background:var(--clay-soft)}
+.dvh{margin:14px 0 4px;font:600 15px var(--f-head)}.rec.dv small{line-height:1.45}
 </style>
 <link rel="stylesheet" href="vendor/temml-local.css">
 </head>
@@ -352,6 +358,7 @@ details.phcard>summary h2{margin:0}details.phcard[open]>summary h2{margin-bottom
 <main class="wrap">
   <section id="v-entry"></section>
   <section id="v-records" hidden></section>
+  <section id="v-devices" hidden></section>
   <section id="v-stands" hidden></section>
   <section id="v-formulas" hidden></section>
   <section id="v-refs" hidden></section>
@@ -360,6 +367,7 @@ details.phcard>summary h2{margin:0}details.phcard[open]>summary h2{margin-bottom
 <nav class="tabs">
   <button data-v="entry" class="on"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 16l9.5-9.5 3 3L9 19H6z"/></svg>Nhập liệu</button>
   <button data-v="records"><svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5z M14 4v5h5 M8 13h8 M8 17h6"/></svg>Hồ sơ</button>
+  <button data-v="devices"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10 M18 16l2 2 -2 2"/></svg>Thiết bị</button>
   <button data-v="stands"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 13l3-3 M12 3v3"/></svg>Chuẩn</button>
   <button data-v="formulas"><svg viewBox="0 0 24 24"><path d="M4 5h9M4 5l6 7-6 7h9 M15 9l5 6 M20 9l-5 6"/></svg>Công thức</button>
   <button data-v="refs"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z M8.5 12l2.5 2.5 4.5-5"/></svg>Căn cứ</button>
@@ -372,6 +380,7 @@ details.phcard>summary h2{margin:0}details.phcard[open]>summary h2{margin-bottom
 <script src="calc.js"></script>
 <script src="calc2.js"></script>
 <script src="data.js"></script>
+<script src="devices.js"></script>
 <script src="docs.js"></script>
 <script src="docs2.js"></script>
 <script src="vendor/supabase.min.js"></script>

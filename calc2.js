@@ -292,7 +292,15 @@
     return { type: "TC", tcType: type, S, pt, a: q, Ultb, uch9, uch7, uch8, uch11, uch1, uch, UltbD, ubk6, ubk1, ubk2, ubk7, ubk8, uDUT, uc, U, Utext: tcUText(U), maxErr, lim, pass, its: R };
   }
   // F59: decimals from the digit count of ROUND(frac,4)·10⁴; adds a half step before rounding (≈ round up)
+  // NGOC 06/11/2026: U in ra không bao giờ nhỏ hơn U tính được. Giữ đúng cách in của Excel (F59) khi kết quả đó ≥ U;
+  // trường hợp Excel ra "0" hoặc nhỏ hơn U (U < 0,001, U nguyên, U dạng 2,0001…) thì in đủ số lẻ: 2 chữ số có nghĩa, làm tròn lên (C.uPub).
   function tcUText(U) {
+    if (!(U > 0)) return "0";
+    const t = tcUText0(U);
+    if (Number(t) > 0 && Number(t) >= U - 1e-12) return t;
+    const p = C.uPub(U); return p.v.toFixed(p.d);
+  }
+  function tcUText0(U) {
     if (!U) return "0";
     const f = Number((xr(U - Math.floor(U), 4) * 1e4).toPrecision(15)), L = String(f).length;
     if (L === 4) return xr(U + 0.005, 2).toFixed(2);

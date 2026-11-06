@@ -216,7 +216,7 @@
         <tr><td></td><td class="c">${cb(h.envOk)} Nhiệt độ ${it("(Ambient Temp.)")}: ${esc(S.qtgTemp)}</td><td colspan="2" class="c">${cb(h.envOk)} Độ ẩm ${it("(Humidity)")}: ${esc(S.qtgHum)}</td></tr>
         <tr><td colspan="4">Người thực hiện ${it("(Calibrated by)")}: ${it(esc(rec.sig.inspector))}</td></tr>
         <tr><td colspan="4">Ngày thực hiện ${it("(Calib. Date)")}: ${dVN(cal)}</td></tr>
-        <tr><td colspan="4">Địa điểm thực hiện ${it("(Location)")}: ${it(esc(h.calPlace || L.code || L.locVN))}</td></tr>
+        <tr><td colspan="4">Địa điểm thực hiện ${it("(Location)")}: ${it(esc(L.locVN || L.code))}</td></tr>
         <tr><td colspan="4" class="c"><b>KẾT QUẢ HIỆU CHUẨN ${it("(RESULT)")}:</b></td></tr></table>`;
       const pd = pDec([h.pset, ...rec.ps.set, ...rec.ps.reset]);
       data = `<table class="res qres ps"><thead>

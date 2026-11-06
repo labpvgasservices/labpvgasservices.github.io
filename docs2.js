@@ -253,7 +253,7 @@
       <div class="no">Số ${it("(N<sup>o</sup>)")}: ${esc(no)}</div><div class="formcode">${it(esc(form))}</div>`;
   }
   const envRow = (h, S0, cols) => `<tr><td colspan="${cols[0]}" class="c">${cb(h.envOk)} Nhiệt độ ${it("(Ambient Temp.)")}: ${esc(S0.qtgTemp)}</td><td colspan="${cols[1]}" class="c">${cb(h.envOk)} Độ ẩm ${it("(Humidity)")}: ${esc(S0.qtgHum)}</td></tr>`;
-  const place = (h, L) => h.calPlace || L.code || L.locVN;
+  const place = (h, L) => L.locVN || L.code;   // NGOC 06/11/2026: bỏ ô "Địa điểm thực hiện", QTG in đúng Công trình khí (Location)
 
   /* ======================= QTG – PG ======================= */
   function pgQtg(rec, res, st, info) {
@@ -274,7 +274,7 @@
       <tr><td colspan="3">Chênh lệch chiều cao ${it("(Height Difference)")}: ${esc(h.heightDiff || "0")} mm</td></tr>
       <tr><td colspan="3">Người thực hiện ${it("(Verified by)")}: ${esc(rec.sig.inspector)}</td></tr>
       <tr><td colspan="3">Ngày thực hiện ${it("(Verification Date)")}: ${dVN(cal)}</td></tr>
-      <tr><td colspan="3">Địa điểm thực hiện ${it("(Place)")}: ${esc(h.calPlace || L.locVN)}</td></tr>
+      <tr><td colspan="3">Địa điểm thực hiện ${it("(Place)")}: ${esc(L.locVN || L.code)}</td></tr>
       <tr><td colspan="3"><b>Số liệu và kết quả ${it("(Result)")}:</b></td></tr>
       <tr><td colspan="2">Kiểm tra bên ngoài ${it("(External Check)")}:</td><td>Đạt yêu cầu ${it("(Pass)")}: ${cb(h.extCheck === "1")} <span class="gap"></span> Không đạt yêu cầu ${it("(Fail)")}: ${cb(h.extCheck !== "1")}</td></tr>
       <tr><td colspan="2">Kiểm tra kỹ thuật ${it("(Technical Check)")}:</td><td>Đạt yêu cầu ${it("(Pass)")}: ${cb(h.techCheck === "1")} <span class="gap"></span> Không đạt yêu cầu ${it("(Fail)")}: ${cb(h.techCheck !== "1")}</td></tr></table>`;
@@ -382,7 +382,7 @@
       ${envRow(h, S0, [3, 1])}
       <tr><td colspan="4">Người thực hiện ${it("(Calibrated by)")}: ${esc(rec.sig.inspector)}</td></tr>
       <tr><td colspan="4">Ngày thực hiện ${it("(Calib. Date)")}: ${dVN(cal)}</td></tr>
-      <tr><td colspan="4">Địa điểm thực hiện ${it("(Location)")}: ${esc(h.calPlace || L.locVN || L.code)}</td></tr>
+      <tr><td colspan="4">Địa điểm thực hiện ${it("(Location)")}: ${esc(L.locVN || L.code)}</td></tr>
       <tr><td colspan="3">Số liệu và kết quả ${it("(Result)")}:</td><td>${cb(h.psType !== "As Left")} AsFound <span class="gap"></span> ${cb(h.psType === "As Left")} AsLeft</td></tr></table>`;
     const ord = ["1<sup>st</sup>", "2<sup>nd</sup>", "3<sup>rd</sup>"], dd = tgDec(h);
     const body = rec.tg.sr.map((_, p) => [0, 1, 2].map(k => `<tr>${k === 0 ? `<td rowspan="3">${vn(num(rec.tg.nom[p]), 3)}</td>` : ""}<td>${ord[k]}</td><td>${vn(num(rec.tg.sr[p][k]), 3)}</td><td>${vn(num(rec.tg.sf[p][k]), 3)}</td><td>${vn(num(rec.tg.dr[p][k]), dd)}</td><td>${vn(num(rec.tg.df[p][k]), dd)}</td></tr>`).join("")).join("");
@@ -507,6 +507,8 @@
   }
   const verdict = p => `<b>${p ? "Đạt (Pass)" : "Không đạt (Fail)"}</b>`;
 
+  // NGOC 06/11/2026: bảng "Kết quả kiểm định" của PG in thống nhất 2 chữ số thập phân (số nào thật sự có nhiều hơn 2 số lẻ thì giữ đủ, không làm mất số đọc)
+  const f2 = v => { if (!isFinite(v)) return ""; const x = Number(Number(v).toPrecision(12)); const d = Math.max(2, Math.min(6, (String(x).split(".")[1] || "").length)); return x.toFixed(d); };
   function pgUnc(rec, res, st, info) {
     const h = rec.h, u = esc(h.unit), s1 = info.stand1;
     const inp = `<div class="ucols"><table class="ukv">
@@ -518,7 +520,7 @@
         ${r3("", "Hạn chuẩn", esc(s1 ? s1.due || "?" : "?"))}
       </table></div>`;
     const out = `<table class="res ug"><thead><tr><th>Điểm</th><th>Chuẩn (AI..AM)</th><th>Tăng (AN..AR)</th><th>Giảm (AS..AW)</th><th>SHC tăng = chuẩn − tăng</th><th>SHC giảm = chuẩn − giảm</th><th>|SHC| / sai số cho phép</th></tr></thead><tbody>
-      ${res.rows.map((r, i) => { const q = Math.max(Math.abs(r.cR), Math.abs(r.cF)) / res.lim; return `<tr><td>${i + 1}</td><td>${g(r.x)}</td><td>${g(r.rise)}</td><td>${g(r.fall)}</td><td>${g(r.cR, 6)}</td><td>${g(r.cF, 6)}</td><td class="${q > 1 ? "bad" : ""}">${(q * 100).toFixed(1)}%</td></tr>`; }).join("")}</tbody></table>`;
+      ${res.rows.map((r, i) => { const q = Math.max(Math.abs(r.cR), Math.abs(r.cF)) / res.lim; return `<tr><td>${i + 1}</td><td>${f2(r.x)}</td><td>${f2(r.rise)}</td><td>${f2(r.fall)}</td><td>${f2(r.cR)}</td><td>${f2(r.cF)}</td><td class="${q > 1 ? "bad" : ""}">${(q * 100).toFixed(1)}%</td></tr>`; }).join("")}</tbody></table>`;
     const red = res.red ? `<div class="unote">Sụt áp chuẩn: ${g(res.red.d, 6)} ${u} (${res.red.pct.toFixed(2)}%) → ${res.red.ok ? "Đạt" : "Không đạt"} (giới hạn &lt; 5% theo mẫu QTG).</div>` : "";
     return uWrap(rec, st, info, "BẢNG TÍNH KIỂM ĐỊNH ÁP KẾ (PRESSURE GAUGE)", "ĐLVN 08:2011 – kiểm định, không tính độ KĐBĐ", inp + `<div class="ulbl">Kết quả kiểm định:</div>` + out + red,
       "Công thức theo file PG_08_Data_Rev2026_Oct-2026.xlsm, sheet Data08. Số hiệu chính chiều tăng dùng số đọc chiều tăng (sheet tháng 10 đang trỏ nhầm sang cột Falling).");
