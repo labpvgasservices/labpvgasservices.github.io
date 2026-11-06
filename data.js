@@ -127,7 +127,7 @@ window.LabSeed = {
     ["Giàn TƯ", "Giàn Thiên Ưng", "Thien Ung Platform", "Chi nhánh Khí Đông Nam Bộ - Tổng công ty Khí Việt Nam – CTCP", "Petrovietnam Gas South East Branch"]
   ],
   settings: {
-    ver: 3,
+    ver: 4,
     // Certificate header (MailMerge_PT_Cert / MailMerge_PS_Cert)
     certLines: ["TỔNG CÔNG TY KHÍ VIỆT NAM", "CÔNG TY DỊCH VỤ KHÍ", "PetroVietnam Gas Services Company", "Add: 101 Le Loi Street-Vung Tau Ward- Ho Chi Minh City", "Tel: 84.254.3586376, Fax: 84.254.3563180"],
     companyTag: "(ĐK 18)",
@@ -137,7 +137,7 @@ window.LabSeed = {
     addrEN: "Add: 101 Le Loi Street-Vung Tau Ward- Ho Chi Minh City",
     tel: "Điện thoại <i>(Tel):</i> 84.254.3586376, Fax: 84.254.3563180",
     place: "TP. Hồ Chí Minh",
-    issueDayBlank: true,
+    issueDayBlank: false,   // NGOC 06/11/2026: in ngày cấp đã nhập
     sig1Title: "Trưởng Phòng TNHC", sig1TitleEn: "(Manager of Laboratory)", sig1Name: "Phan Việt Anh",
     sig2Title: "PHÓ GIÁM ĐỐC", sig2TitleEn: "(Deputy General Manager)", sig2Name: "Đỗ Thành Trung",
     footerVN: "Không được sao chép rời khi giấy chứng nhận có nhiều trang nếu không được sự đồng ý bằng văn bản của Công ty Dịch Vụ Khí.",
