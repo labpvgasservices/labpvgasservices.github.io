@@ -19,6 +19,24 @@
   };
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   let users = ls.get("users", []);
+  /* ID đăng nhập (NGOC 07/11/2026): "ten.hotenlot" viết liền, không dấu – Nguyễn Minh Ngọc = ngoc.nm, Ngô Như Bách = bach.nn;
+   * trùng thì thêm số 1, 2, 3… Họ tên đầy đủ (u.name) mới là chữ in ở ô ký / duyệt trên QTG và GCN. */
+  const deaccent = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
+  const okUid = t => /^[a-z]+(\.[a-z]+)?\d*$/.test(t);
+  const fullName = t => /\S\s+\S/.test(String(t || "").trim()) && !okUid(String(t).trim().toLowerCase());
+  function makeUid(name, taken) {
+    const w = deaccent(name).toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean);
+    if (!w.length) return "";
+    const last = w.pop(), base = last + (w.length ? "." + w.map(x => x[0]).join("") : "");
+    let id = base, n = 1; while (taken && taken.has(id)) id = base + (n++);
+    return id;
+  }
+  const uidSet = (skip) => new Set(users.filter(u => u !== skip).map(u => u.uid).filter(Boolean));
+  // Tài khoản cũ chưa có ID: tên đang là dạng ID (vd "ngoc.nm") thì lấy làm ID, còn lại tạo theo quy tắc
+  if (users.some(u => !u.uid)) {
+    users.forEach(u => { if (u.uid) return; const t = String(u.name || "").trim().toLowerCase(); u.uid = okUid(t) && !uidSet(u).has(t) ? t : makeUid(u.name, uidSet(u)); });
+    ls.set("users", users);
+  }
   let me = null, lastAct = Date.now(), onReady = null;
 
   async function hash(salt, pin) {
@@ -35,12 +53,16 @@
   const save = () => ls.set("users", users);
   const can = p => !!me && me.role >= (PERM[p] || 9);
 
-  async function addUser(name, role, pin) {
-    name = String(name || "").trim();
-    if (!name) throw new Error("Nhập họ tên");
+  async function addUser(name, role, pin, uid) {
+    name = String(name || "").trim().replace(/\s+/g, " ");
+    if (!name) throw new Error("Nhập họ tên đầy đủ");
+    if (!fullName(name)) throw new Error("Ô Họ tên phải là họ tên đầy đủ có dấu (vd Nguyễn Minh Ngọc) – tên viết tắt như ngoc.nm nhập ở ô ID");
+    uid = String(uid || "").trim().toLowerCase() || makeUid(name, uidSet());
+    if (!okUid(uid)) throw new Error("ID viết liền, không dấu, dạng ten.hotenlot (vd ngoc.nm, bach.nn, có thể thêm số: anh.nt1)");
     if (!okPin(pin)) throw new Error("PIN phải gồm 4–8 chữ số");
-    if (users.some(u => u.name.toLowerCase() === name.toLowerCase())) throw new Error("Tên này đã có");
-    const s = salt(); const u = { id: "u" + Date.now().toString(36), name, role: Number(role) || 1, salt: s, hash: await hash(s, pin), created: new Date().toISOString() };
+    if (users.some(u => u.uid === uid)) throw new Error(`ID ${uid} đã có – thêm số phía sau (vd ${uid}1)`);
+    if (users.some(u => u.name.toLowerCase() === name.toLowerCase())) throw new Error("Họ tên này đã có");
+    const s = salt(); const u = { id: "u" + Date.now().toString(36), uid, name, role: Number(role) || 1, salt: s, hash: await hash(s, pin), created: new Date().toISOString() };
     users.push(u); save(); return u;
   }
   async function setPin(id, pin) {
@@ -61,28 +83,51 @@
   const err = m => { const e = document.getElementById("aerr"); if (e) e.textContent = m; };
   function showSetup() {
     const g = gate(`<p>Lần đầu dùng trên máy này: tạo tài khoản <b>Trưởng phòng / Quản trị</b>. Người quản trị sẽ thêm Kiểm định viên và Người kiểm soát trong tab Cài đặt.</p>
-      <label>Họ tên<input id="an" autocomplete="name"></label><label>PIN (4–8 số)<input id="ap" type="password" inputmode="numeric" autocomplete="new-password"></label>
+      <label>Họ tên đầy đủ (in ở ô ký / duyệt)<input id="an" autocomplete="name" placeholder="Nguyễn Minh Ngọc"></label>
+      <label>ID đăng nhập (ten.hotenlot)<input id="aid" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="ngoc.nm"></label>
+      <label>PIN (4–8 số)<input id="ap" type="password" inputmode="numeric" autocomplete="new-password"></label>
       <label>Nhập lại PIN<input id="ap2" type="password" inputmode="numeric" autocomplete="new-password"></label><button class="btn pri" id="ago">Tạo tài khoản</button>`);
     g.querySelector("#ago").onclick = async () => {
       const p = g.querySelector("#ap").value;
       if (p !== g.querySelector("#ap2").value) return err("Hai lần nhập PIN không giống nhau");
-      try { const u = await addUser(g.querySelector("#an").value, 3, p); login(u); } catch (e) { err(e.message); }
+      try { const u = await addUser(g.querySelector("#an").value, 3, p, g.querySelector("#aid").value); login(u); } catch (e) { err(e.message); }
     };
+    autoUid(g.querySelector("#an"), g.querySelector("#aid"));
+  }
+  // Gõ họ tên → tự gợi ý ID (người dùng vẫn sửa được)
+  function autoUid(nameEl, uidEl) {
+    if (!nameEl || !uidEl) return;
+    nameEl.addEventListener("input", () => { if (!uidEl.dataset.touched) uidEl.value = makeUid(nameEl.value, uidSet()); });
+    uidEl.addEventListener("input", () => { uidEl.dataset.touched = uidEl.value ? "1" : ""; });
   }
   function showLogin(msg) {
-    const last = ls.get("lastUser", "");
-    const g = gate(`${msg ? `<p class="mut">${esc(msg)}</p>` : ""}<label>Người dùng<select id="au">${users.map(u => `<option value="${u.id}"${u.id === last ? " selected" : ""}>${esc(u.name)} – ${ROLES[u.role]}</option>`).join("")}</select></label>
+    const lastU = users.find(u => u.id === ls.get("lastUser", ""));
+    const g = gate(`${msg ? `<p class="mut">${esc(msg)}</p>` : ""}<label>ID đăng nhập<input id="au" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="vd ngoc.nm" value="${esc(lastU ? lastU.uid : "")}"></label>
       <label>PIN<input id="ap" type="password" inputmode="numeric" autocomplete="current-password"></label><button class="btn pri" id="ago">Đăng nhập</button>
       <p class="hint">Quên PIN: nhờ Trưởng phòng đặt lại trong Cài đặt › Người dùng.</p>`);
     const go = async () => {
-      const u = users.find(x => x.id === g.querySelector("#au").value), p = g.querySelector("#ap").value;
-      if (!u) return;
+      const k = g.querySelector("#au").value.trim().toLowerCase(), p = g.querySelector("#ap").value;
+      const u = users.find(x => x.uid === k) || users.find(x => x.name.toLowerCase() === k);
+      if (!u) return err(k ? `Không có ID "${k}" trên máy này` : "Nhập ID đăng nhập (vd ngoc.nm)");
       if (await hash(u.salt, p) !== u.hash) { err("Sai PIN"); g.querySelector("#ap").value = ""; return; }
+      if (u.mustChange) return showNewPin(u, p);
       login(u);
     };
     g.querySelector("#ago").onclick = go;
     g.querySelector("#ap").onkeydown = e => { if (e.key === "Enter") go(); };
-    setTimeout(() => g.querySelector("#ap").focus(), 50);
+    setTimeout(() => g.querySelector(lastU ? "#ap" : "#au").focus(), 50);
+  }
+  // PIN ban đầu (cấp qua file danh sách) phải đổi ở lần đăng nhập đầu
+  function showNewPin(u, oldPin) {
+    const g = gate(`<p>Chào <b>${esc(u.name)}</b> (${esc(u.uid)}). Đây là lần đăng nhập đầu: đặt PIN riêng của anh/chị.</p>
+      <label>PIN mới (4–8 số)<input id="ap" type="password" inputmode="numeric" autocomplete="new-password"></label>
+      <label>Nhập lại PIN mới<input id="ap2" type="password" inputmode="numeric" autocomplete="new-password"></label><button class="btn pri" id="ago">Đổi PIN và vào app</button>`);
+    g.querySelector("#ago").onclick = async () => {
+      const p = g.querySelector("#ap").value;
+      if (p !== g.querySelector("#ap2").value) return err("Hai lần nhập PIN không giống nhau");
+      if (p === oldPin) return err("PIN mới phải khác PIN ban đầu");
+      try { await setPin(u.id, p); delete u.mustChange; save(); login(u); } catch (e) { err(e.message); }
+    };
   }
   function login(u) {
     me = u; ss.set(u.id); ls.set("lastUser", u.id); lastAct = Date.now();
@@ -141,7 +186,7 @@
   function chip() {
     const h = document.querySelector("header.top"); if (!h) return;
     let c = h.querySelector(".me"); if (!c) { c = document.createElement("button"); c.className = "me"; c.onclick = () => logout("Đã đăng xuất"); h.appendChild(c); }
-    c.hidden = !me; if (me) c.innerHTML = `${esc(me.name)} · cấp ${me.role} <span>Đăng xuất</span>`;
+    c.hidden = !me; if (me) c.innerHTML = `${esc(me.name)}${me.uid ? ` (${esc(me.uid)})` : ""} · cấp ${me.role} <span>Đăng xuất</span>`;
     let st = h.querySelector("#cloudst"); if (!st && C && C.enabled) { st = document.createElement("span"); st.id = "cloudst"; st.className = "cloudst"; st.hidden = true; st.onclick = () => C.sync(); h.appendChild(st); }
     if (st) { if (me) C.paint(st); else st.hidden = true; }
   }
@@ -158,17 +203,18 @@
       setTimeout(loadCloudUsers, 0);
       return mineC + `<div class="card"><h2>Người dùng</h2><p class="hint">Người mới tự tạo tài khoản ở màn hình đăng nhập, rồi Trưởng phòng cấp quyền ở đây. Cấp 0 = khoá / chờ duyệt.</p><div id="cusers"><p class="mut">Đang tải…</p></div></div>`;
     }
-    const mine = `<div class="card"><h2>Tài khoản</h2><p>Đang đăng nhập: <b>${esc(me.name)}</b> – ${ROLES[me.role]}.</p>
+    const mine = `<div class="card"><h2>Tài khoản</h2><p>Đang đăng nhập: <b>${esc(me.name)}</b> (ID ${esc(me.uid || "")}) – ${ROLES[me.role]}.</p>
       <div class="grid"><label class="f"><span>PIN mới (4–8 số)</span><input id="u_mypin" type="password" inputmode="numeric" autocomplete="new-password"></label></div>
       <div class="btns"><button class="btn" data-u="mypin">Đổi PIN của tôi</button><button class="btn" data-u="logout">Đăng xuất</button></div>
       <p class="hint">Quyền: cấp 1 nhập liệu và lưu hồ sơ; cấp 2 thêm duyệt và xoá hồ sơ; cấp 3 thêm thư viện chuẩn, cài đặt, số chứng chỉ, người dùng. Khoá tự động sau ${IDLE_MIN / 60} giờ không thao tác.
       Đây là khoá trên máy này (danh sách người dùng lưu trong trình duyệt), chưa phải bảo mật máy chủ.</p></div>`;
     if (!can("users")) return mine;
-    const rows = users.map(u => `<div class="rec"><div><b>${esc(u.name)}</b> <span class="tag">cấp ${u.role}</span><br><small class="mut">${ROLES[u.role]}</small></div>
+    const rows = users.map(u => `<div class="rec"><div><b>${esc(u.name)}</b> <span class="tag">${esc(u.uid || "")}</span> <span class="tag">cấp ${u.role}</span>${fullName(u.name) ? "" : ` <span class="tag bad">chưa có họ tên đầy đủ</span>`}<br><small class="mut">${ROLES[u.role]}${u.empNo ? ` · MSNV ${esc(u.empNo)}` : ""}${u.team ? ` · ${esc(u.team)}` : ""}${u.title ? ` · ${esc(u.title)}` : ""}${u.mustChange ? " · chưa đổi PIN ban đầu" : ""}</small></div>
       <div class="ra"><select data-urole="${u.id}">${[1, 2, 3].map(r => `<option value="${r}"${u.role === r ? " selected" : ""}>Cấp ${r}</option>`).join("")}</select>
-      <button class="btn sm" data-u="pin" data-id="${u.id}">Đặt PIN</button>${u.id === me.id ? "" : `<button class="btn sm" data-u="del" data-id="${u.id}">Xoá</button>`}</div></div>`).join("");
+      <button class="btn sm" data-u="rename" data-id="${u.id}">Sửa họ tên</button><button class="btn sm" data-u="pin" data-id="${u.id}">Đặt PIN</button>${u.id === me.id ? "" : `<button class="btn sm" data-u="del" data-id="${u.id}">Xoá</button>`}</div></div>`).join("");
     return mine + `<div class="card"><h2>Người dùng <small>(${users.length})</small></h2>
-      <div class="grid"><label class="f"><span>Họ tên</span><input id="u_name"></label>
+      <div class="grid"><label class="f"><span>Họ tên đầy đủ (in ở ô ký / duyệt)</span><input id="u_name" placeholder="Nguyễn Minh Ngọc"></label>
+      <label class="f"><span>ID đăng nhập (ten.hotenlot)</span><input id="u_uid" autocapitalize="none" spellcheck="false" placeholder="tự tạo từ họ tên"></label>
       <label class="f"><span>Cấp</span><select id="u_role">${[1, 2, 3].map(r => `<option value="${r}">${r} – ${ROLES[r]}</option>`).join("")}</select></label>
       <label class="f"><span>PIN ban đầu (4–8 số)</span><input id="u_pin" type="password" inputmode="numeric" autocomplete="new-password"></label></div>
       <div class="btns"><button class="btn pri" data-u="add">Thêm người dùng</button><button class="btn" data-u="export">Xuất danh sách (JSON)</button><label class="btn">Nhập danh sách<input type="file" id="u_imp" accept=".json,application/json" hidden></label></div>
@@ -191,7 +237,13 @@
       if (a === "mypw") { const p = val("u_mypw"); if (p.length < 8) throw new Error("Mật khẩu ít nhất 8 ký tự"); await C.changePassword(p); toast("Đã đổi mật khẩu"); rerender(); return true; }
       if (a === "mypin") { await setPin(me.id, val("u_mypin")); toast("Đã đổi PIN"); rerender(); }
       if (!can("users")) return true;
-      if (a === "add") { const u = await addUser(val("u_name"), val("u_role"), val("u_pin")); toast("Đã thêm " + u.name); rerender(); }
+      if (a === "add") { const u = await addUser(val("u_name"), val("u_role"), val("u_pin"), val("u_uid")); toast(`Đã thêm ${u.name} – ID ${u.uid}`); rerender(); }
+      if (a === "rename") {
+        const u = users.find(x => x.id === b.dataset.id); if (!u) return true;
+        const n = prompt(`Họ tên đầy đủ của ${u.uid} (in ở ô ký / duyệt)`, fullName(u.name) ? u.name : ""); if (n == null) return true;
+        const t = n.trim().replace(/\s+/g, " "); if (!fullName(t)) throw new Error("Phải là họ tên đầy đủ có dấu, vd Nguyễn Minh Ngọc");
+        u.name = t; save(); if (me && u.id === me.id) { me = u; chip(); } toast("Đã sửa họ tên"); rerender();
+      }
       if (a === "pin") { const p = prompt("PIN mới (4–8 số)"); if (p == null) return true; await setPin(b.dataset.id, p.trim()); toast("Đã đặt PIN"); }
       if (a === "del") { if (!b.dataset.armed) { b.dataset.armed = 1; b.textContent = "Xoá thật?"; return true; } users = users.filter(u => u.id !== b.dataset.id); save(); rerender(); }
       if (a === "export") {
@@ -217,8 +269,17 @@
       fr.onload = () => {
         try {
           const d = JSON.parse(fr.result); if (!d || !Array.isArray(d.users)) throw new Error("File không đúng");
-          let n = 0; d.users.forEach(u => { if (u && u.id && u.name && u.hash && !users.some(x => x.id === u.id || x.name === u.name)) { users.push(u); n++; } });
-          save(); toast(`Đã nhập ${n} người dùng`); rerender();
+          // Trùng ID (hoặc trùng mã tài khoản): cập nhật họ tên / MSNV / tổ / chức danh, GIỮ PIN và cấp đang dùng trên máy này
+          let n = 0, up = 0;
+          d.users.forEach(u => {
+            if (!u || !u.id || !u.name || !u.hash) return;
+            if (!u.uid) u.uid = makeUid(u.name, uidSet());
+            const x = users.find(y => y.id === u.id || y.uid === u.uid);
+            if (x) { ["name", "empNo", "team", "title"].forEach(k => { if (u[k]) x[k] = u[k]; }); if (!x.uid) x.uid = u.uid; up++; if (me && x.id === me.id) me = x; return; }
+            if (users.some(y => y.name === u.name)) return;
+            users.push(u); n++;
+          });
+          save(); chip(); toast(`Đã nhập ${n} người dùng mới, cập nhật ${up} người đã có`); rerender();
         } catch (x) { toast(x.message); }
       };
       fr.readAsText(t.files[0]); return true;
