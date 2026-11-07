@@ -61,6 +61,18 @@
   const num = v => (v === "" || v == null) ? NaN : Number(String(v).replace(",", "."));
   function decimalsOf(arr) { let d = 0; arr.forEach(v => { const s = String(v == null ? "" : v).replace(",", "."); const i = s.indexOf("."); if (i >= 0) d = Math.max(d, s.length - i - 1); }); return d; }
   const pDec = arr => Math.min(3, Math.max(2, decimalsOf(arr)));
+  // NGOC 07/11/2026: số đọc chuẩn (áp suất, mA) in đủ số chữ số lẻ mà màn hình chuẩn hiển thị ở đúng đơn vị, theo manual/GCN của chuẩn:
+  // không cắt số 0 cuối, không bị trần 3 số lẻ. Chuẩn không có số liệu (quả cân, không có màn hình) hoặc số nhập nhiều lẻ hơn màn hình -> dùng quy tắc cũ (fallback).
+  function stdPrintDec(s, unit, vals, fallback) {
+    const f = window.LabStdDec; if (!s || !f) return fallback;
+    let d = -1;
+    for (const v of vals) {
+      if (v === "" || v == null || !isFinite(num(v))) continue;
+      const k = f(s, unit, v); if (k == null || k < 0) return fallback;
+      d = Math.max(d, k);
+    }
+    return d >= 0 && decimalsOf(vals) <= d ? d : fallback;
+  }
   const g = (v, d = 6) => isFinite(v) ? Number(v.toPrecision(d)).toString() : "—";
   // NGOC 06/11/2026: bảng kết quả theo điểm của trang Uncer (cả 9 loại) in tối thiểu 2 chữ số thập phân (VD 62.5 → 62.50, 0 → 0.00);
   // số thật sự có nhiều số lẻ hơn thì giữ đủ (tối đa 6), không làm mất số đọc.
@@ -144,7 +156,7 @@
     let table, mid;
     if (PT) {
       // decimals per reading set (M = 3); corrections follow their reading set; U = 2 significant figures rounded up
-      const pd = C.pubDec(rec.pt.points, 3), dR = C.pubDec(res.rows.map(r => r.rise), 3), dF = C.pubDec(res.rows.map(r => r.fall), 3), u = esc(h.unit);
+      const pd = stdPrintDec(info.stand1, h.unit, rec.pt.points, C.pubDec(rec.pt.points, 3)), dR = stdPrintDec(info.stand2, "mA", rec.pt.rise, C.pubDec(res.rows.map(r => r.rise), 3)), dF = stdPrintDec(info.stand2, "mA", rec.pt.fall, C.pubDec(res.rows.map(r => r.fall), 3)), u = esc(h.unit);
       const rows = res.rows.map((r, i) => `<tr><td>${p2(i + 1)}</td><td>${vn(r.x, pd)}</td><td>${vn(r.ideal, 3)}</td><td>${vn(r.rise, dR)}</td><td>${vn(r.fall, dF)}</td><td>${vn(r.shcR, dR)}</td><td>${vn(r.shcF, dF)}</td><td>${uTxt("PT", r.U)}</td></tr>`).join("");
       table = `<table class="res cres"><thead>
         <tr><th rowspan="2">TT<br>${it("(N<sup>o</sup>)")}</th><th rowspan="2">Áp suất đặt<br>${it("(Input Pressure)")}<br>${u}</th><th rowspan="2">Tín hiệu điện quy đổi<br>${it("(Ideal Output Current)")}<br>mA</th>
@@ -157,7 +169,7 @@
         <p class="c">U<sub>exp-max</sub> = ${uTxt("PT", res.Umax)} ${u}</p>`;
     } else {
       // PS: dot decimal, decimals per reading set (M = 2), deviations follow their set
-      const dS = C.pubDec(res.set, 2), dR = C.pubDec(res.reset, 2), u = esc(h.unitPset), U = res.Utext.text, ps = (v, d) => nTxt("PS", v, d);
+      const dS = stdPrintDec(info.stand1, h.unitPset, rec.ps.set, C.pubDec(res.set, 2)), dR = stdPrintDec(info.stand1, h.unitPset, rec.ps.reset, C.pubDec(res.reset, 2)), u = esc(h.unitPset), U = res.Utext.text, ps = (v, d) => nTxt("PS", v, d);
       const rows = res.set.map((v, i) => `<tr><td>${p2(i + 1)}</td>${i === 0 ? `<td rowspan="5">${esc(dot(h.pset))}</td>` : ""}<td>${ps(v, dS)}</td><td>${ps(res.reset[i], dR)}</td><td>${ps(res.setDev[i], dS)}</td><td>${ps(res.resetDev[i], dR)}</td>${i === 0 ? `<td rowspan="5">${U}</td>` : ""}</tr>`).join("");
       table = `<table class="res cres"><thead><tr><th rowspan="2">TT<br>${it("(N<sup>o</sup>)")}</th><th rowspan="2">Áp suất đặt ${it("(Pset)")}<br>${u}</th><th rowspan="2">Áp suất tác động<br>${it("(Set-Pressure)")}<br>${u}</th><th rowspan="2">Áp suất trả về<br>${it("(Reset-Pressure)")}<br>${u}</th>
         <th colspan="2">Áp suất chênh lệch</th><th rowspan="2">Độ KĐBĐ<br>${it("(Uncertainty)")}<br>${u}</th></tr>
@@ -220,12 +232,12 @@
         <tr><td colspan="2" class="c">${cb(h.envOk)} &nbsp; Nhiệt độ ${it("(Ambient Temp.)")}: ${esc(S.qtgTemp)}</td><td class="c">${cb(h.envOk)} &nbsp; Độ ẩm ${it("(Humidity)")}: ${esc(S.qtgHum)}</td></tr>
         <tr><td colspan="3">Ngày thực hiện ${it("(Calib. Date)")}: ${dVN(cal)}</td></tr>
         <tr><td colspan="2">Số liệu và kết quả ${it("(Result)")}:</td><td class="sp2">${cb(asF)} &nbsp; AsFound <span class="gap"></span> ${cb(asL)} &nbsp; AsLeft</td></tr></table>`;
-      const pd = pDec(rec.pt.points);
+      const pd = stdPrintDec(info.stand1, h.unit, rec.pt.points, pDec(rec.pt.points)), dm = stdPrintDec(info.stand2, "mA", [...rec.pt.rise, ...rec.pt.fall], 3);
       data = `<table class="res qres"><thead>
         <tr><th rowspan="2">TT<br>${it("(N<sup>o</sup>)")}</th><th rowspan="2">Áp chuẩn<br>${it("(Standard Input Pressure)")}<br><br>${esc(h.unit)}</th><th rowspan="2">Tín hiệu điện quy đổi<br>${it("(Ideal Output Current)")}<br>mA</th>
           <th colspan="2">Giá trị dòng trên thiết bị<br>${it("(Measured Output Current)")}<br>mA</th><th colspan="2">Số hiệu chính<br>${it("(Correction)")}<br>mA</th></tr>
         <tr><th>Tăng<br>${it("(Increasing)")}</th><th>Giảm<br>${it("(Decreasing)")}</th><th>Tăng<br>${it("(Increasing)")}</th><th>Giảm<br>${it("(Decreasing)")}</th></tr></thead><tbody>
-        ${res.rows.map((r, i) => `<tr><td>${p2(i + 1)}</td><td>${vn(r.x, pd)}</td><td>${vn(r.ideal, 3)}</td><td>${vn(r.rise, 3)}</td><td>${vn(r.fall, 3)}</td><td>${vn(r.shcR, 3)}</td><td>${vn(r.shcF, 3)}</td></tr>`).join("")}</tbody></table>`;
+        ${res.rows.map((r, i) => `<tr><td>${p2(i + 1)}</td><td>${vn(r.x, pd)}</td><td>${vn(r.ideal, 3)}</td><td>${vn(r.rise, dm)}</td><td>${vn(r.fall, dm)}</td><td>${vn(r.shcR, dm)}</td><td>${vn(r.shcF, dm)}</td></tr>`).join("")}</tbody></table>`;
     } else {
       const rising = h.dirQTG !== "Falling";
       const mpe = num(h.acc) * num(h.pset) / 100;
@@ -249,7 +261,7 @@
         <tr><td colspan="4">Ngày thực hiện ${it("(Calib. Date)")}: ${dVN(cal)}</td></tr>
         <tr><td colspan="4">Địa điểm thực hiện ${it("(Location)")}: ${it(esc(L.locVN || L.code))}</td></tr>
         <tr><td colspan="4" class="c"><b>KẾT QUẢ HIỆU CHUẨN ${it("(RESULT)")}:</b></td></tr></table>`;
-      const pd = pDec([h.pset, ...rec.ps.set, ...rec.ps.reset]);
+      const pd = stdPrintDec(info.stand1, h.unitPset, [...rec.ps.set, ...rec.ps.reset], pDec([h.pset, ...rec.ps.set, ...rec.ps.reset]));
       data = `<table class="res qres ps"><thead>
         <tr><th rowspan="2">TT<br>${it("(N<sup>o</sup>)")}</th><th rowspan="2">Áp suất đặt<br>${it("(P<sub>set</sub>)")}<br><br>${esc(h.unitPset)}</th><th colspan="2">Áp suất hiển thị trên thiết bị chuẩn<br>${it("(Standard Pressure)")}</th><th rowspan="2">Chênh tác động<br>${it("(Set-deviation)")}</th><th rowspan="2">Chênh trả lại<br>${it("(Reset-deviation)")}</th></tr>
         <tr><th>Áp suất tác động<br>${it("(Set-Pressure)")}</th><th>Áp suất trả về<br>${it("(Reset-Pressure)")}</th></tr></thead><tbody>
@@ -303,7 +315,7 @@
           ${r3("K34", "DEVSQ Σ(xi−xtb)²", g(res.K34))}${r3("L34", "SUMSQ Σxi²", g(res.L34))}${r3("M34/N34", "COUNT n / SUM Σxi", `${res.M34} / ${g(res.N34)}`)}
           ${r3("F39", "2.2.2 uv Vôn/Ampe kế", g(res.uv, 6), "%")}${r3("F41", "3. Uc tổng hợp lớn nhất", g(res.F41, 6), "%")}${r3("F42", "4. Uexp tương đối = E16·F41", g(res.F42, 6), "%")}
         </table></div>`;
-      const pd = pDec(rec.pt.points);
+      const pd = stdPrintDec(info.stand1, h.unit, rec.pt.points, pDec(rec.pt.points));
       const out = `<table class="res ug"><thead><tr><th>Áp suất chuẩn<br>B46</th><th>Quy đổi mA<br>C46</th><th>DUT tăng<br>D46</th><th>DUT giảm<br>E46</th><th>SHC tăng<br>F46</th><th>SHC giảm<br>G46</th><th>SHC TB<br>H46</th><th>Uc,i(tb) %<br>I46</th><th>Uexp ${esc(h.unit)}<br>J46</th><th>Uexp %<br>K46</th><th>In CC<br>${esc(h.unit)}</th></tr></thead><tbody>
         ${res.rows.map(r => `<tr><td>${g2(r.x)}</td><td>${g2(r.ideal)}</td><td>${f2(r.rise)}</td><td>${f2(r.fall)}</td><td>${g2(r.shcR, 4)}</td><td>${g2(r.shcF, 4)}</td><td>${g2(r.shcAvg, 4)}</td><td>${g(r.ucAvg, 6)}</td><td>${g(r.U, 6)}</td><td>${g(r.Upct, 6)}</td><td><b>${uTxt("PT", r.U)}</b></td></tr>`).join("")}</tbody></table>`;
       const ratioI = res.shcMax / res.limI, ratioU = res.Umax / res.limU;
@@ -337,7 +349,7 @@
           ${r3("F37", "8.4 U mở = E18·F34", g(res.F37, 6))}${r3("F38", "U đóng = E18·F35", g(res.F38, 6))}
           ${r3("I42", "U báo cáo (theo chiều " + res.dir + ")", g(res.U, 6), esc(h.unitPset))}${r3("", "In chứng chỉ (2 chữ số có nghĩa, làm tròn lên)", `<b>${res.Utext.text}</b>`, esc(h.unitPset))}
         </table></div>`;
-      const pd = pDec([h.pset, ...rec.ps.set, ...rec.ps.reset]);
+      const pd = stdPrintDec(info.stand1, h.unitPset, [...rec.ps.set, ...rec.ps.reset], pDec([h.pset, ...rec.ps.set, ...rec.ps.reset]));
       const out = `<table class="res ug"><thead><tr><th>Lần<br>C42</th><th>Pset<br>D42</th><th>Set<br>E42</th><th>Reset<br>F42</th><th>Set-deviation<br>G42</th><th>Reset-deviation<br>H42</th></tr></thead><tbody>
         ${res.set.map((v, i) => `<tr><td>${i + 1}</td><td>${i === 0 ? esc(h.pset) : ""}</td><td>${vn(v, pd)}</td><td>${vn(res.reset[i], pd)}</td><td>${vn(res.setDev[i], pd)}</td><td>${vn(res.resetDev[i], pd)}</td></tr>`).join("")}</tbody></table>`;
       const maxDev = Math.max(...res.setDev.map(Math.abs)), ratio = res.J42 / res.K42;

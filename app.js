@@ -162,6 +162,7 @@
     if (s.kind === "e" || s.kind === "r" || s.kind === "v") return decOf(s.res);
     return null;
   }
+  window.LabStdDec = standDec;   // docs.js dùng để in đủ số chữ số lẻ mà màn hình chuẩn hiển thị (NGOC 07/11/2026)
   // vals: chuỗi người dùng nhập; lỗi khi nhiều chữ số lẻ hơn chuẩn hiển thị (điện trở chỉ cảnh báo – xem review/stand_digits)
   function checkDec(s, unit, vals, lab, E, W) {
     if (!s) return;
