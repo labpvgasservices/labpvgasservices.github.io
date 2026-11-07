@@ -1169,13 +1169,28 @@
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
       const pages = $$("section.a4", host);
+      // Mộc ẩn: chỉ gắn khi Trưởng phòng đã đặt khóa Phòng (Cài đặt › Mộc ẩn)
+      const mf = settings.mocKey && window.MOC ? mocFields() : null, mc = mf ? await MOC.code(settings.mocKey, mf) : "";
       for (let i = 0; i < pages.length; i++) {
         const cv = await html2canvas(pages[i], { scale: 2, backgroundColor: "#ffffff", logging: false, width: 794, height: 1123, windowWidth: 794 });
+        if (mc) MOC.stamp(cv, mc);
         if (i) pdf.addPage();
         pdf.addImage(cv.toDataURL("image/jpeg", 0.82), "JPEG", 0, 0, 210, 297);
       }
-      return pdf.output("blob");
+      pdf.setProperties({ title: [rec.certNo, rec.h.tag].filter(Boolean).join(" "), subject: "LAB PVGAS Services", creator: "LAB PVGAS Services", keywords: mc ? MOC.keywords(mc, mf) : "" });
+      const blob = pdf.output("blob");
+      if (mc) {
+        const log = store.get("pdfLog", []);
+        log.push({ sha: await MOC.sha256(blob), code: mc, f: mf, certNo: rec.certNo || "", tag: rec.h.tag || "", recId: rec.id, at: new Date().toISOString(), by: A.me() ? A.me().name : "" });
+        store.set("pdfLog", log.slice(-3000));
+      }
+      return blob;
     } finally { host.innerHTML = ""; }
+  }
+  function mocFields() {
+    const c = compute();
+    return { certNo: rec.certNo || "", type: rec.type, tag: rec.h.tag || "", serial: rec.h.serial || "", issueDate: rec.h.issueDate || "", calDate: rec.h.calDate || "",
+      result: c.res ? (c.res.pass ? "Đạt" : "Không đạt") : "", approvedBy: rec.approved ? rec.approved.by : "" };
   }
   const fileTag = () => `${(rec.certNo || "").replace(/[^\w.-]+/g, "_")}_${(rec.h.tag || "").replace(/[^\w.-]+/g, "_")}`;
   async function makePdf(which, htmlIn, nameIn, outSel) {
@@ -1422,8 +1437,8 @@
     const tail = `<div class="card"><h2>Tự kiểm tra công thức</h2><p class="hint">Chạy lại 2 ca thật từ file DGCP 10/2026 (PT-1506A, PSHH-0522) và so sánh từng số.</p>
         <div class="btns"><button class="btn pri" data-t="selftest">Chạy kiểm tra</button></div><div id="stout"></div></div>
       <div class="card"><h2>Về ứng dụng</h2><p class="hint">LAB PVGAS Services · bản thử nghiệm PT, PS, PG, TS, TT, RTD, TG · chạy offline, dữ liệu chỉ lưu trên máy này (dùng Sao lưu JSON ở tab Hồ sơ).</p></div>`;
-    if (!A.can("settings")) { $("#v-settings").innerHTML = A.accountCard() + `<div class="card"><p class="hint">Cài đặt chứng chỉ chỉ dành cho Trưởng phòng / Quản trị (cấp 3).</p></div>` + tail; return; }
-    $("#v-settings").innerHTML = A.accountCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
+    if (!A.can("settings")) { $("#v-settings").innerHTML = A.accountCard() + (canCheck() ? checkCard() : "") + `<div class="card"><p class="hint">Cài đặt chứng chỉ chỉ dành cho Trưởng phòng / Quản trị (cấp 3).</p></div>` + tail; return; }
+    $("#v-settings").innerHTML = A.accountCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
         ${f("Chức danh trái", "sig1Title")}${f("Tên", "sig1Name")}${f("Chức danh trái (EN)", "sig1TitleEn", 1)}
         ${f("Chức danh phải", "sig2Title")}${f("Tên", "sig2Name")}${f("Chức danh phải (EN)", "sig2TitleEn", 1)}
         ${f("Nơi cấp (dòng ngày)", "place")}${f("Chu kỳ HC (tháng)", "dueMonths")}
@@ -1443,9 +1458,47 @@
         ${f("PS – Môi trường (chứng chỉ)", "PS.env", 1)}${f("PS – Nhiệt độ QTG", "PS.qtgTemp")}${f("PS – Độ ẩm QTG", "PS.qtgHum")}
         ${NEWT.map(t => `${f(`${t} – Phương pháp`, `${t}.procedure`)}${f(`${t} – Mã biểu mẫu QTG`, `${t}.qtgForm`)}${t === "PG" ? f("PG – Ký hiệu series (N256.yy<b>A</b>)", "PG.series") : f(`${t} – Mã bảng Uncer`, `${t}.form`)}${f(`${t} – Tiền tố CC`, `${t}.prefix`)}${f(`${t} – Tiền tố BB`, `${t}.bbPrefix`)}
           ${t === "PG" ? f("PG – Phương pháp in GCN (VN)", "PG.procVN", 1) + f("PG – Phương pháp in GCN (EN)", "PG.procEN", 1) : f(`${t} – Môi trường (chứng chỉ)`, `${t}.env`, 1)}${f(`${t} – Nhiệt độ QTG`, `${t}.qtgTemp`)}${f(`${t} – Độ ẩm QTG`, `${t}.qtgHum`)}${t === "TC" ? f("TC – U thiết bị bù đầu tự do (°C, uch7 = U/2; 0 = bỏ)", "TC.uCJ") : ""}`).join("")}</div>
-        <div class="btns"><button class="btn" data-t="resetset">Về mặc định</button></div></div>` + tail;
+        <div class="btns"><button class="btn" data-t="resetset">Về mặc định</button></div></div>` + mocCard() + tail;
+  }
+  function mocCard() {
+    const on = !!settings.mocKey;
+    return `<div class="card" id="moc"><h2>Mộc ẩn & Kiểm tra GCN</h2>
+      <p class="hint">Khi có khóa Phòng, mọi PDF xuất ra đều mang một mã ẩn (lưới chấm gần trắng trong ảnh trang + thông tin ẩn của file) và được ghi dấu vân tay SHA-256 vào nhật ký máy này. Mắt thường không thấy; chỉ kiểm tra được bằng khóa Phòng. Giữ khóa ở nơi an toàn: mất khóa thì không kiểm tra được GCN cũ.</p>
+      <p class="${on ? "ok" : "bad"}"><b>${on ? "Đang bật: PDF xuất ra có mộc ẩn" : "Chưa có khóa: PDF chưa gắn mộc ẩn"}</b></p>
+      <div class="grid"><label class="f wide"><span>Khóa Phòng (bí mật)</span><input type="password" id="mockey" data-sp="mocKey" value="${esc(settings.mocKey || "")}" autocomplete="off"></label></div>
+      <div class="btns"><button class="btn" data-t="mocshow">Hiện / ẩn khóa</button><button class="btn" data-t="mocnew">${on ? "Đổi khóa mới" : "Tạo khóa"}</button></div>
+      <div class="grid"><label class="f wide"><span>Cấp được dùng "Kiểm tra GCN thật / giả"</span><select data-sp="mocCheckLevel">${[[1, "Tất cả (cấp 1, 2, 3)"], [2, "Cấp 2 và 3"], [3, "Chỉ cấp 3"]].map(([v, t]) => `<option value="${v}"${checkLevel() === v ? " selected" : ""}>${t}</option>`).join("")}</select></label></div></div>`;
+  }
+  const checkLevel = () => [1, 2, 3].includes(+settings.mocCheckLevel) ? +settings.mocCheckLevel : 1;
+  const canCheck = () => !!A.me() && (+A.me().role || 0) >= checkLevel();
+  function checkCard() {
+    return `<div class="card" id="mocchk"><h2>Kiểm tra GCN thật / giả</h2>
+      <p class="hint">Tải lên file PDF GCN (bản app xuất hoặc bản đã ký số trên cks.pvgas.com.vn). App đọc mộc ẩn trong ảnh trang và thông tin ẩn của file, so với khóa Phòng.
+      Chữ ký số còn hiệu lực hay không thì kiểm tra bằng mã QR / cks.pvgas.com.vn hoặc Adobe Reader.</p>
+      ${settings.mocKey ? "" : `<p class="bad"><b>Máy này chưa có khóa Phòng: chỉ đọc được mã ẩn, chưa xác nhận được đúng/sai. Nhờ cấp 3 nhập khóa trong Cài đặt › Mộc ẩn.</b></p>`}
+      <label class="btn pri" style="display:inline-block">Chọn file PDF để kiểm tra<input type="file" id="mocfile" accept="application/pdf,.pdf" hidden></label>
+      <div id="mocout"></div></div>`;
+  }
+  async function mocCheck(file) {
+    const out = $("#mocout"); out.innerHTML = `<p class="mut">Đang kiểm tra ${esc(file.name)}…</p>`;
+    try {
+      const r = await MOC.verify(new Uint8Array(await file.arrayBuffer()), settings.mocKey, store.get("pdfLog", []));
+      if (!settings.mocKey && (r.img.found || r.meta)) r.st = "nokey";
+      const T = { nokey: ["warn", "⚠ CÓ MỘC ẨN nhưng máy này chưa có khóa Phòng nên chưa xác nhận được đúng/sai"], ok: ["ok", "✔ ĐÚNG: file do Phòng cấp, còn nguyên vẹn"],
+        signed: ["ok", `✔ MỘC ẨN ĐÚNG · ĐÃ KÝ SỐ (${r.sigs} chữ ký): nội dung trùng bản app xuất. Kiểm tra hiệu lực chữ ký trên cks.pvgas.com.vn`], changed: ["warn", "⚠ MỘC ĐÚNG NHƯNG FILE KHÁC BẢN ĐÃ CẤP: đã bị chỉnh sửa, hoặc được xuất từ máy khác"],
+        bad: ["bad", r.img.found && r.meta && r.img.code === r.meta.code ? "✖ MỘC SAI: mã ẩn không đúng khóa Phòng (GCN giả, hoặc đóng mộc bằng khóa khác / khóa cũ)" : "✖ MỘC SAI: thông tin trên file không khớp mã ẩn (đã bị sửa)"], none: ["bad", "✖ KHÔNG CÓ MỘC ẨN: file không xuất từ app (hoặc đã bị dựng lại)"] }[r.st];
+      const f = r.fields, row = (a, b) => `<tr><td style="text-align:left">${a}</td><td style="text-align:left">${b}</td></tr>`;
+      out.innerHTML = `<div class="verdict ${T[0] === "ok" ? "ok" : (T[0] === "warn" ? "warn" : "ko")}">${T[1]}</div>
+        <table class="mini">${row("File", esc(file.name))}${row("Mã ẩn đọc từ ảnh trang", r.img.found ? `${esc(r.img.code)} (${r.img.pages} trang, đồng thuận ${(r.img.agree * 100).toFixed(1)}%)` : "không thấy")}
+        ${row("Mã trong thông tin file", r.meta ? esc(r.meta.code) : "không có")}${row("Mã đúng theo khóa Phòng", esc(r.expect || "—"))}
+        ${row("Chữ ký số trong file", r.sigs ? `${r.sigs} chữ ký (ảnh trang và thông tin ẩn không bị hệ thống ký số thay đổi)` : "không có")}
+        ${row("Vân tay SHA-256", `${esc(r.sha.slice(0, 16))}… ${r.hit ? `khớp bản xuất ${esc(r.hit.at.slice(0, 16).replace("T", " "))} bởi ${esc(r.hit.by)}` : "không có trong nhật ký máy này"}`)}
+        ${f ? row(r.st === "bad" ? "Thông tin ghi trong file (không khớp mã ẩn)" : (r.from === "log" ? "Nội dung gốc (theo nhật ký máy này)" : "Nội dung gốc khi cấp"), esc(`${f.certNo} · ${f.type} · ${f.tag} · S/N ${f.serial} · cấp ${f.issueDate} · ${f.result}${f.approvedBy ? " · duyệt: " + f.approvedBy : ""}`)) : ""}</table>
+        ${f && r.st !== "bad" ? `<p class="hint">Đối chiếu nội dung gốc với số in trên GCN: khác nhau là GCN đã bị sửa.</p>` : ""}`;
+    } catch (e) { out.innerHTML = `<p class="bad">Không đọc được file: ${esc(e.message)}</p>`; }
   }
   function onSettingsInput(e) {
+    if (e.target.id === "mocfile") { if (e.type === "change" && e.target.files[0]) { if (canCheck()) mocCheck(e.target.files[0]); e.target.value = ""; } return; }
     if (e.type === "change" && A.onAccountChange(e, renderSettings, toast)) return;
     const p = e.target.dataset.sp; if (!p || !A.can("settings")) return;
     let v = e.target.value; if (["showLogo", "warnExpired", "issueDayBlank", "showAccred"].includes(p)) v = !!v; if (p === "dueMonths") v = num(v) || 12;
@@ -1457,6 +1510,12 @@
     const b = e.target.closest("button[data-t]"); if (!b) return;
     if (b.dataset.t === "resetset" && A.can("settings")) { settings = clone(SEED.settings); store.set("settings", settings); renderSettings(); toast("Đã về mặc định"); }
     if (b.dataset.t === "selftest") $("#stout").innerHTML = selfTest();
+    if (b.dataset.t === "mocshow") { const i = $("#mockey"); i.type = i.type === "password" ? "text" : "password"; }
+    if (b.dataset.t === "mocnew" && A.can("settings")) {
+      if (settings.mocKey && !b.dataset.armed) { b.dataset.armed = 1; b.textContent = "Chắc chắn đổi? GCN cũ cần khóa cũ để kiểm tra"; return; }
+      const a = new Uint8Array(18); crypto.getRandomValues(a); settings.mocKey = btoa(String.fromCharCode(...a)).replace(/[+/=]/g, "x");
+      store.set("settings", settings); renderSettings(); $("#mockey").type = "text"; $("#moc").scrollIntoView(); toast("Đã tạo khóa: hãy chép và cất khóa ở nơi an toàn");
+    }
   }
   function selfTest() {
     // Chuẩn đóng băng đúng như sheet "Stand Ref" của file Excel 2026 dùng để đối chiếu (không lấy từ danh mục đang dùng, vì U đã cập nhật theo GCN mới)
