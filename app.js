@@ -162,6 +162,7 @@
     if (s.kind === "e" || s.kind === "r" || s.kind === "v") return decOf(s.res);
     return null;
   }
+  window.LabStdDec = standDec;   // docs.js dùng để in đủ số chữ số lẻ mà màn hình chuẩn hiển thị (NGOC 07/11/2026)
   // vals: chuỗi người dùng nhập; lỗi khi nhiều chữ số lẻ hơn chuẩn hiển thị (điện trở chỉ cảnh báo – xem review/stand_digits)
   function checkDec(s, unit, vals, lab, E, W) {
     if (!s) return;
@@ -1177,14 +1178,47 @@
       return pdf.output("blob");
     } finally { host.innerHTML = ""; }
   }
+  // Tên file (NGOC 07/11/2026): "<Tag thiết bị>_<GCN|QTG|Uncer>_<dd-mm-yyyy>" – ngày = ngày hiệu chuẩn của hồ sơ
+  const ddmmyyyy = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ""); return m ? `${m[3]}-${m[2]}-${m[1]}` : "khong-ngay"; };
+  const safeTag = t => String(t || "").trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, "_") || "KhongTag";
+  const fileBase = (r, kind) => `${safeTag(r.h.tag)}_${kind}_${ddmmyyyy(r.h.calDate)}`;
+  // Tải trọn bộ hồ sơ đã duyệt (NGOC 07/11/2026): 1 file ZIP gồm 3 thư mục QTG/, GCN/, Uncer/ – mỗi loại chung một thư mục.
+  // Thiết bị Không đạt: không có GCN (quy tắc không cấp GCN), vẫn có QTG và Uncer. Cấp 1 không tải QTG (quy tắc 01/11/2026).
+  async function exportPack(list, zipName, outSel) {
+    const out = $(outSel); if (!out) return;
+    if (!list.length) { out.innerHTML = `<p class="bad">Chưa có hồ sơ đã duyệt để tải.</p>`; return; }
+    const keep = rec, files = [], used = new Map(), skipped = [], noCert = [];
+    const kinds = [["qtg", "QTG"], ["cert", "GCN"], ["unc", "Uncer"]].filter(([w]) => !(w === "qtg" && lv1()));
+    const uniq = n => { const k = n.toLowerCase(), i = (used.get(k) || 0) + 1; used.set(k, i); return i === 1 ? n : `${n}_${i}`; };
+    try {
+      for (let i = 0; i < list.length; i++) {
+        rec = normalize(clone(list[i]));
+        out.innerHTML = `<p class="mut">Đang tạo PDF ${i + 1}/${list.length}: ${esc(rec.h.tag || rec.certNo)}…</p>`;
+        const c = compute(); if (!c.res) { skipped.push(rec.h.tag || rec.certNo || rec.id); continue; }
+        for (const [w, k] of kinds) {
+          if (w === "cert" && failed(c)) { noCert.push(rec.h.tag); continue; }
+          const html = pagesHtml(w); if (!html) continue;
+          files.push({ name: `${k}/${uniq(fileBase(rec, k))}.pdf`, blob: await buildPdf(html) });
+        }
+      }
+      if (!files.length) { out.innerHTML = `<p class="bad">Không tạo được file nào${skipped.length ? " – thiếu số liệu: " + esc(skipped.join(", ")) : ""}.</p>`; return; }
+      out.innerHTML = `<p class="mut">Đang đóng gói ZIP (${files.length} file)…</p>`;
+      lastPdf = { blob: await LabZip.make(files), name: zipName };
+      const cnt = k => files.filter(f => f.name.startsWith(k + "/")).length;
+      out.innerHTML = `<div class="pdfready"><b>${esc(zipName)}</b><span class="mut">${(lastPdf.blob.size / 1024 / 1024).toFixed(1)} MB · ${list.length} hồ sơ · ${kinds.map(([, k]) => `${k} ${cnt(k)}`).join(" · ")}</span>
+        ${noCert.length ? `<span class="mut">Không đạt, không có GCN: ${esc(noCert.join(", "))}</span>` : ""}${skipped.length ? `<span class="bad">Bỏ qua (thiếu số liệu): ${esc(skipped.join(", "))}</span>` : ""}
+        <div class="btns"><button class="btn pri" data-act="share" data-r="share">Chia sẻ / Lưu vào Tệp</button><button class="btn" data-act="download" data-r="download">Mở / Tải xuống</button></div></div>`;
+    } catch (e) { out.innerHTML = `<p class="bad">Không tạo được bộ ZIP: ${esc(e.message)}</p>`; }
+    finally { rec = keep; }
+  }
   const fileTag = () => `${(rec.certNo || "").replace(/[^\w.-]+/g, "_")}_${(rec.h.tag || "").replace(/[^\w.-]+/g, "_")}`;
   async function makePdf(which, htmlIn, nameIn, outSel) {
     if (!htmlIn && lv1()) { if (which === "qtg") { renderPreview("qtg"); return; } if (which === "all") which = "certunc"; }
     const html = htmlIn || pagesHtml(which); if (!html) return;
     const out = $(outSel || "#pdfout"); out.innerHTML = `<p class="mut">Đang tạo PDF…</p>`;
     try {
-      const label = { cert: "ChungChi", qtg: "BienBan", unc: "Uncer", all: "HoSo", certunc: "GCN_Uncer" }[which];
-      const name = nameIn || `${label}_${fileTag()}.pdf`;
+      const kind = { cert: "GCN", qtg: "QTG", unc: "Uncer", all: "TronBo", certunc: "GCN_Uncer" }[which];
+      const name = nameIn || `${fileBase(rec, kind)}.pdf`;
       lastPdf = { blob: await buildPdf(html), name };
       out.innerHTML = `<div class="pdfready"><b>${esc(name)}</b><span class="mut">${(lastPdf.blob.size / 1024).toFixed(0)} KB</span>
         <div class="btns"><button class="btn pri" data-act="share" data-r="share">Chia sẻ / Lưu vào Tệp</button><button class="btn" data-act="download" data-r="download">Mở / Tải xuống</button></div></div>`;
@@ -1221,7 +1255,7 @@
   }
   async function sharePdf() {
     if (!lastPdf) return;
-    const file = new File([lastPdf.blob], lastPdf.name, { type: "application/pdf" });
+    const file = new File([lastPdf.blob], lastPdf.name, { type: lastPdf.blob.type || "application/pdf" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try { await navigator.share({ files: [file], title: lastPdf.name }); return; } catch (e) { if (e.name === "AbortError") return; }
     }
@@ -1236,10 +1270,15 @@
 
   /* ---------- records tab ---------- */
   let mineOnly = false;
+  function visibleRecords(q) {
+    const m = A.me();
+    return records.filter(r => (!mineOnly || (m && r.owner && r.owner.id === m.id)) && (!q || [r.h.tag, r.certNo, r.h.model, r.h.location, r.h.locFree, r.owner ? r.owner.name : ""].join(" ").toLowerCase().includes(q)));
+  }
+  const byCert = (a, z) => String(a.certNo || "").localeCompare(String(z.certNo || "")) || String(a.h.tag || "").localeCompare(String(z.h.tag || ""));
   function renderRecords() {
     const q = ($("#rq") && $("#rq").value || "").toLowerCase();
     const m = A.me();
-    const list = records.filter(r => (!mineOnly || (m && r.owner && r.owner.id === m.id)) && (!q || [r.h.tag, r.certNo, r.h.model, r.h.location, r.h.locFree, r.owner ? r.owner.name : ""].join(" ").toLowerCase().includes(q)));
+    const list = visibleRecords(q);
     // Hàng chờ duyệt (cấp 2/3): hồ sơ cấp 1 đã Gửi duyệt nhảy lên đầu tab Hồ sơ (yêu cầu NGOC 01/11/2026)
     const pend = A.can("approve") ? records.filter(r => r.submitted && !r.approved) : [];
     const byF = new Map(); pend.forEach(r => { const k = folderKey(r); if (!byF.has(k)) byF.set(k, []); byF.get(k).push(r); });
@@ -1252,6 +1291,7 @@
     $("#v-records").innerHTML = queue + `<div class="card"><h2>Hồ sơ đã lưu <small>(${records.length})</small></h2>
       <input id="rq" placeholder="Tìm tag, số chứng chỉ, model, người nhập…" value="${esc(q)}">
       <div class="btns"><button class="btn sm${mineOnly ? "" : " pri"}" data-r="all">Tất cả</button><button class="btn sm${mineOnly ? " pri" : ""}" data-r="mine">Hồ sơ của tôi</button></div>
+      <div class="btns"><button class="btn pri" data-r="zipall">⬇ Tải trọn bộ đã duyệt <small>ZIP: QTG · GCN · Uncer</small></button></div><div id="zipout"></div>
       <div class="btns"><button class="btn pri" data-r="qcPT">Bảng kiểm tra PT (QC)</button><button class="btn pri" data-r="qcPS">Bảng kiểm tra PS (QC)</button></div><div id="qcout"></div>
       <div class="btns"><button class="btn" data-r="csv">Xuất danh mục CSV</button><button class="btn" data-r="backup">Sao lưu JSON</button><label class="btn">Nhập JSON<input type="file" id="imp" accept=".json,application/json" hidden></label></div>
       ${list.length ? folders(list, r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} <span class="${r.approved ? "ok" : r.submitted ? "warn" : "mut"}">${r.approved ? "Đã duyệt" : r.submitted ? "Chờ duyệt" : "Chưa duyệt"}</span><br>
@@ -1272,7 +1312,7 @@
     if (!openFolders) openFolders = new Set(m ? [m.id] : []);
     return keys.map(k => { const f = G.get(k), n = f.items.length, ok = f.items.filter(r => r.approved).length;
       return `<details class="fold" data-f="${esc(k)}"${openFolders.has(k) || keys.length === 1 ? " open" : ""}><summary>📁 <b>${esc(f.name)}</b>${m && k === m.id ? " <span class=\"tag\">của tôi</span>" : ""} <small class="mut">${n} hồ sơ · ${ok} đã duyệt</small></summary>
-        <div class="btns">${A.can("approve") && f.items.some(r => r.submitted && !r.approved) ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${f.items.filter(r => r.submitted && !r.approved).length})</button>` : ""}<button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button><button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button></div>
+        <div class="btns">${A.can("approve") && f.items.some(r => r.submitted && !r.approved) ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${f.items.filter(r => r.submitted && !r.approved).length})</button>` : ""}${ok ? `<button class="btn sm pri" data-r="zipf" data-f="${esc(k)}">⬇ Trọn bộ đã duyệt (${ok})</button>` : ""}<button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button><button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button></div>
         ${f.items.map(row).join("")}</details>`; }).join("");
   }
   function onRecordsClick(e) {
@@ -1304,6 +1344,14 @@
       return;
     }
     if (b.dataset.r === "apf") { approveFolder(b); return; }
+    if (b.dataset.r === "zipall" || b.dataset.r === "zipf") {
+      const q = ($("#rq") && $("#rq").value || "").toLowerCase(), fk = b.dataset.f;
+      const sel = (fk ? records.filter(r => folderKey(r) === fk) : visibleRecords(q)).filter(r => r.approved).sort(byCert);
+      const who = fk && sel[0] && sel[0].owner ? "_" + safeTag(sel[0].owner.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D")) : "";
+      exportPack(sel, `TronBo_DaDuyet${who}_${ddmmyyyy(todayISO())}.zip`, "#zipout");
+      $("#zipout").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      return;
+    }
     if (b.dataset.r === "share") { sharePdf(); return; }
     if (b.dataset.r === "download") { downloadPdf(); return; }
     // backupf / csvf: chỉ hồ sơ trong thư mục của một người, tên file mang tên người đó
