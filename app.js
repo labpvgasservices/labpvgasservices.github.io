@@ -1467,12 +1467,12 @@
       <p class="${on ? "ok" : "bad"}"><b>${on ? "Đang bật: PDF xuất ra có mộc ẩn" : "Chưa có khóa: PDF chưa gắn mộc ẩn"}</b></p>
       <div class="grid"><label class="f wide"><span>Khóa Phòng (bí mật)</span><input type="password" id="mockey" data-sp="mocKey" value="${esc(settings.mocKey || "")}" autocomplete="off"></label></div>
       <div class="btns"><button class="btn" data-t="mocshow">Hiện / ẩn khóa</button><button class="btn" data-t="mocnew">${on ? "Đổi khóa mới" : "Tạo khóa"}</button></div>
-      <div class="grid"><label class="f wide"><span>Cấp được dùng "Kiểm tra GCN thật / giả"</span><select data-sp="mocCheckLevel">${[[1, "Tất cả (cấp 1, 2, 3)"], [2, "Cấp 2 và 3"], [3, "Chỉ cấp 3"]].map(([v, t]) => `<option value="${v}"${checkLevel() === v ? " selected" : ""}>${t}</option>`).join("")}</select></label></div></div>`;
+      <div class="grid"><label class="f wide"><span>Cấp được dùng "Kiểm tra nguyên bản GCN"</span><select data-sp="mocCheckLevel">${[[1, "Tất cả (cấp 1, 2, 3)"], [2, "Cấp 2 và 3"], [3, "Chỉ cấp 3"]].map(([v, t]) => `<option value="${v}"${checkLevel() === v ? " selected" : ""}>${t}</option>`).join("")}</select></label></div></div>`;
   }
   const checkLevel = () => [1, 2, 3].includes(+settings.mocCheckLevel) ? +settings.mocCheckLevel : 1;
   const canCheck = () => !!A.me() && (+A.me().role || 0) >= checkLevel();
   function checkCard() {
-    return `<div class="card" id="mocchk"><h2>Kiểm tra GCN thật / giả</h2>
+    return `<div class="card" id="mocchk"><h2>Kiểm tra nguyên bản GCN</h2>
       <p class="hint">Tải lên file PDF GCN (bản app xuất hoặc bản đã ký số trên cks.pvgas.com.vn). App đọc mộc ẩn trong ảnh trang và thông tin ẩn của file, so với khóa Phòng.
       Chữ ký số còn hiệu lực hay không thì kiểm tra bằng mã QR / cks.pvgas.com.vn hoặc Adobe Reader.</p>
       ${settings.mocKey ? "" : `<p class="bad"><b>Máy này chưa có khóa Phòng: chỉ đọc được mã ẩn, chưa xác nhận được đúng/sai. Nhờ cấp 3 nhập khóa trong Cài đặt › Mộc ẩn.</b></p>`}
