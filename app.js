@@ -1062,14 +1062,13 @@
       <div class="agrp"><div class="alab">Hồ sơ</div><div class="arow">
         <button class="btn pri" data-act="save">💾 Lưu hồ sơ</button><button class="btn" data-act="new">＋ Hồ sơ mới</button></div></div>
       <div class="agrp"><div class="alab">Duyệt</div><div class="astat">${st}</div>${rv ? `<div class="arow">${rv}</div>` : ""}
-        ${L && !a ? `<div class="hint">Gửi duyệt: đóng gói Chứng chỉ + Bảng Uncer (PDF) và file hồ sơ (.json, kèm ảnh) để chuyển cho Người kiểm soát / Trưởng phòng qua Zalo, email… Người duyệt mở tab Hồ sơ › Nhập JSON.</div>` : ""}</div>
+        ${L && !a ? `<div class="hint">Gửi duyệt: đóng gói Chứng chỉ (PDF) và file hồ sơ (.json, kèm ảnh) để chuyển cho Người kiểm soát / Trưởng phòng qua Zalo, email… Người duyệt mở tab Hồ sơ › Nhập JSON.</div>` : ""}</div>
       <div class="agrp"><div class="alab">Xuất tài liệu</div><div class="agrid">
         <button class="btn pri" data-pdf="cert">Chứng chỉ <small>2 trang</small></button>
-        <button class="btn" data-pdf="unc">Bảng Uncer <small>QC</small></button>
-        ${L ? `<button class="btn" data-act="viewqtg">Biên bản QTG <small>chỉ xem</small></button>
-        <button class="btn" data-pdf="certunc">GCN + Uncer <small>PDF</small></button>`
+        ${L ? `<button class="btn" data-act="viewqtg">Biên bản QTG <small>chỉ xem</small></button>`
         : `<button class="btn" data-pdf="qtg">Biên bản QTG <small>PDF</small></button>
-        <button class="btn" data-pdf="all">Trọn bộ <small>PDF</small></button>`}
+        <button class="btn" data-pdf="all">Trọn bộ <small>QTG + GCN</small></button>
+        <button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`}
         <button class="btn wide2" data-act="preview">Xem trước trọn bộ</button></div></div>
     </div>`;
   }
@@ -1126,31 +1125,32 @@
   function pagesHtml(which) {
     const { c, info } = docInfo();
     if (!c.res) { toast(c.errors[0] || "Chưa đủ số liệu"); return null; }
+    // Bảng Uncer không nằm trong file xuất thường; chỉ cấp 2–3 mở được khi cần trích xuất (NGOC 09/11/2026)
+    if (which === "unc" && lv1()) { toast("Bảng Uncer chỉ dành cho Người kiểm soát / Trưởng phòng"); return null; }
     if (which === "certunc") {
-      const P = D2.PAGES[rec.type], u = P ? P.u(rec, c.res, settings, info) : D.uncPage(rec, c.res, settings, info);
-      if (failed(c)) { toast("Không đạt: không xuất chứng chỉ – chỉ gồm Bảng Uncer"); return u; }
-      return (P ? P.c1(rec, c.res, settings, info) + P.c2(rec, c.res, settings, info) : D.certPage1(rec, c.res, settings, info) + D.certPage2(rec, c.res, settings, info)) + u;
+      if (failed(c)) { toast("Không đạt: không có chứng chỉ để gửi"); return null; }
+      const P = D2.PAGES[rec.type];
+      return P ? P.c1(rec, c.res, settings, info) + P.c2(rec, c.res, settings, info) : D.certPage1(rec, c.res, settings, info) + D.certPage2(rec, c.res, settings, info);
     }
     if (failed(c)) {
       if (which === "cert") { toast("Không đạt: không xuất chứng chỉ (kể cả bản nháp)"); return null; }
-      if (which === "all") toast("Không đạt: bộ PDF chỉ gồm Biên bản và bảng Uncer");
+      if (which === "all") toast("Không đạt: bộ PDF chỉ gồm Biên bản");
       which = which === "all" ? "noCert" : which;
     }
     const a = [], P = D2.PAGES[rec.type];
     if (which === "noCert") {
       a.push(P ? P.q(rec, c.res, settings, info) : D.qtgPage(rec, c.res, settings, info));
-      a.push(P ? P.u(rec, c.res, settings, info) : D.uncPage(rec, c.res, settings, info));
       return a.join("");
     }
     if (P) {
       if (which === "qtg" || which === "all") a.push(P.q(rec, c.res, settings, info));
       if (which === "cert" || which === "all") a.push(P.c1(rec, c.res, settings, info), P.c2(rec, c.res, settings, info));
-      if (which === "unc" || which === "all") a.push(P.u(rec, c.res, settings, info));
+      if (which === "unc") a.push(P.u(rec, c.res, settings, info));
       return a.join("");
     }
     if (which === "qtg" || which === "all") a.push(D.qtgPage(rec, c.res, settings, info));
     if (which === "cert" || which === "all") a.push(D.certPage1(rec, c.res, settings, info), D.certPage2(rec, c.res, settings, info));
-    if (which === "unc" || which === "all") a.push(D.uncPage(rec, c.res, settings, info));
+    if (which === "unc") a.push(D.uncPage(rec, c.res, settings, info));
     return a.join("");
   }
   function renderPreview(which) {
@@ -1194,7 +1194,7 @@
   }
   const fileTag = () => `${(rec.certNo || "").replace(/[^\w.-]+/g, "_")}_${(rec.h.tag || "").replace(/[^\w.-]+/g, "_")}`;
   async function makePdf(which, htmlIn, nameIn, outSel) {
-    if (!htmlIn && lv1()) { if (which === "qtg") { renderPreview("qtg"); return; } if (which === "all") which = "certunc"; }
+    if (!htmlIn && lv1()) { if (which === "qtg") { renderPreview("qtg"); return; } if (which === "all") which = "certunc"; if (which === "unc") { toast("Bảng Uncer chỉ dành cho Người kiểm soát / Trưởng phòng"); return; } }
     const html = htmlIn || pagesHtml(which); if (!html) return;
     const out = $(outSel || "#pdfout"); out.innerHTML = `<p class="mut">Đang tạo PDF…</p>`;
     try {
@@ -1205,24 +1205,24 @@
         <div class="btns"><button class="btn pri" data-act="share" data-r="share">Chia sẻ / Lưu vào Tệp</button><button class="btn" data-act="download" data-r="download">Mở / Tải xuống</button></div></div>`;
     } catch (e) { out.innerHTML = `<p class="bad">Không tạo được PDF: ${esc(e.message)}</p>`; }
   }
-  // Gửi duyệt: đánh dấu Chờ duyệt, đóng gói GCN + Uncer (PDF) + hồ sơ JSON (kèm ảnh) để chuyển cho cấp 2/3
+  // Gửi duyệt: đánh dấu Chờ duyệt, đóng gói GCN (PDF) + hồ sơ JSON (kèm ảnh) để chuyển cho cấp 2/3
   async function submitReview() {
     if (!rec.h.tag) { toast("Nhập Tag trước khi gửi duyệt"); return; }
     const c = compute(); if (!c.res) { toast(c.errors[0] || "Chưa đủ số liệu"); return; }
     if (!rec.sig.inspector) { toast("Chưa có tên Kiểm định viên"); return; }
-    const html = pagesHtml("certunc"); if (!html) return;
+    const html = failed(c) ? "" : pagesHtml("certunc"); if (!html && !failed(c)) return;   // không đạt: chỉ gửi hồ sơ JSON, Uncer dựng lại từ JSON
     const m = A.me(); rec.submitted = { by: m ? m.name : "", at: new Date().toISOString() }; logAct("Gửi duyệt"); saveRecord(true); persistCurrent();
     const out = $("#pdfout"); out.innerHTML = `<p class="mut">Đang đóng gói hồ sơ gửi duyệt…</p>`;
     try {
-      const pdf = new File([await buildPdf(html)], `GuiDuyet_${fileTag()}.pdf`, { type: "application/pdf" });
+      const pdf = html ? new File([await buildPdf(html)], `GuiDuyet_${fileTag()}.pdf`, { type: "application/pdf" }) : null;
       const all = await P.all().catch(() => ({})), photos = {};
       Object.keys(all).forEach(k => { if (k.startsWith(rec.id + ":")) photos[k] = all[k]; });
       const js = new File([JSON.stringify({ app: "lab-pvgas-services", kind: "review", records: [rec], photos }, null, 1)], `GuiDuyet_${fileTag()}.json`, { type: "application/json" });
       renderEntry();
       const o = $("#pdfout");
-      o.innerHTML = `<div class="pdfready"><b>Đã đánh dấu Chờ duyệt</b><span class="mut">${esc(pdf.name)} (${(pdf.size / 1024).toFixed(0)} KB) + ${esc(js.name)}</span>
+      o.innerHTML = `<div class="pdfready"><b>Đã đánh dấu Chờ duyệt</b><span class="mut">${pdf ? esc(pdf.name) + " (" + (pdf.size / 1024).toFixed(0) + " KB) + " : ""}${esc(js.name)}</span>
         <div class="btns"><button class="btn pri" data-act="sendpkg">Chuyển cho người duyệt</button></div></div>`;
-      lastPkg = [pdf, js];
+      lastPkg = pdf ? [pdf, js] : [js];
       sendPkg();
     } catch (e) { out.innerHTML = `<p class="bad">Không đóng gói được: ${esc(e.message)}</p>`; }
   }

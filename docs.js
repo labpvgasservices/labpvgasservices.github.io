@@ -348,8 +348,6 @@
     return `<section class="a4 unc">${draft(info)}
       <div class="uhead"><div><b>BẢNG TÍNH TOÁN ĐỘ KHÔNG ĐẢM BẢO ĐO CỦA PHÉP HIỆU CHUẨN</b><br>No.: ${esc(rec.certNo)} · Tag: <b>${esc(h.tag)}</b> · ${dVN(toDate(h.calDate))}<br>${it(PT ? "Pressure transmitter Uncertainty Calculation Report – DLVN112-2002_Rev2" : "Uncertainty Calculation Form – DLVN133 - 2004")}</div><div class="fc">${esc(S.form)}</div></div>
       ${body}${fvBox(rec.type, res)}
-      <table class="qsig u"><tr><td><b>Người kiểm tra</b><br>${it("(Quality Checker)")}</td><td><b>Người thực hiện</b><br>${it("(Calibrated by)")}</td></tr>
-        <tr class="sp"><td></td><td></td></tr><tr><td><b>${esc(rec.sig.controller)}</b></td><td><b>${esc(rec.sig.inspector)}</b></td></tr></table>
       <div class="ufoot">${res.fv === 2 ? "Bản công thức đã sửa 06/11/2026 – khác file Excel ở các điểm nêu trên. Gốc: " : ""}Công thức và ô Excel theo file ${PT ? "PT_DGCP_10_2026.xls" : "PS_DGCP_10_2026.xls"} (macro khainv). Đối chiếu 2026-10-29: ${PT ? "31/31" : "13/13"} thiết bị DGCP trùng khớp.</div></section>`;
   }
 
