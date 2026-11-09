@@ -778,7 +778,7 @@
         ${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"], [standById(h.stand3), "mV", 50]])}</div>`;
     if (T === "DPG") std = `<div class="grid">${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p", "h.stand1"), wide: 1 })}
         <div class="hint wide">Số đọc chuẩn nhập theo đơn vị của đồng hồ (${esc(u)}). U chuẩn và %Rdg lấy theo GCN của chuẩn trong thư viện.</div>${decHint([[standById(h.stand1), u]])}</div>`;
-    const inp = (p, v, ph) => `<input data-p="${p}" inputmode="decimal" value="${esc(v)}"${ph ? ` placeholder="${ph}"` : ""}>`;
+    const inp = (p, v, ph) => `<input data-p="${p}" inputmode="decimal" value="${esc(v)}"${ph ? ` placeholder="${ph}"` : ""}${(rec.stdAuto || []).includes(p) ? ` class="auto" title="Tự điền = điểm hiệu chuẩn, gõ để sửa"` : ""}>`;
     const sgn = (p, v) => `<div class="pm">${inp(p, v)}<button type="button" class="pmb sm" data-neg="${p}" aria-label="Đổi dấu">±</button></div>`;
     let pts, ptsTitle;
     if (T === "PG") {
@@ -951,8 +951,11 @@
     const wasApproved = touched();
     if (p === "certNo") rec.certAuto = false;
     if (p === "h.makerSel") { rec.h.maker = e.target.value === OTHER ? "" : e.target.value; renderEntry(); if (e.target.value === OTHER) focusPath("h.maker"); persistCurrent(); return; }
-    if (p.startsWith("pt.points") || p.startsWith("pg.std") || p.startsWith("dpg.std") || p.startsWith("tt.nom")) rec.ptAuto = false;
-    if (["PT", "PG", "TT", "TG", "DPG"].includes(rec.type) && (p === "h.min" || p === "h.max") && rec.ptAuto) { genPoints(); renderEntry(); focusPath(p); }
+    if (p.startsWith("pt.points") || p.startsWith("pg.std") || p.startsWith("dpg.std") || p.startsWith("tt.nom") || p.startsWith("tg.nom") || p.startsWith("tc.nom")) rec.ptAuto = false;
+    if (/^(tt|tg)\.(sr|sf)\.|^tc\.std\.|^rtd\.std\./.test(p) && rec.stdAuto) { rec.stdAuto = rec.stdAuto.filter(x => x !== p); e.target.classList.remove("auto"); }   // gõ tay → không tự điền đè nữa
+    if (/^(tt|tg|tc)\.nom\./.test(p)) paintStd(fillStd());
+    if (p.startsWith("h.stand")) fillStd();
+    if (["PT", "PG", "TT", "TG", "DPG", "TC", "RTD"].includes(rec.type) && (p === "h.min" || p === "h.max") && rec.ptAuto) { genPoints(); renderEntry(); focusPath(p); }
     else if (p === "h.psType" && rec.type === "TS") { renderEntry(); focusPath(p); }
     else if (p === "h.unit" || p === "h.unitPset" || p === "h.description" || p === "h.calDate" || p === "h.dirQTG" || p === "h.location" || p === "h.cust" || p === "h.locFree" || p.startsWith("h.stand") || ["h.min", "h.max", "h.acc", "h.pset", "h.tset", "h.tcType", "h.sens"].includes(p)) {
       if (p === "h.calDate" && rec.certAuto) rec.certNo = autoCertNo();
@@ -970,10 +973,36 @@
   }
   function genPoints() {
     const mn = num(rec.h.min), mx = num(rec.h.max); if (!(mx > mn)) return;
-    if (rec.type === "TC") { rec.tc.nom = [0, 1, 2, 3, 4, 5, 6, 7].map(k => String(C.xround((mx - mn) / 7 * k + mn, 1))); return; }
+    if (rec.type === "TC") { rec.tc.nom = [0, 1, 2, 3, 4, 5, 6, 7].map(k => String(C.xround((mx - mn) / 7 * k + mn, 1))); fillStd(); return; }
+    if (rec.type === "RTD") { fillStd(); return; }
     const P = [0, 1, 2, 3, 4].map(k => String(C.xround((mx - mn) / 4 * k + mn, 6)));  // QTG!D23 = (G23-C23)/4*k + C23
     if (rec.type === "DPG") rec.dpg.std = P; else if (rec.type === "PG") rec.pg.std = P; else if (rec.type === "TT") rec.tt.nom = P; else if (rec.type === "TG") rec.tg.nom = P; else rec.pt.points = P;
+    fillStd();
   }
+  /* Số đọc chuẩn nhiệt điền sẵn = điểm hiệu chuẩn (NGOC 09/11/2026): TT, TG (Chuẩn ↑/↓ × 3 lần), TC (Chuẩn × 5 lần), RTD (cột Chuẩn).
+   * Chỉ điền ô trống hoặc ô do app điền (rec.stdAuto); ô người dùng gõ tay giữ nguyên. Số lẻ = số lẻ chuẩn nhiệt hiển thị (°C), chưa chọn chuẩn = 3. */
+  const AUTO_STD = { TT: ["tt", ["sr", "sf"]], TG: ["tg", ["sr", "sf"]], TC: ["tc", ["std"]] };
+  function stdDecTemp() {
+    const ds = [rec.h.stand1, rec.h.stand2].map(standById).filter(s => s && s.kind === "t").map(s => standDec(s, "°C")).filter(d => d != null && d >= 0);
+    return ds.length ? Math.min(...ds) : 3;
+  }
+  function fillStd() {
+    const T = rec.type; if (!AUTO_STD[T] && T !== "RTD") return [];
+    const d = stdDecTemp(), auto = new Set(rec.stdAuto || []), changed = [];
+    const put = (path, v) => {
+      const cur = String(getPath(rec, path) == null ? "" : getPath(rec, path)).trim(), n = typeof v === "number" ? v : num(v);
+      if (cur !== "" && !auto.has(path)) return;
+      const nv = isFinite(n) ? n.toFixed(d) : "";
+      if (nv) auto.add(path); else auto.delete(path);
+      if (nv !== cur) { setPath(rec, path, nv); changed.push(path); }
+    };
+    if (AUTO_STD[T]) { const [g, cols] = AUTO_STD[T]; rec[g].nom.forEach((nm, p) => cols.forEach(c => rec[g][c][p].forEach((_, k) => put(`${g}.${c}.${p}.${k}`, nm)))); }
+    else { const mn = num(rec.h.min), mx = num(rec.h.max); if (mx > mn) { const P = [0, 1, 2, 3, 4].map(k => C.xround((mx - mn) / 4 * k + mn, 6)); P.push(P[2]); P.forEach((v, i) => put(`rtd.std.${i}`, v)); } }
+    rec.stdAuto = [...auto];
+    return changed;
+  }
+  // cập nhật ô chuẩn trên màn hình mà không vẽ lại cả trang (giữ con trỏ đang gõ)
+  function paintStd(paths) { paths.forEach(p => { const el = $(`[data-p="${p}"]`); if (el) el.value = getPath(rec, p); }); $$("[data-p]").forEach(el => el.classList.toggle("auto", (rec.stdAuto || []).includes(el.dataset.p))); }
   // Một nút đồng bộ: điền ô trống từ chiều còn lại; nếu không có ô trống thì gán Giảm = Tăng.
   function syncRF() {
     const R = rec.pt.rise, F = rec.pt.fall; let filled = 0;
