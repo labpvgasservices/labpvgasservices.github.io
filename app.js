@@ -1332,6 +1332,7 @@
       rec.tc = Object.assign(b.tc, { nom: (r.tc || b.tc).nom.slice() }); rec.dpg = Object.assign(b.dpg, { std: (r.dpg || b.dpg).std.slice() });
       delete rec.approved; delete rec.log; rec.sig = { inspector: A.me().name, controller: "" };
       rec.owner = { id: A.me().id, name: A.me().name }; rec.photos = blankPhotos();
+      rec.stdAuto = (r.stdAuto || []).filter(p => p.startsWith("rtd.")); fillStd();   // số đọc chuẩn nhiệt tự điền lại theo điểm (v47)
       rec.certNo = autoCertNo(); rec.certAuto = true; persistCurrent(); go("entry"); toast("Đã nhân bản – nhập tag và số đọc mới");
     }
     if (b.dataset.r === "del" && r && A.can("deleteRecord")) {
