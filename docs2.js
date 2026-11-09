@@ -502,8 +502,6 @@
     return `<section class="a4 unc">${draft(info)}
       <div class="uhead"><div><b>${title}</b><br>No.: ${esc(rec.certNo)} · Tag: <b>${esc(h.tag)}</b> · ${dVN(toDate(h.calDate))}<br>${it(sub)}</div><div class="fc">${esc(S(st, rec.type).form || "")}</div></div>
       ${body}${D.fvBox(rec.type, res)}
-      <table class="qsig u"><tr><td><b>Người kiểm tra</b><br>${it("(Quality Checker)")}</td><td><b>Người thực hiện</b><br>${it("(Calibrated by)")}</td></tr>
-        <tr class="sp"><td></td><td></td></tr><tr><td><b>${esc(rec.sig.controller)}</b></td><td><b>${esc(rec.sig.inspector)}</b></td></tr></table>
       <div class="ufoot">${res && res.fv === 2 ? "Gốc: " + src + " Bản công thức đã sửa 06/11/2026 khác file Excel ở các điểm nêu trên." : src}</div></section>`;
   }
   const verdict = p => `<b>${p ? "Đạt (Pass)" : "Không đạt (Fail)"}</b>`;
