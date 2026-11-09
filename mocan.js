@@ -1,13 +1,14 @@
 /* Mộc ẩn (hidden stamp) cho PDF xuất từ app.
  * Gắn: mã 64 bit = HMAC-SHA256(khóa Phòng, thông tin chính của GCN), cắt 8 byte.
- *   - Giấu trong ảnh trang: lưới ô 16×16 px; ô nền trắng tinh mang bit 1 được hạ xuống 252/255 (mắt thường không thấy).
+ *   - Giấu trong ảnh trang: lưới ô 16×16 px; ô nền trắng tinh mang bit 1 được hạ kênh xanh B xuống 251 (R, G giữ 255 → độ sáng không đổi, in trắng đen không ra đốm).
+ *     (v39–v43 hạ cả R,G,B xuống 252: vẫn đọc được, nhưng bản in trắng đen lộ đốm.)
  *     Ô 16 px trùng khối 8×8 của JPEG nên mã vẫn đọc lại được sau khi nén.
  *   - Giấu trong thông tin file (Keywords): "LPS-MOC1 <mã> <thông tin chính, base64>".
  *   - Ghi dấu vân tay SHA-256 của file vào nhật ký trên máy (lab.pdfLog).
  * Kiểm tra: đọc lại mã trong ảnh, tính lại HMAC từ thông tin trong file bằng khóa Phòng, so vân tay với nhật ký.
  */
 (function () {
-  const CELL = 16, BITS = 64, BASE_W = 1588, ON = 252;
+  const CELL = 16, BITS = 64, BASE_W = 1588, ON = 252, BLUE = 251;   // BLUE: mộc mới (v44) hạ riêng kênh xanh B → độ sáng giữ 255, in trắng đen không ra đốm
   const enc = new TextEncoder();
   const b32 = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const hex = buf => Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, "0")).join("");
@@ -47,25 +48,29 @@
         const i = (y * W + x) * 4; if (d[i] < 255 || d[i + 1] < 255 || d[i + 2] < 255) { white = false; break; }
       }
       if (!white) continue;
-      for (let y = r * CELL; y < (r + 1) * CELL; y++) for (let x = q * CELL; x < (q + 1) * CELL; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = ON; }
+      for (let y = r * CELL; y < (r + 1) * CELL; y++) for (let x = q * CELL; x < (q + 1) * CELL; x++) { const i = (y * W + x) * 4; d[i + 2] = BLUE; }
       marked++;
     }
     ctx.putImageData(img, 0, 0);
     return marked;
   }
   // đọc phiếu bầu từ ảnh 1 trang; trả về [số phiếu bit 1, số phiếu bit 0] cho từng vị trí bit
-  function votes(imgData, W, H, acc) {
+  function votes(imgData, W, H, acc, accB) {
     const d = imgData.data, cell = Math.max(4, Math.round(CELL * W / BASE_W));
     const cols = Math.floor(W / cell), rows = Math.floor(H / cell);
     let k = 0;
     for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++, k++) {
-      let s = 0, mn = 255, mx = 0, n = 0;
+      let s = 0, mn = 255, mx = 0, n = 0, sb = 0, sg = 0, nb = 0, mnb = 255, mxb = 0;
       for (let y = r * cell + 2; y < (r + 1) * cell - 2; y++) for (let x = q * cell + 2; x < (q + 1) * cell - 2; x++) {
         const i = (y * W + x) * 4, v = (d[i] + d[i + 1] + d[i + 2]) / 3; s += v; n++; if (v < mn) mn = v; if (v > mx) mx = v;
+        const rg = (d[i] + d[i + 1]) / 2; sg += rg; sb += d[i + 2];
+        if (rg < mnb) mnb = rg; if (rg > mxb) mxb = rg;
       }
       const m = s / n;
-      if (mx - mn > 3 || m < 249) continue;      // ô có chữ / nét: bỏ qua
-      if (m < 253.5) acc[k % BITS][0]++; else acc[k % BITS][1]++;
+      if (mx - mn <= 3 && m >= 249) { if (m < 253.5) acc[k % BITS][0]++; else acc[k % BITS][1]++; }   // mộc cũ (v39–v43): hạ độ sáng
+      // mộc mới (v44): kênh B thấp hơn trung bình R,G; ô phải trắng (R,G ≥ 253) và không có nét chữ
+      const rgm = sg / n, bm = sb / n;
+      if (mxb - mnb <= 3 && rgm >= 253) { if (rgm - bm >= 2) accB[k % BITS][0]++; else accB[k % BITS][1]++; }
     }
   }
   function pdfJpegs(bytes) {     // ảnh trang JPEG do jsPDF ghi (DCTDecode, không nén thêm)
@@ -77,21 +82,26 @@
     }
     return out;
   }
-  async function readImageCode(bytes) {
-    const acc = Array.from({ length: BITS }, () => [0, 0]);
-    const jpgs = pdfJpegs(bytes); let ones = 0;
-    for (const j of jpgs) {
-      const bm = await createImageBitmap(new Blob([j], { type: "image/jpeg" }));
-      const cv = document.createElement("canvas"); cv.width = bm.width; cv.height = bm.height;
-      const ctx = cv.getContext("2d"); ctx.drawImage(bm, 0, 0);
-      votes(ctx.getImageData(0, 0, bm.width, bm.height), bm.width, bm.height, acc);
-    }
-    acc.forEach(a => { ones += a[0]; });
+  function decide(acc) {
+    let ones = 0; acc.forEach(a => { ones += a[0]; });
     const bits = acc.map(a => (a[0] > a[1] ? 1 : 0));
     // Mã thật có khoảng một nửa số bit = 1. Vùng xám nhạt (hình chìm PG…) chỉ cho phiếu lẻ tẻ → đa số bit 0 → KHÔNG coi là có mộc
     const pos1 = bits.reduce((t, b) => t + b, 0), real = ones >= BITS && pos1 >= 12 && pos1 <= 52;
     const agree = acc.reduce((t, a) => t + Math.max(a[0], a[1]), 0), total = acc.reduce((t, a) => t + a[0] + a[1], 0);
-    return { pages: jpgs.length, found: real, code: real ? bitsCode(bits) : "", agree: total ? agree / total : 0 };
+    return { found: real, code: real ? bitsCode(bits) : "", agree: total ? agree / total : 0 };
+  }
+  async function readImageCode(bytes) {
+    const acc = Array.from({ length: BITS }, () => [0, 0]), accB = Array.from({ length: BITS }, () => [0, 0]);
+    const jpgs = pdfJpegs(bytes);
+    for (const j of jpgs) {
+      const bm = await createImageBitmap(new Blob([j], { type: "image/jpeg" }));
+      const cv = document.createElement("canvas"); cv.width = bm.width; cv.height = bm.height;
+      const ctx = cv.getContext("2d"); ctx.drawImage(bm, 0, 0);
+      votes(ctx.getImageData(0, 0, bm.width, bm.height), bm.width, bm.height, acc, accB);
+    }
+    const nw = decide(accB), od = decide(acc);
+    const pick = nw.found ? nw : od;
+    return { pages: jpgs.length, found: pick.found, code: pick.code, agree: pick.agree, kind: nw.found ? "B" : (od.found ? "luma" : "") };
   }
   async function sha256(blobOrBytes) {
     const buf = blobOrBytes instanceof Blob ? await blobOrBytes.arrayBuffer() : blobOrBytes;
