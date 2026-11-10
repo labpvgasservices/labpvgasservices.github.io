@@ -1,0 +1,23 @@
+# Giữ dự án Supabase gói Free không bị tạm dừng (Free tự pause nếu ~7 ngày không có truy cập).
+# Đọc Project URL + anon key ngay trong cloud.js (anon key vốn công khai), gọi 1 truy vấn nhỏ 2 lần/tuần.
+# Lưu ý: GitHub tự tắt lịch chạy nếu repo không có commit 60 ngày – khi đó vào tab Actions bấm Enable lại.
+name: Supabase keep-alive
+on:
+  schedule:
+    - cron: "17 1 * * 1,4"   # 08:17 giờ VN thứ Hai và thứ Năm
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ping Supabase
+        run: |
+          URL=$(grep -oP 'url:\s*"\Khttps://[^"]+' cloud.js || true)
+          KEY=$(grep -oP 'key:\s*"\K[^"]+' cloud.js || true)
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then echo "cloud.js chưa có CONFIG – bỏ qua"; exit 0; fi
+          code=$(curl -s -o /dev/null -w "%{http_code}" "$URL/rest/v1/profiles?select=id&limit=1" -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          echo "HTTP $code"
+          [ "$code" = "200" ]

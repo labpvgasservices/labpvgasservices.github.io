@@ -8,8 +8,10 @@
   "use strict";
   const CONFIG = {
     url: "",        // Project URL, ví dụ https://abcd1234.supabase.co
-    key: ""         // anon public key (KHÔNG dùng service_role)
+    key: "",        // anon public key (KHÔNG dùng service_role)
+    domain: "lab-pvgas.local"   // ID ngoc.nm → email nội bộ ngoc.nm@lab-pvgas.local (phải trùng public.lab_domain() trong setup.sql)
   };
+  const toEmail = id => { const t = String(id || "").trim().toLowerCase(); return t.includes("@") ? t : t + "@" + CONFIG.domain; };
   const enabled = !!(CONFIG.url && CONFIG.key && window.supabase && window.supabase.createClient);
   const ls = {
     get(k, d) { try { const v = localStorage.getItem("lab.cloud." + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -45,9 +47,9 @@
     const { data, error } = await client().from("profiles").select("*").eq("id", uid).single();
     if (error) throw error; ls.set("profile", data); return data;
   }
-  async function signIn(email, password) {
-    const { data, error } = await client().auth.signInWithPassword({ email: email.trim(), password });
-    if (error) throw new Error(error.message === "Invalid login credentials" ? "Sai email hoặc mật khẩu" : error.message);
+  async function signIn(id, password) {
+    const { data, error } = await client().auth.signInWithPassword({ email: toEmail(id), password });
+    if (error) throw new Error(error.message === "Invalid login credentials" ? "Sai ID hoặc PIN" : error.message);
     return profile(data.user.id);
   }
   async function signUp(email, password, name) {
@@ -61,7 +63,18 @@
     const s = await session(); if (!s) return null;
     try { return await profile(s.user.id); } catch (e) { const p = ls.get("profile", null); return p && p.id === s.user.id ? p : null; }   // offline: dùng bản lưu
   }
-  async function changePassword(pw) { const { error } = await client().auth.updateUser({ password: pw }); if (error) throw new Error(error.message); }
+  async function changePassword(pw) {
+    const { error } = await client().auth.updateUser({ password: pw });
+    if (error && !/different from the old/i.test(error.message)) throw new Error(error.message);
+    if (error) throw new Error("PIN mới phải khác PIN cũ");
+    await client().rpc("my_pin_changed");
+  }
+  // cấp 3 tạo tài khoản / đặt lại PIN (hàm admin_create_user, admin_set_pin trong setup.sql – máy chủ kiểm tra cấp 3)
+  async function createUser(login, name, role, pin) {
+    const { data, error } = await client().rpc("admin_create_user", { p_login: login, p_name: name, p_role: role, p_pin: pin });
+    if (error) throw new Error(error.message); return data;
+  }
+  async function resetPin(id, pin) { const { error } = await client().rpc("admin_set_pin", { p_user: id, p_pin: pin }); if (error) throw new Error(error.message); }
   async function listUsers() { const { data, error } = await client().from("profiles").select("*").order("created_at"); if (error) throw error; return data; }
   async function setRole(id, role) { const { error } = await client().from("profiles").update({ role }).eq("id", id); if (error) throw new Error(error.message); }
 
@@ -208,5 +221,5 @@
     }
   }
   // Lần đầu nối máy chủ trên một máy đã có dữ liệu: mọi hồ sơ cũ được coi là "chưa gửi" và sẽ đẩy lên (cấp 3 đẩy tất cả)
-  window.LabCloud = { enabled, attach, start, stop, sync, schedule, deleted, signIn, signUp, signOut, currentProfile, changePassword, listUsers, setRole, paint, pending, isUuid };
+  window.LabCloud = { enabled, attach, start, stop, sync, schedule, deleted, signIn, signUp, signOut, currentProfile, changePassword, createUser, resetPin, listUsers, setRole, paint, pending, isUuid };
 })();

@@ -2,6 +2,8 @@
 -- Cách dùng: Supabase › SQL Editor › New query › dán toàn bộ file này › Run. Chạy lại nhiều lần không sao.
 -- Quyền (giống app): cấp 0 = chờ Trưởng phòng duyệt tài khoản (không đọc được gì); 1 Kiểm định viên; 2 Người kiểm soát; 3 Trưởng phòng / Quản trị.
 -- Người đăng ký ĐẦU TIÊN tự thành cấp 3; người sau là cấp 0 cho tới khi cấp 3 nâng quyền trong app (Cài đặt › Người dùng).
+-- 10/11/2026 (NGOC): đăng nhập bằng ID "ten.hotenlot" + PIN như bản PIN trên máy. Tài khoản do cấp 3 tạo (mục 6, hàm admin_create_user),
+-- không tự đăng ký. Bên trong, ID được đổi thành email nội bộ <id>@lab-pvgas.local (không gửi thư, chỉ để Supabase nhận dạng).
 
 -- 1. Hồ sơ người dùng ------------------------------------------------------------------------------------------
 create table if not exists public.profiles (
@@ -11,6 +13,8 @@ create table if not exists public.profiles (
   role int not null default 0 check (role between 0 and 3),
   created_at timestamptz not null default now()
 );
+alter table public.profiles add column if not exists login text;                              -- ID đăng nhập, vd ngoc.nm
+alter table public.profiles add column if not exists must_change boolean not null default false; -- phải đổi PIN ở lần đăng nhập đầu
 
 create or replace function public.my_role() returns int
 language sql stable security definer set search_path = public as $$
@@ -20,9 +24,10 @@ $$;
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.profiles (id, email, name, role)
+  insert into public.profiles (id, email, name, role, login, must_change)
   values (new.id, new.email, coalesce(new.raw_user_meta_data->>'name', ''),
-          case when not exists (select 1 from public.profiles) then 3 else 0 end)
+          case when not exists (select 1 from public.profiles) then 3 else 0 end,
+          split_part(new.email, '@', 1), coalesce((new.raw_user_meta_data->>'must_change')::boolean, false))
   on conflict (id) do nothing;
   return new;
 end $$;
@@ -113,3 +118,62 @@ create policy "photos update" on storage.objects for update to authenticated usi
 do $$ begin
   alter publication supabase_realtime add table public.records;
 exception when duplicate_object then null; when undefined_object then null; end $$;
+
+-- 6. Tạo tài khoản / đặt lại PIN (10/11/2026) -------------------------------------------------------------------
+-- Gọi được từ app (chỉ cấp 3) hoặc từ SQL Editor của Supabase. Không cần khoá service_role.
+create or replace function public.lab_domain() returns text language sql immutable as $$ select 'lab-pvgas.local' $$;
+
+create or replace function public.admin_create_user(p_login text, p_name text, p_role int, p_pin text)
+returns uuid language plpgsql security definer set search_path = public, extensions, auth as $$
+declare v_id uuid; v_email text;
+begin
+  -- auth.role() rỗng = đang chạy trong SQL Editor (chủ dự án); gọi từ app thì phải là cấp 3
+  if auth.role() is not null and public.my_role() < 3 then raise exception 'Chỉ cấp 3 được tạo tài khoản'; end if;
+  p_login := lower(trim(p_login)); p_name := trim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g'));
+  if p_login !~ '^[a-z]+(\.[a-z]+)?[0-9]*$' then raise exception 'ID không đúng dạng ten.hotenlot: %', p_login; end if;
+  if p_name = '' then raise exception 'Thiếu họ tên của %', p_login; end if;
+  if p_role is null or p_role not between 0 and 3 then raise exception 'Cấp phải từ 0 đến 3'; end if;
+  v_email := p_login || '@' || public.lab_domain();
+  select id into v_id from auth.users where email = v_email;
+  if v_id is not null then   -- đã có: chỉ cập nhật họ tên và cấp, giữ PIN
+    update public.profiles set name = p_name, role = p_role, login = p_login where id = v_id;
+    return v_id;
+  end if;
+  if length(coalesce(p_pin, '')) < 6 then raise exception 'PIN ít nhất 6 ký tự (%)', p_login; end if;
+  v_id := gen_random_uuid();
+  insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+                          raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+                          confirmation_token, recovery_token, email_change_token_new, email_change)
+  values ('00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated', v_email,
+          crypt(p_pin, gen_salt('bf')), now(),
+          '{"provider":"email","providers":["email"]}', jsonb_build_object('name', p_name, 'must_change', true), now(), now(),
+          '', '', '', '');
+  insert into auth.identities (id, user_id, provider_id, provider, identity_data, last_sign_in_at, created_at, updated_at)
+  values (gen_random_uuid(), v_id, v_id::text, 'email',
+          jsonb_build_object('sub', v_id::text, 'email', v_email, 'email_verified', true), now(), now(), now());
+  update public.profiles set name = p_name, role = p_role, login = p_login, must_change = true where id = v_id;
+  return v_id;
+end $$;
+
+create or replace function public.admin_set_pin(p_user uuid, p_pin text)
+returns void language plpgsql security definer set search_path = public, extensions, auth as $$
+begin
+  if auth.role() is not null and public.my_role() < 3 then raise exception 'Chỉ cấp 3 được đặt lại PIN'; end if;
+  if length(coalesce(p_pin, '')) < 6 then raise exception 'PIN ít nhất 6 ký tự'; end if;
+  update auth.users set encrypted_password = crypt(p_pin, gen_salt('bf')), updated_at = now() where id = p_user;
+  if not found then raise exception 'Không thấy tài khoản'; end if;
+  update public.profiles set must_change = true where id = p_user;
+end $$;
+
+-- người dùng tự đổi PIN xong thì bỏ cờ "phải đổi PIN"
+create or replace function public.my_pin_changed() returns void
+language sql security definer set search_path = public as $$
+  update public.profiles set must_change = false where id = auth.uid()
+$$;
+
+revoke all on function public.admin_create_user(text, text, int, text) from public, anon;
+revoke all on function public.admin_set_pin(uuid, text) from public, anon;
+revoke all on function public.my_pin_changed() from public, anon;
+grant execute on function public.admin_create_user(text, text, int, text) to authenticated;
+grant execute on function public.admin_set_pin(uuid, text) to authenticated;
+grant execute on function public.my_pin_changed() to authenticated;
