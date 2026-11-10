@@ -266,3 +266,65 @@ begin
 end $$;
 create unique index if not exists records_certno_uq on public.records (upper(trim(data->>'certNo')))
   where not deleted and coalesce(trim(data->>'certNo'), '') <> '';
+
+-- 10. Dải số dùng chung mọi loại (10/11/2026, app v52) ------------------------------------------------------
+-- NGOC: PT, PS, TT… dùng chung dải; đuôi số đã cấp cho loại này thì loại khác không được dùng lại trong cùng năm
+-- (CN.PS.26.2301 có rồi thì không có CN.PT.26.2301). Khoá so trùng = CN.<năm>.<đuôi>; số khác dạng (PG N256…) so nguyên chuỗi.
+create or replace function public.cert_key(p text) returns text language sql immutable as $$
+  select case when upper(trim(p)) ~ '^CN\.[A-Z]+\.[0-9]{2}\.[0-9]+$'
+    then 'CN.' || split_part(upper(trim(p)), '.', 3) || '.' || split_part(upper(trim(p)), '.', 4)::bigint
+    else upper(trim(p)) end
+$$;
+
+-- p_pre bây giờ là "CN.26." (dải chung) hoặc tiền tố PG.
+create or replace function public.cert_next(p_pre text, p_lo int, p_hi int, p_id text)
+returns int language sql stable security definer set search_path = public as $$
+  select coalesce(max(t), 0)::int from (
+    select nullif(regexp_replace(substr(public.cert_key(data->>'certNo'), length(p_pre) + 1), '[^0-9].*$', ''), '')::bigint t
+    from public.records
+    where not deleted and public.cert_key(data->>'certNo') like upper(p_pre) || '%' and id <> coalesce(p_id, '')
+      and public.my_role() >= 1
+  ) s where t between p_lo and p_hi
+$$;
+
+create or replace function public.cert_who(p_no text, p_id text)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'id', id, 'no', data->>'certNo', 'tag', data#>>'{h,tag}', 'owner', data#>>'{owner,name}', 'type', data->>'type',
+    'stage', case when coalesce(data->'final', 'null') <> 'null' then 'Đã duyệt final'
+                  when coalesce(data->'approved', 'null') <> 'null' and coalesce(data->>'flow2', 'false') <> 'true' then 'Đã duyệt'
+                  when coalesce(data->'approved', 'null') <> 'null' then 'Chờ duyệt final'
+                  when coalesce(data->'submitted', 'null') <> 'null' then 'Chờ kiểm soát'
+                  else 'Đang nhập (chưa chuyển duyệt)' end)
+  from public.records
+  where not deleted and coalesce(trim(data->>'certNo'), '') <> ''
+    and public.cert_key(data->>'certNo') = public.cert_key(p_no) and id <> coalesce(p_id, '')
+    and public.my_role() >= 1
+  limit 1
+$$;
+
+-- Các đuôi số đã dùng trong một năm (cho bảng "Số còn trống theo site"). Chỉ trả số, không trả hồ sơ.
+create or replace function public.cert_used(p_pool text)
+returns int[] language sql stable security definer set search_path = public as $$
+  select coalesce(array_agg(distinct t order by t), '{}') from (
+    select nullif(regexp_replace(substr(public.cert_key(data->>'certNo'), length(p_pool) + 1), '[^0-9].*$', ''), '')::int t
+    from public.records
+    where not deleted and public.cert_key(data->>'certNo') like upper(p_pool) || '%' and public.my_role() >= 1
+  ) s where t is not null
+$$;
+revoke all on function public.cert_used(text) from public, anon;
+grant execute on function public.cert_used(text) to authenticated;
+
+-- Số cũ đã trùng giữa các loại từ trước v52 (VD CN.PT.26.9001 và CN.PS.26.9001 theo cách đánh số riêng từng loại):
+-- giữ nguyên, đánh dấu cert_legacy và không đưa vào chỉ mục chặn trùng. Hồ sơ mới vẫn bị chặn trùng như thường.
+alter table public.records add column if not exists cert_legacy boolean not null default false;
+update public.records set cert_legacy = true
+where not deleted and not cert_legacy and coalesce(trim(data->>'certNo'), '') <> ''
+  and public.cert_key(data->>'certNo') in (
+    select public.cert_key(data->>'certNo') from public.records
+    where not deleted and coalesce(trim(data->>'certNo'), '') <> '' group by 1 having count(*) > 1);
+drop index if exists public.records_certkey_uq;
+create unique index records_certkey_uq on public.records (public.cert_key(data->>'certNo'))
+  where not deleted and not cert_legacy and coalesce(trim(data->>'certNo'), '') <> '';
+drop index if exists public.records_certno_uq;
+-- Xem các hồ sơ số cũ bị trùng: select id, data->>'certNo' so, data#>>'{h,tag}' tag, data#>>'{owner,name}' nguoi from public.records where cert_legacy order by 2;

@@ -30,4 +30,5 @@ Dải số GCN / QTG theo công trình (v51, 10/11/2026)
 - GCN và QTG cùng đuôi: CN.PT.26.2301 ↔ BB.PT.26.2301. "26" lấy theo năm của ngày hiệu chuẩn (2027 → 27).
 - Số ngoài dải, sai dạng/năm, hoặc đã có người dùng (app báo thiết bị, người nhập, tình trạng) → không chuyển duyệt / duyệt được.
 - Địa điểm gõ tay: chọn ô "Dải số chứng chỉ". Công trình chưa có dải: chỉ cảnh báo, vẫn kiểm trùng.
-
+- v52: chạy `05_v52_dai_so_chung.sql` TRƯỚC khi merge. Mọi loại (PT, PS, TT…) dùng chung dải: đuôi số đã cấp cho loại này thì loại khác không dùng lại trong năm (PS 2301 có rồi thì không có PT 2301).
+- Cài đặt › "Số tem / GCN còn trống theo site": mọi cấp xem được các khoảng số chưa dùng (A–B) của từng dải theo năm.

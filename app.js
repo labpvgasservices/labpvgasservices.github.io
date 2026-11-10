@@ -46,7 +46,18 @@
     }
     // v4 (NGOC 06/11/2026): GCN in đủ ngày cấp theo ô "Ngày cấp chứng chỉ" – bỏ chế độ để trống ngày đã lưu trên máy
     if ((o.ver || 1) < 4) { o.issueDayBlank = false; o.ver = 4; store.set("settings", o); }
-    const m = deepMerge(SEED.settings, o); m.ver = SEED.settings.ver; return m;
+    const m = deepMerge(SEED.settings, o); m.ver = SEED.settings.ver; return fixRanges(m, o.rangesVer);
+  }
+  // Sửa dải đã lưu (trên máy / máy chủ) theo xác nhận của NGOC. v2 10/11/2026: GDS = GDS Phú Mỹ; GDS Bà Rịa thuộc dải Bà Rịa.
+  function fixRanges(m, oldVer) {
+    if ((oldVer || 1) < 2 && Array.isArray(m.ranges)) {
+      const gds = m.ranges.find(g => g.id === "kdn-gds"), br = m.ranges.find(g => g.id === "kdn-br");
+      if (gds && br && (gds.locs || []).includes("Trạm GDS BR")) {
+        gds.locs = gds.locs.filter(c => c !== "Trạm GDS BR"); gds.note = "GDS trong bảng = GDS Phú Mỹ (NGOC 10/11/2026)";
+        if (!(br.locs || []).includes("Trạm GDS BR")) br.locs = (br.locs || []).concat("Trạm GDS BR");
+      }
+    }
+    m.rangesVer = SEED.settings.rangesVer; return m;
   }
   // Danh mục chuẩn: khi đổi phiên bản seed thì thay chuẩn gốc, giữ chuẩn người dùng tự thêm (id bắt đầu bằng "s")
   function loadStands() {
@@ -289,14 +300,19 @@
   }
   function certPre(r = rec) { const S0 = settings[r.type], pg = r.type === "PG"; return `${S0.prefix}.${yy(r)}${pg ? S0.series || "" : ""}.`; }
   const tailOf = (no, pre) => { no = String(no || "").trim().toUpperCase(); return no.startsWith(pre.toUpperCase()) ? parseInt(no.slice(pre.length), 10) : NaN; };
-  let srvMax = {};                       // pre|lo|hi → số lớn nhất máy chủ đã cấp trong dải (không tính hồ sơ đang mở)
+  // NGOC 10/11/2026: mọi loại (PT, PS, TT…) dùng CHUNG dải, mỗi đuôi số chỉ cấp 1 lần/năm: PS đã dùng 2301 thì PT không được 2301.
+  // Khoá so trùng: CN.<năm>.<đuôi> (bỏ mã loại, bỏ số 0 đầu). PG (N256…) giữ dãy riêng.
+  const certKey = no => { const t = String(no || "").trim().toUpperCase(), m = t.match(/^CN\.[A-Z]+\.(\d{2})\.(\d+)$/); return m ? `CN.${m[1]}.${parseInt(m[2], 10)}` : t; };
+  const poolPre = (r = rec) => r.type === "PG" ? certPre(r).toUpperCase() : `CN.${yy(r)}.`;
+  const poolTail = (no, pool) => { const k = certKey(no); return k.startsWith(pool) ? parseInt(k.slice(pool.length), 10) : NaN; };
+  let srvMax = {};                       // pool|lo|hi → số lớn nhất máy chủ đã cấp trong dải (không tính hồ sơ đang mở)
   function autoCertNo() {
-    const pre = certPre(), g = rangeOf(), pg = rec.type === "PG", lo = g ? g.lo : 1, hi = g ? g.hi : 99999;
+    const pre = certPre(), pool = poolPre(), g = rangeOf(), pg = rec.type === "PG", lo = g ? g.lo : 1, hi = g ? g.hi : 99999;
     let max = lo - 1;
-    records.forEach(r => { if (r.id !== rec.id && r.certNo) { const n = tailOf(r.certNo, pre); if (n >= lo && n <= hi && n > max) max = n; } });
-    const k = `${pre}|${lo}|${hi}|${rec.id}`;
+    records.forEach(r => { if (r.id !== rec.id && r.certNo) { const n = poolTail(r.certNo, pool); if (n >= lo && n <= hi && n > max) max = n; } });
+    const k = `${pool}|${lo}|${hi}|${rec.id}`;
     if (srvMax[k] != null) max = Math.max(max, srvMax[k]);
-    else if (A.cloud() && window.LabCloud) { srvMax[k] = null; LabCloud.certNext(pre, lo, hi, rec.id).then(v => { srvMax[k] = v || 0; if (rec.certAuto && rec.certNo && tailOf(rec.certNo, pre) <= v) { rec.certNo = autoCertNo(); const f = $("#f_certNo"); if (f) f.value = rec.certNo; persistCurrent(); } paintCert(); }).catch(() => { delete srvMax[k]; }); }
+    else if (A.cloud() && window.LabCloud) { srvMax[k] = null; LabCloud.certNext(pool, lo, hi, rec.id).then(v => { srvMax[k] = v || 0; if (rec.certAuto && rec.certNo && poolTail(rec.certNo, pool) <= v) { rec.certNo = autoCertNo(); const f = $("#f_certNo"); if (f) f.value = rec.certNo; persistCurrent(); } paintCert(); }).catch(() => { delete srvMax[k]; }); }
     return pre + String(max + 1).padStart(pg ? 5 : 4, "0");
   }
   // Kiểm tra số đang dùng: ngoài dải / trùng (trên máy này và trên máy chủ). Trả về danh sách lỗi chặn chuyển duyệt.
@@ -306,8 +322,8 @@
     if (isNaN(n)) out.push(`Số ${no} không đúng dạng ${pre}xxxx (loại ${r.type}, năm 20${yy(r)})`);
     else if (g && (n < g.lo || n > g.hi)) out.push(`Số tem ${no} NGOÀI DẢI của ${g.name}: chỉ được ${pad4(g.lo)}–${pad4(g.hi)}`);
     if (!g) out.push(NORANGE + " – báo cấp 3 gắn dải ở Cài đặt › Dải số" + (r.h.locMode === "free" ? " (hoặc chọn ô Dải số)" : "") + "; vẫn được chuyển duyệt, chỉ kiểm trùng");
-    const dl = records.find(x => x.id !== r.id && (x.certNo || "").trim().toUpperCase() === no.toUpperCase());
-    if (dl) out.push(`Số ${no} đã dùng cho ${dl.h.tag || "hồ sơ khác"} (${dl.owner ? dl.owner.name : "—"}) – ${STAGE[stage(dl)][1]}`);
+    const dl = records.find(x => x.id !== r.id && x.certNo && certKey(x.certNo) === certKey(no));
+    if (dl) out.push(`Số ${no} đã dùng${dl.certNo.trim().toUpperCase() !== no.toUpperCase() ? ` (là ${dl.certNo})` : ""} cho ${dl.h.tag || "hồ sơ khác"} (${dl.owner ? dl.owner.name : "—"}) – ${STAGE[stage(dl)][1]}`);
     const sv = srvWho[no.toUpperCase() + "|" + r.id];
     if (!dl && sv) out.push(`Số ${no} đã có người dùng cho thiết bị ${sv.tag || "?"} (${sv.owner || "—"}) – ${sv.stage}`);
     return out;
@@ -323,7 +339,11 @@
   function paintCert() {
     const el = document.getElementById("certchk"); if (!el) return;
     const g = rangeOf(), iss = certIssues();
-    el.innerHTML = (g ? `<span class="mut">Dải số ${esc(g.name)}: ${pad4(g.lo)}–${pad4(g.hi)} · QTG cùng số: ${esc((rec.certNo || "").replace(/^CN\./, "BB."))}</span>` : "")
+    let fr = "";
+    if (g && rec.type !== "PG") { const pool = poolPre(), used = usedTails(pool, rec.id), runs = freeRuns(g, used), nf = runs.reduce((t, [a, b]) => t + b - a + 1, 0);
+      if (srvUsed[pool] == null) { srvUsed[pool] = []; loadUsed(pool, paintCert); }
+      fr = ` · còn trống ${nf} số${runs.length ? ": " + esc(runs.slice(0, 3).map(runTxt).join(", ")) + (runs.length > 3 ? "…" : "") : ""}`; }
+    el.innerHTML = (g ? `<span class="mut">Dải số ${esc(g.name)}: ${pad4(g.lo)}–${pad4(g.hi)}${fr} · QTG cùng số: ${esc((rec.certNo || "").replace(/^CN\./, "BB."))}</span>` : "")
       + iss.map(t => `<br><b class="bad">⚠ ${esc(t)}</b>`).join("");
   }
   function getPath(o, p) { return p.split(".").reduce((a, k) => a == null ? a : a[k], o); }
@@ -1287,7 +1307,7 @@
     if (quiet !== true) logAct(rec.saved ? "Lưu" : "Tạo");
     const c = compute(); syncCertNo(c);
     // NGOC 06/11/2026: trên một máy không được có 2 hồ sơ trùng số chứng chỉ (chống trùng giữa các máy cần máy chủ chung)
-    const dupNo = rec.certNo && records.find(r => r.id !== rec.id && (r.certNo || "").trim().toUpperCase() === rec.certNo.trim().toUpperCase());
+    const dupNo = rec.certNo && records.find(r => r.id !== rec.id && r.certNo && certKey(r.certNo) === certKey(rec.certNo));
     if (dupNo) {
       if (rec.certAuto) { rec.certNo = autoCertNo(); const f = $("#f_certNo"); if (f) f.value = rec.certNo; }
       else { toast(`Không lưu: số ${rec.certNo} đã dùng cho ${dupNo.h.tag || "hồ sơ khác"} – nhập số khác`); return; }
@@ -1584,8 +1604,8 @@
       (d.records || []).forEach(r => {
         const i = records.findIndex(x => x.id === r.id);
         if (i >= 0 && !((r.updated || "") > (records[i].updated || ""))) return;
-        const cn = (r.certNo || "").trim().toUpperCase();
-        if (cn && records.some(x => x.id !== r.id && (x.certNo || "").trim().toUpperCase() === cn)) { dupSkip.push(r.certNo); return; }   // không nhận hồ sơ trùng số GCN
+        const cn = (r.certNo || "").trim() ? certKey(r.certNo) : "";
+        if (cn && records.some(x => x.id !== r.id && x.certNo && certKey(x.certNo) === cn)) { dupSkip.push(r.certNo); return; }   // không nhận hồ sơ trùng số GCN
 
         if (i >= 0) { records[i] = normalize(r); u++; } else { records.push(normalize(r)); n++; }
         Object.keys(d.photos || {}).forEach(k => { if (k.startsWith(r.id + ":")) P.put(k, d.photos[k]).catch(() => { }); });
@@ -1651,8 +1671,8 @@
     const tail = `<div class="card"><h2>Tự kiểm tra công thức</h2><p class="hint">Chạy lại 2 ca thật từ file DGCP 10/2026 (PT-1506A, PSHH-0522) và so sánh từng số.</p>
         <div class="btns"><button class="btn pri" data-t="selftest">Chạy kiểm tra</button></div><div id="stout"></div></div>
       <div class="card"><h2>Về ứng dụng</h2><p class="hint">LAB PVGAS Services · bản thử nghiệm PT, PS, PG, TS, TT, RTD, TG · ${A.cloud() ? "dữ liệu đồng bộ qua máy chủ Supabase; vẫn nhập liệu được khi mất mạng, có mạng lại tự đồng bộ." : "chạy offline, dữ liệu chỉ lưu trên máy này (dùng Sao lưu JSON ở tab Hồ sơ)."}</p></div>`;
-    if (!A.can("settings")) { $("#v-settings").innerHTML = A.accountCard() + (canCheck() ? checkCard() : "") + `<div class="card"><p class="hint">Cài đặt chứng chỉ chỉ dành cho Trưởng phòng / Quản trị (cấp 3).</p></div>` + tail; return; }
-    $("#v-settings").innerHTML = A.accountCard() + backupCard() + rangesCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
+    if (!A.can("settings")) { $("#v-settings").innerHTML = A.accountCard() + freeCard() + (canCheck() ? checkCard() : "") + `<div class="card"><p class="hint">Cài đặt chứng chỉ chỉ dành cho Trưởng phòng / Quản trị (cấp 3).</p></div>` + tail; return; }
+    $("#v-settings").innerHTML = A.accountCard() + backupCard() + freeCard() + rangesCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
         ${f("Chức danh trái", "sig1Title")}${f("Tên", "sig1Name")}${f("Chức danh trái (EN)", "sig1TitleEn", 1)}
         ${f("Chức danh phải", "sig2Title")}${f("Tên", "sig2Name")}${f("Chức danh phải (EN)", "sig2TitleEn", 1)}
         ${f("Nơi cấp (dòng ngày)", "place")}${f("Chu kỳ HC (tháng)", "dueMonths")}
@@ -1750,6 +1770,43 @@
   }
   /* Bảng dải số (cấp 3): sửa tên, từ số, đến số, mã công trình gắn với dải (cách nhau dấu phẩy). Lưu vào Cài đặt chung, đồng bộ cho mọi người. */
   let rgOpen = false;
+  /* Bảng số còn trống theo site (NGOC 10/11/2026): mỗi dải → các khoảng A–B chưa dùng trong năm đang chọn (mọi loại dùng chung dải). */
+  let frOpen = false, frYY = null, srvUsed = {};
+  function usedTails(pool, exceptId) {
+    const u = new Set(srvUsed[pool] || []);
+    records.forEach(r => { if (r.certNo && !r.deleted && r.id !== exceptId) { const n = poolTail(r.certNo, pool); if (!isNaN(n)) u.add(n); } });
+    return u;
+  }
+  function freeRuns(g, used) {
+    const out = []; let a = null;
+    for (let n = g.lo; n <= g.hi + 1; n++) {
+      const free = n <= g.hi && !used.has(n);
+      if (free && a == null) a = n; else if (!free && a != null) { out.push([a, n - 1]); a = null; }
+    }
+    return out;
+  }
+  const runTxt = ([a, b]) => a === b ? pad4(a) : `${pad4(a)}–${pad4(b)}`;
+  function loadUsed(pool, then) {
+    if (!A.cloud() || !window.LabCloud || !LabCloud.certUsed) return;
+    LabCloud.certUsed(pool).then(v => { srvUsed[pool] = v || []; then && then(); }).catch(() => {});
+  }
+  function freeCard() {
+    const y0 = Number(todayISO().slice(2, 4)); if (frYY == null) frYY = y0;
+    const pool = `CN.${String(frYY).padStart(2, "0")}.`;
+    if (frOpen && srvUsed[pool] == null) { srvUsed[pool] = []; loadUsed(pool, () => { if (frOpen) renderSettings(); }); }
+    const used = usedTails(pool);
+    const rows = RANGES().slice().sort((a, b) => a.lo - b.lo).map(g => {
+      const runs = freeRuns(g, used), nFree = runs.reduce((t, [a, b]) => t + b - a + 1, 0), size = g.hi - g.lo + 1;
+      const sites = (g.locs || []).map(c => siteName(c)).join(", ");
+      return `<tr${nFree === 0 ? ' class="bad"' : nFree < size * 0.1 ? ' class="warnrow"' : ""}><td>${esc(g.grp)}</td><td>${esc(g.name)}${sites ? `<br><small class="mut">${esc(sites)}</small>` : ""}</td>
+        <td>${pad4(g.lo)}–${pad4(g.hi)}</td><td>${size - nFree}</td><td><b>${nFree}</b></td><td>${runs.length ? esc(runs.map(runTxt).join(", ")) : "HẾT SỐ"}</td></tr>`;
+    }).join("");
+    const yOpts = [y0 - 1, y0, y0 + 1].map(y => `<option value="${y}"${y === frYY ? " selected" : ""}>20${y}</option>`).join("");
+    return `<details class="card" id="frcard"${frOpen ? " open" : ""}><summary><h2>📋 Số tem / GCN còn trống theo site</h2></summary>
+      <p class="hint">Các khoảng số chưa dùng trong từng dải (PT, PS, TT… dùng chung một dải; số đã cấp cho loại này thì loại khác không dùng lại). ${A.cloud() ? "Tính trên toàn hệ thống (máy chủ) + hồ sơ trên máy này." : "Chỉ tính hồ sơ trên máy này."} PG (N256…) không tính ở đây.</p>
+      <div class="btns"><label class="f"><span>Năm</span><select id="fryy">${yOpts}</select></label>${A.cloud() ? '<button class="btn sm" data-t="frreload">↻ Tải lại từ máy chủ</button>' : ""}</div>
+      <div class="tblwrap"><table class="entry rgt"><thead><tr><th>Khối</th><th>Site / công trình</th><th>Dải</th><th>Đã dùng</th><th>Còn trống</th><th>Khoảng số trống</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+  }
   function rangesCard() {
     const known = new Set(SEED.locations.map(l => l[0])), used = new Set(RANGES().flatMap(g => g.locs || []));
     const free = SEED.locations.filter(l => !l[5] && !used.has(l[0])).map(l => l[0]);
@@ -1779,6 +1836,7 @@
     if (b.dataset.t === "resetset" && A.can("settings")) { settings = clone(SEED.settings); store.set("settings", settings); renderSettings(); toast("Đã về mặc định"); }
     if (b.dataset.t === "selftest") $("#stout").innerHTML = selfTest();
     if (b.dataset.t === "bkall") backupNow(b);
+    if (b.dataset.t === "frreload") { srvUsed = {}; frOpen = true; renderSettings(); }
     if (b.dataset.t === "rgadd" && A.can("settings")) { settings.ranges = (settings.ranges || []).concat([{ id: "rg" + Date.now().toString(36), grp: "", name: "Dải mới", lo: 0, hi: 0, locs: [], note: "" }]); store.set("settings", settings); rgOpen = true; renderSettings(); }
     if (b.dataset.t === "rgdel" && A.can("settings")) { if (!b.dataset.armed) { b.dataset.armed = 1; b.textContent = "Xoá thật?"; return; } settings.ranges.splice(Number(b.dataset.i), 1); store.set("settings", settings); rgOpen = true; renderSettings(); }
     if (b.dataset.t === "mocshow") { const i = $("#mockey"); i.type = i.type === "password" ? "text" : "password"; }
@@ -1848,14 +1906,15 @@
     });
     $("#v-settings").addEventListener("input", onSettingsInput);
     $("#v-settings").addEventListener("change", onSettingsInput);
-    $("#v-settings").addEventListener("change", e => { if (e.target.id === "bkrest") onRestoreFile(e); if (e.target.dataset.rg) onRangeInput(e); });
+    $("#v-settings").addEventListener("change", e => { if (e.target.id === "bkrest") onRestoreFile(e); if (e.target.id === "fryy") { frYY = Number(e.target.value); frOpen = true; renderSettings(); } if (e.target.dataset.rg) onRangeInput(e); });
     $("#v-settings").addEventListener("click", onSettingsClick);
+    $("#v-settings").addEventListener("toggle", e => { if (e.target.id === "frcard") { const was = frOpen; frOpen = e.target.open; if (frOpen && !was) renderSettings(); } if (e.target.id === "rgcard") rgOpen = e.target.open; }, true);
     // Đồng bộ máy chủ (cloud.js): app trao quyền đọc/ghi dữ liệu cục bộ; thay đổi từ máy khác vẽ lại màn hình đang xem
     if (window.LabCloud) LabCloud.attach({
       getRecords: () => records, normalize, photos: P, seedVersion: SEED.version,
       setRecords: list => { records = list; fromCloud = true; store.set("records", records); fromCloud = false; },
       getShared: k => k === "stands" ? stands : settings,
-      setShared: (k, v) => { fromCloud = true; if (k === "stands") { stands = v; store.set("stands", stands); } else { settings = deepMerge(SEED.settings, v); settings.ver = SEED.settings.ver; store.set("settings", settings); } fromCloud = false; },
+      setShared: (k, v) => { fromCloud = true; if (k === "stands") { stands = v; store.set("stands", stands); } else { settings = fixRanges(deepMerge(SEED.settings, v), v && v.rangesVer); settings.ver = SEED.settings.ver; store.set("settings", settings); } fromCloud = false; },
       onCertConflict: list => toast(`⚠ Số ${list.map(r => r.certNo).join(", ")} đã có người dùng trên hệ thống – mở hồ sơ ${list.map(r => r.h.tag).join(", ")} để lấy số khác`),
       onRemote: () => {
         badge();
