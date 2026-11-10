@@ -142,45 +142,49 @@
 
   /* ---------- đăng nhập máy chủ (Supabase) – dùng khi cloud.js đã có CONFIG ---------- */
   const C = window.LabCloud;
-  function showCloudLogin(msg, signup) {
-    const g = gate(signup
-      ? `<p>Tạo tài khoản mới. Người đăng ký đầu tiên là Trưởng phòng / Quản trị; người sau chờ Trưởng phòng cấp quyền trong Cài đặt › Người dùng.</p>
-        <label>Họ tên<input id="cn" autocomplete="name"></label><label>Email<input id="ce" type="email" autocomplete="email"></label>
-        <label>Mật khẩu (ít nhất 8 ký tự)<input id="cp" type="password" autocomplete="new-password"></label>
-        <button class="btn pri" id="cgo">Tạo tài khoản</button><p class="hint"><a href="#" id="csw">Đã có tài khoản? Đăng nhập</a></p>`
-      : `${msg ? `<p class="mut">${esc(msg)}</p>` : ""}<label>Email<input id="ce" type="email" autocomplete="email" value="${esc(ls.get("lastEmail", ""))}"></label>
-        <label>Mật khẩu<input id="cp" type="password" autocomplete="current-password"></label>
+  /* 10/11/2026 (NGOC): đăng nhập bằng ID (ngoc.nm) + PIN; không tự đăng ký – Trưởng phòng tạo tài khoản ở Cài đặt › Người dùng. */
+  function showCloudLogin(msg) {
+    const g = gate(`${msg ? `<p class="mut">${esc(msg)}</p>` : ""}<label>ID đăng nhập<input id="ce" autocapitalize="none" autocomplete="username" spellcheck="false" placeholder="vd ngoc.nm" value="${esc(ls.get("lastEmail", ""))}"></label>
+        <label>PIN<input id="cp" type="password" inputmode="numeric" autocomplete="current-password"></label>
         <button class="btn pri" id="cgo">Đăng nhập</button>
-        <p class="hint">Dữ liệu đồng bộ giữa điện thoại và máy tính qua máy chủ. <a href="#" id="csw">Tạo tài khoản mới</a></p>`);
+        <p class="hint">Dữ liệu đồng bộ giữa điện thoại và máy tính qua máy chủ. Chưa có tài khoản hoặc quên PIN: báo Trưởng phòng.</p>`);
     const val = id => (g.querySelector("#" + id) || {}).value || "";
-    g.querySelector("#csw").onclick = e => { e.preventDefault(); showCloudLogin("", !signup); };
     const go = async () => {
       err(""); const b = g.querySelector("#cgo"); b.disabled = true;
       try {
-        if (signup) {
-          if (!val("cn").trim()) throw new Error("Nhập họ tên");
-          if (val("cp").length < 8) throw new Error("Mật khẩu ít nhất 8 ký tự");
-          const p = await C.signUp(val("ce"), val("cp"), val("cn"));
-          if (!p) { showCloudLogin("Đã tạo tài khoản. Mở email xác nhận rồi đăng nhập."); return; }
-          ls.set("lastEmail", val("ce").trim()); cloudEnter(p);
-        } else {
-          const p = await C.signIn(val("ce"), val("cp")); ls.set("lastEmail", val("ce").trim()); cloudEnter(p);
-        }
+        const id = val("ce").trim().toLowerCase(); if (!id) throw new Error("Nhập ID đăng nhập");
+        const p = await C.signIn(id, val("cp")); ls.set("lastEmail", id); cloudEnter(p);
       } catch (x) { err(x.message || String(x)); b.disabled = false; }
     };
     g.querySelector("#cgo").onclick = go;
     g.querySelector("#cp").onkeydown = e => { if (e.key === "Enter") go(); };
   }
+  function cloudChangePin(p) {
+    const g = gate(`<p>Xin chào <b>${esc(p.name || p.login || "")}</b>. Lần đầu đăng nhập (hoặc vừa được đặt lại PIN): hãy đặt PIN riêng của anh/chị.</p>
+      <label>PIN mới (ít nhất 6 số)<input id="np1" type="password" inputmode="numeric" autocomplete="new-password"></label>
+      <label>Nhập lại PIN mới<input id="np2" type="password" inputmode="numeric" autocomplete="new-password"></label>
+      <div class="btns"><button class="btn pri" id="ngo">Lưu PIN</button><button class="btn" id="cso">Đăng xuất</button></div>`);
+    const v = id => g.querySelector("#" + id).value;
+    g.querySelector("#cso").onclick = () => C.signOut().finally(() => showCloudLogin());
+    g.querySelector("#ngo").onclick = async () => {
+      err(""); const b = g.querySelector("#ngo"); b.disabled = true;
+      try {
+        if (v("np1").length < 6) throw new Error("PIN ít nhất 6 số"); if (v("np1") !== v("np2")) throw new Error("Hai lần nhập PIN không khớp");
+        await C.changePassword(v("np1")); cloudEnter(await C.currentProfile());
+      } catch (x) { err(x.message || String(x)); b.disabled = false; }
+    };
+  }
   function cloudEnter(p) {
     if (!p) return showCloudLogin();
     if (!(p.role >= 1)) {
-      const g = gate(`<p>Tài khoản <b>${esc(p.email || "")}</b> đã tạo, đang chờ Trưởng phòng cấp quyền.</p>
+      const g = gate(`<p>Tài khoản <b>${esc(p.login || p.email || "")}</b> đang bị khoá (cấp 0). Báo Trưởng phòng mở quyền.</p>
         <div class="btns"><button class="btn pri" id="crt">Kiểm tra lại</button><button class="btn" id="cso">Đăng xuất</button></div>`);
       g.querySelector("#crt").onclick = async () => cloudEnter(await C.currentProfile());
       g.querySelector("#cso").onclick = () => C.signOut().finally(() => showCloudLogin());
       return;
     }
-    login({ id: p.id, name: p.name || p.email, role: p.role, email: p.email, cloud: true });
+    if (p.must_change) return cloudChangePin(p);
+    login({ id: p.id, uid: p.login || String(p.email || "").split("@")[0], name: p.name || p.email, role: p.role, email: p.email, cloud: true });
     C.start(p);
   }
   function chip() {
@@ -195,13 +199,20 @@
   function accountCard() {
     if (!me) return "";
     if (me.cloud) {
-      const mineC = `<div class="card"><h2>Tài khoản</h2><p>Đang đăng nhập: <b>${esc(me.name)}</b> (${esc(me.email || "")}) – ${ROLES[me.role]}.</p>
-        <div class="grid"><label class="f"><span>Mật khẩu mới (ít nhất 8 ký tự)</span><input id="u_mypw" type="password" autocomplete="new-password"></label></div>
-        <div class="btns"><button class="btn" data-u="mypw">Đổi mật khẩu</button><button class="btn" data-u="sync">Đồng bộ ngay</button><button class="btn" data-u="logout">Đăng xuất</button></div>
+      const mineC = `<div class="card"><h2>Tài khoản</h2><p>Đang đăng nhập: <b>${esc(me.name)}</b> (ID ${esc(me.uid || "")}) – ${ROLES[me.role]}.</p>
+        <div class="grid"><label class="f"><span>PIN mới (ít nhất 6 số)</span><input id="u_mypw" type="password" inputmode="numeric" autocomplete="new-password"></label></div>
+        <div class="btns"><button class="btn" data-u="mypw">Đổi PIN của tôi</button><button class="btn" data-u="sync">Đồng bộ ngay</button><button class="btn" data-u="logout">Đăng xuất</button></div>
         <p class="hint">Dữ liệu đồng bộ tự động qua máy chủ (khi có mạng). Khoá tự động sau ${IDLE_MIN / 60} giờ không thao tác.</p></div>`;
       if (!can("users")) return mineC;
       setTimeout(loadCloudUsers, 0);
-      return mineC + `<div class="card"><h2>Người dùng</h2><p class="hint">Người mới tự tạo tài khoản ở màn hình đăng nhập, rồi Trưởng phòng cấp quyền ở đây. Cấp 0 = khoá / chờ duyệt.</p><div id="cusers"><p class="mut">Đang tải…</p></div></div>`;
+      return mineC + `<div class="card"><h2>Người dùng</h2>
+        <div class="grid"><label class="f"><span>Họ tên đầy đủ (in ở ô ký / duyệt)</span><input id="u_name" placeholder="Nguyễn Minh Ngọc"></label>
+        <label class="f"><span>ID đăng nhập (ten.hotenlot)</span><input id="u_uid" autocapitalize="none" spellcheck="false" placeholder="tự tạo từ họ tên"></label>
+        <label class="f"><span>Cấp</span><select id="u_role">${[1, 2, 3].map(r => `<option value="${r}">${r} – ${ROLES[r]}</option>`).join("")}</select></label>
+        <label class="f"><span>PIN tạm (ít nhất 6 số)</span><input id="u_pin" type="password" inputmode="numeric" autocomplete="new-password"></label></div>
+        <div class="btns"><button class="btn pri" data-u="cadd">Tạo tài khoản</button></div>
+        <p class="hint">Người mới đăng nhập bằng ID + PIN tạm, app bắt đổi PIN riêng ngay lần đầu. Cấp 0 = khoá tài khoản (không xoá dữ liệu). Quên PIN: bấm Đặt lại PIN.</p>
+        <div id="cusers"><p class="mut">Đang tải…</p></div></div>`;
     }
     const mine = `<div class="card"><h2>Tài khoản</h2><p>Đang đăng nhập: <b>${esc(me.name)}</b> (ID ${esc(me.uid || "")}) – ${ROLES[me.role]}.</p>
       <div class="grid"><label class="f"><span>PIN mới (4–8 số)</span><input id="u_mypin" type="password" inputmode="numeric" autocomplete="new-password"></label></div>
@@ -224,8 +235,9 @@
     const el = document.getElementById("cusers"); if (!el) return;
     try {
       const list = await C.listUsers();
-      el.innerHTML = list.map(u => `<div class="rec"><div><b>${esc(u.name || "(chưa có tên)")}</b> <span class="tag">cấp ${u.role}</span><br><small class="mut">${esc(u.email || "")}</small></div>
-        <div class="ra"><select data-crole="${u.id}"${u.id === me.id ? " disabled" : ""}>${[0, 1, 2, 3].map(r => `<option value="${r}"${u.role === r ? " selected" : ""}>${r === 0 ? "0 – Khoá / chờ duyệt" : `${r} – ${ROLES[r]}`}</option>`).join("")}</select></div></div>`).join("");
+      el.innerHTML = `<p class="mut">${list.length} tài khoản</p>` + list.map(u => `<div class="rec"><div><b>${esc(u.name || "(chưa có tên)")}</b> <span class="tag">${esc(u.login || String(u.email || "").split("@")[0])}</span> <span class="tag">cấp ${u.role}</span><br><small class="mut">${u.role ? ROLES[u.role] : "Đang khoá"}${u.must_change ? " · chưa đổi PIN ban đầu" : ""}</small></div>
+        <div class="ra"><select data-crole="${u.id}"${u.id === me.id ? " disabled" : ""}>${[0, 1, 2, 3].map(r => `<option value="${r}"${u.role === r ? " selected" : ""}>${r === 0 ? "0 – Khoá" : `${r} – ${ROLES[r]}`}</option>`).join("")}</select>
+        <button class="btn sm" data-u="cpin" data-id="${u.id}" data-n="${esc(u.name || u.login || "")}">Đặt lại PIN</button></div></div>`).join("");
     } catch (x) { el.innerHTML = `<p class="bad">Không tải được danh sách: ${esc(x.message || x)}</p>`; }
   }
   async function onAccountClick(e, rerender, toast) {
@@ -234,7 +246,19 @@
     try {
       if (a === "logout") { logout("Đã đăng xuất"); return true; }
       if (a === "sync") { C.sync(); toast("Đang đồng bộ…"); return true; }
-      if (a === "mypw") { const p = val("u_mypw"); if (p.length < 8) throw new Error("Mật khẩu ít nhất 8 ký tự"); await C.changePassword(p); toast("Đã đổi mật khẩu"); rerender(); return true; }
+      if (a === "mypw") { const p = val("u_mypw"); if (p.length < 6) throw new Error("PIN ít nhất 6 số"); await C.changePassword(p); toast("Đã đổi PIN"); rerender(); return true; }
+      if (me.cloud && can("users") && a === "cadd") {
+        const name = val("u_name").trim().replace(/\s+/g, " "); if (!fullName(name)) throw new Error("Phải là họ tên đầy đủ có dấu, vd Nguyễn Minh Ngọc");
+        let uid = val("u_uid").trim().toLowerCase();
+        if (!uid) { const taken = new Set(((await C.listUsers()) || []).map(u => u.login)); uid = makeUid(name, taken); }
+        if (!okUid(uid)) throw new Error("ID dạng ten.hotenlot, chỉ chữ thường không dấu, vd ngoc.nm");
+        if (val("u_pin").length < 6) throw new Error("PIN tạm ít nhất 6 số");
+        await C.createUser(uid, name, Number(val("u_role")), val("u_pin")); toast(`Đã tạo ${name} – ID ${uid}`); rerender(); return true;
+      }
+      if (me.cloud && can("users") && a === "cpin") {
+        const p = prompt(`PIN tạm mới cho ${b.dataset.n} (ít nhất 6 số). Người đó sẽ phải đổi PIN khi đăng nhập.`); if (p == null) return true;
+        if (p.trim().length < 6) throw new Error("PIN ít nhất 6 số"); await C.resetPin(b.dataset.id, p.trim()); toast("Đã đặt lại PIN"); loadCloudUsers(); return true;
+      }
       if (a === "mypin") { await setPin(me.id, val("u_mypin")); toast("Đã đổi PIN"); rerender(); }
       if (!can("users")) return true;
       if (a === "add") { const u = await addUser(val("u_name"), val("u_role"), val("u_pin"), val("u_uid")); toast(`Đã thêm ${u.name} – ID ${u.uid}`); rerender(); }
