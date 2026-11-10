@@ -18,6 +18,6 @@ jobs:
           URL=$(grep -oP 'url:\s*"\Khttps://[^"]+' cloud.js || true)
           KEY=$(grep -oP 'key:\s*"\K[^"]+' cloud.js || true)
           if [ -z "$URL" ] || [ -z "$KEY" ]; then echo "cloud.js chưa có CONFIG – bỏ qua"; exit 0; fi
-          code=$(curl -s -o /dev/null -w "%{http_code}" "$URL/rest/v1/profiles?select=id&limit=1" -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          code=$(curl -s -o /dev/null -w "%{http_code}" "$URL/rest/v1/profiles?select=id&limit=1" -H "apikey: $KEY")
           echo "HTTP $code"
           [ "$code" = "200" ]

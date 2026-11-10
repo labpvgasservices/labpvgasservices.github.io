@@ -8,7 +8,7 @@
   "use strict";
   const CONFIG = {
     url: "",        // Project URL, ví dụ https://abcd1234.supabase.co
-    key: "",        // anon public key (KHÔNG dùng service_role)
+    key: "",        // Publishable key sb_publishable_… (hoặc anon cũ). KHÔNG dùng secret / service_role
     domain: "lab-pvgas.local"   // ID ngoc.nm → email nội bộ ngoc.nm@lab-pvgas.local (phải trùng public.lab_domain() trong setup.sql)
   };
   const toEmail = id => { const t = String(id || "").trim().toLowerCase(); return t.includes("@") ? t : t + "@" + CONFIG.domain; };
