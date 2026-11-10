@@ -322,5 +322,15 @@
     setInterval(() => { if (me && Date.now() - lastAct > IDLE_MIN * 60000) logout(`Đã khoá sau ${IDLE_MIN / 60} giờ không thao tác`); }, 30000);
   }
 
-  window.LabAuth = { ROLES, start, can, me: () => me, accountCard, onAccountClick, onAccountChange };
+  // Danh sách người dùng để chọn Người kiểm soát / người duyệt final (v49): máy chủ (cloud) hoặc danh sách PIN trên máy
+  async function people() {
+    if (C && C.enabled && me && me.cloud) {
+      try {
+        const list = (await C.listUsers()).map(u => ({ id: u.id, name: u.name || u.login || u.email, role: u.role, login: u.login || String(u.email || "").split("@")[0] }));
+        ls.set("people", list); return list;
+      } catch (e) { return ls.get("people", []); }
+    }
+    return users.map(u => ({ id: u.id, name: u.name, role: u.role, login: u.uid || "" }));
+  }
+  window.LabAuth = { ROLES, start, can, me: () => me, people, cloud: () => !!(me && me.cloud), accountCard, onAccountClick, onAccountChange };
 })();

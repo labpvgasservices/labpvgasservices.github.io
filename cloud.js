@@ -128,11 +128,12 @@
     } else if (dels.length) { dels = []; ls.set("dels", dels); }
     const todo = app.getRecords().filter(r => r.updated && sent[r.id] !== r.updated);
     // cấp 1 chỉ đẩy hồ sơ của mình (máy chủ cũng chặn); hồ sơ người khác sửa trên máy này sẽ bị kéo đè lại
-    const mine = r => me.role >= 2 || (r.owner && (r.owner.id === me.id || r.owner.name === me.name));
+    // v49: máy chủ chỉ cho người nhập, người được chuyển hồ sơ (viewers) và cấp 3 ghi – đẩy hồ sơ khác sẽ làm hỏng cả lô
+    const mine = r => me.role >= 3 || (r.owner && (r.owner.id === me.id || (!isUuid(r.owner.id) && r.owner.name === me.name))) || (r.viewers || []).includes(me.id);
     for (let i = 0; i < todo.length; i += 50) {
       const part = todo.slice(i, i + 50).filter(mine);
       if (!part.length) continue;
-      const rows = part.map(r => ({ id: r.id, owner: r.owner && isUuid(r.owner.id) ? r.owner.id : me.id, data: r, deleted: false }));
+      const rows = part.map(r => ({ id: r.id, owner: r.owner && isUuid(r.owner.id) ? r.owner.id : me.id, viewers: (r.viewers || []).filter(isUuid), data: r, deleted: false }));
       const { error } = await c.from("records").upsert(rows, { onConflict: "id" });
       if (error) throw error;
       part.forEach(r => { sent[r.id] = r.updated; }); ls.set("sent", sent);

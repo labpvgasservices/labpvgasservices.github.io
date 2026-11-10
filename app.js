@@ -86,6 +86,46 @@
   let records = store.get("records", []).map(normalize);
   let names = store.get("names", []);
   let rec = normalize(store.get("current", null)) || newRecord("PT");
+  /* ---------- người dùng, quyền xem hồ sơ, trạng thái duyệt (v49) ---------- */
+  let people = store.get("people", []);
+  function loadPeople() { return A.people().then(l => { if (Array.isArray(l) && l.length) { people = l; store.set("people", l); } return people; }).catch(() => people); }
+  const isFinal = r => !!(r && (r.final || (r.approved && !r.flow2)));
+  const stage = r => isFinal(r) ? "done" : r.approved ? "final" : r.submitted ? "review" : "draft";
+  const STAGE = { done: ["ok", "Đã duyệt final"], final: ["warn", "Chờ duyệt final"], review: ["warn", "Chờ kiểm soát"], draft: ["mut", "Chưa chuyển duyệt"] };
+  // Cấp 3 xem tất cả; cấp 1/2 chỉ xem hồ sơ mình nhập và hồ sơ được chuyển tới mình (NGOC 10/11/2026)
+  const visible = r => { const m = A.me(); if (!m) return false; if (m.role >= 3) return true; return !!(r.owner && r.owner.id === m.id) || (r.viewers || []).includes(m.id); };
+  // Hồ sơ đang chờ chính mình xử lý: bước kiểm soát (được chuyển tới mình) hoặc bước final (cấp 3, chuyển tới mình hoặc chưa ghi người)
+  const myTurn = r => { const m = A.me(); if (!m || m.role < 2 || !visible(r)) return false; const st = stage(r);
+    if (st === "review") return r.submitted.to ? r.submitted.to.id === m.id : !(r.owner && r.owner.id === m.id);
+    if (st === "final") return m.role >= 3 && (!r.finalTo || r.finalTo.id === m.id);
+    return false; };
+  const isFail = r => !!(r.summary && r.summary.pass === false);
+  const reviewers = exclude => people.filter(p => p.role >= 2 && p.id !== exclude);
+  const finals = () => people.filter(p => p.role >= 3);
+  function addViewer(r, id) { if (!id) return; r.viewers = Array.isArray(r.viewers) ? r.viewers : []; if (!r.viewers.includes(id)) r.viewers.push(id); }
+  const personByName = n => { n = String(n || "").trim().toLowerCase(); return n ? people.find(p => String(p.name || "").trim().toLowerCase() === n) : null; };
+  const personSel = (id, list, cur, ph) => `<select id="${id}"><option value="">${esc(ph)}</option>${list.map(p => `<option value="${esc(p.id)}"${cur === p.id ? " selected" : ""}>${esc(p.name)} (cấp ${p.role})</option>`).join("")}</select>`;
+  function failWhy(c) {
+    const w = (c.warns || []).filter(x => /^Không đạt/.test(x) && !/không cấp số/.test(x));
+    return w.length ? w[0].replace(/^Không đạt:\s*/, "") : "Sai số + độ không đảm bảo đo vượt sai số cho phép (MPE)";
+  }
+  // Ô Người kiểm soát: chọn từ danh sách cấp 2 / 3 (trừ người nhập hồ sơ)
+  function ctlField() {
+    const list = reviewers(rec.owner ? rec.owner.id : (A.me() || {}).id), cur = rec.sig.controller || "";
+    const opts = [["", list.length ? "— Chọn Người kiểm soát (cấp 2 / 3) —" : "— Chưa tải được danh sách người dùng —"]].concat(list.map(p => [p.name, `${p.name} (cấp ${p.role})`]));
+    if (cur && !list.some(p => p.name === cur)) opts.push([cur, cur]);
+    return fld("Người soát lại / kiểm tra (Người kiểm soát)", "sig.controller", { options: opts });
+  }
+  // Huy hiệu tab Hồ sơ: số hồ sơ chờ mình duyệt và số hồ sơ KHÔNG ĐẠT; báo động khi có hồ sơ không đạt / chờ duyệt mới
+  function badge() {
+    const b = document.querySelector('nav.tabs button[data-v="records"]'); if (!b || !A.me()) return;
+    const vis = records.filter(visible), q = vis.filter(myTurn).length, f = vis.filter(isFail);
+    let el = b.querySelector(".bdg"); if (!el) { el = document.createElement("span"); el.className = "bdg"; b.appendChild(el); }
+    el.innerHTML = `${q ? `<i class="bq">${q}</i>` : ""}${f.length ? `<i class="bf">⚠${f.length}</i>` : ""}`; el.hidden = !q && !f.length;
+    const seen = store.get("failSeen", []), fresh = f.filter(r => !seen.includes(r.id));
+    if (fresh.length) toast(`⚠ ${fresh.length} hồ sơ KHÔNG ĐẠT mới: ${fresh.slice(0, 3).map(r => r.h.tag).join(", ")}${fresh.length > 3 ? "…" : ""} – xem tab Hồ sơ`);
+    if (fresh.length) store.set("failSeen", seen.concat(fresh.map(r => r.id)).slice(-500));
+  }
   let lastPdf = null;
 
   function newRecord(type) {
@@ -658,7 +698,7 @@
     if (NEWT.includes(rec.type)) ({ dev, std, pts, ptsTitle } = buildNew(locHtml));
     const sig = `<div class="grid">
         ${fld("Người thực hiện (Kiểm định viên)", "sig.inspector", { list: "names", ro: !A.can("users") })}
-        ${fld("Người soát lại / kiểm tra (Người kiểm soát)", "sig.controller", { list: "names", ph: "Chọn hoặc nhập tên người soát lại" })}
+        ${ctlField()}
         ${fld("Ngày cấp chứng chỉ", "h.issueDate", { type: "date" })}
         ${fld("Ghi chú QTG", "h.note", { wide: 1 })}
         <div class="hint wide">Trang 1 chứng chỉ ký: ${esc(settings.sig1Title)} <b>${esc(settings.sig1Name)}</b> và ${esc(settings.sig2Title)} <b>${esc(settings.sig2Name)}</b> (đổi trong Cài đặt).</div>
@@ -681,7 +721,7 @@
   }
   /* ---------- người chịu trách nhiệm & ảnh bằng chứng ---------- */
   // Người tạo hồ sơ (tài khoản đăng nhập lúc tạo) chịu trách nhiệm số liệu; cấp 2 trở lên được sửa hồ sơ của người khác
-  const canEdit = () => !rec.owner || !A.me() || rec.owner.id === A.me().id || A.can("approve");
+  const canEdit = () => !rec.owner || !A.me() || rec.owner.id === A.me().id || (A.can("approve") && visible(rec));
   function ownerHtml() {
     const o = rec.owner ? `<b>${esc(rec.owner.name)}</b>` : `<span class="mut">chưa ghi (hồ sơ tạo trước khi có đăng nhập)</span>`;
     return `<div class="hint wide">Người nhập liệu, chịu trách nhiệm hồ sơ: ${o}${canEdit() ? "" : ` · <span class="bad">bạn chỉ được xem, không sửa</span>`}</div>`;
@@ -1031,7 +1071,7 @@
       renderEntry(); persistCurrent(); return;
     }
     const act = b.dataset.act;
-    if (act === "approve" || act === "unapprove") { approve(act === "approve"); return; }
+    if (["approve", "unapprove", "submit", "forward", "return", "final"].includes(act)) { wf(act); return; }
     if (b.dataset.phdel) {
       if (!canEdit()) return; const i = Number(b.dataset.phdel);
       if (!b.dataset.armed) { b.dataset.armed = 1; b.textContent = "Xoá thật?"; b.classList.add("danger"); return; }
@@ -1080,26 +1120,91 @@
   const lv1 = () => !A.can("approve");
   const when = t => esc(new Date(t).toLocaleString("vi-VN", { hour12: false }));
   function actionsHtml() {
-    const a = rec.approved, sb = rec.submitted;
-    const st = a ? `<span class="stp ok">✓ Đã duyệt</span><span>bởi <b>${esc(a.by)}</b> · ${when(a.at)}</span>`
-      : sb ? `<span class="stp wait">⏳ Chờ duyệt</span><span>${esc(sb.by)} gửi lúc ${when(sb.at)} · chứng chỉ còn dấu BẢN NHÁP</span>`
-      : `<span class="stp no">Chưa duyệt</span><span>Chứng chỉ in dấu BẢN NHÁP cho đến khi Người kiểm soát duyệt</span>`;
-    const rv = A.can("approve") ? (a ? `<button class="btn" data-act="unapprove">Huỷ duyệt</button>` : `<button class="btn pri" data-act="approve">✓ Duyệt hồ sơ</button>`)
-      : (a ? "" : `<button class="btn pri" data-act="submit">${sb ? "Gửi duyệt lại" : "➜ Gửi duyệt"}</button>`);
-    const L = lv1();
-    return `<div class="acts">
-      <div class="agrp"><div class="alab">Hồ sơ</div><div class="arow">
-        <button class="btn pri" data-act="save">💾 Lưu hồ sơ</button><button class="btn" data-act="new">＋ Hồ sơ mới</button></div></div>
-      <div class="agrp"><div class="alab">Duyệt</div><div class="astat">${st}</div>${rv ? `<div class="arow">${rv}</div>` : ""}
-        ${L && !a ? `<div class="hint">Gửi duyệt: đóng gói Chứng chỉ (PDF) và file hồ sơ (.json, kèm ảnh) để chuyển cho Người kiểm soát / Trưởng phòng qua Zalo, email… Người duyệt mở tab Hồ sơ › Nhập JSON.</div>` : ""}</div>
-      <div class="agrp"><div class="alab">Xuất tài liệu</div><div class="agrid">
-        <button class="btn pri" data-pdf="cert">Chứng chỉ <small>2 trang</small></button>
+    const m = A.me(), st = stage(rec), sb = rec.submitted, a = rec.approved, f = rec.final;
+    const stHtml = st === "done" ? `<span class="stp ok">✓ Đã duyệt final</span><span>${f ? `bởi <b>${esc(f.by)}</b> · ${when(f.at)}` : `bởi <b>${esc(a.by)}</b> · ${when(a.at)}`} · được in / tải</span>`
+      : st === "final" ? `<span class="stp wait">⏳ Chờ duyệt final</span><span>Kiểm soát <b>${esc(a.by)}</b> đã duyệt ${when(a.at)} → chờ <b>${esc(rec.finalTo ? rec.finalTo.name : "cấp 3")}</b> duyệt final</span>`
+      : st === "review" ? `<span class="stp wait">⏳ Chờ kiểm soát</span><span>${esc(sb.by)} chuyển ${when(sb.at)} → <b>${esc(sb.to ? sb.to.name : "cấp 2 / 3")}</b></span>`
+      : `<span class="stp no">Chưa chuyển duyệt</span><span>Chọn Người kiểm soát ở trên rồi bấm Chuyển duyệt. Chỉ in / tải PDF sau khi duyệt final.</span>`;
+    const ret = rec.returned && st === "draft" ? `<div class="hint bad">↩ ${esc(rec.returned.by)} trả lại ${when(rec.returned.at)}${rec.returned.note ? ": " + esc(rec.returned.note) : ""}</div>` : "";
+    const mine = m && rec.owner && rec.owner.id === m.id;
+    let rv = "";
+    if (st === "draft" && m && (mine || !rec.owner || m.role >= 3)) rv = `<div class="arow"><button class="btn pri" data-act="submit">➜ Chuyển duyệt${rec.sig.controller ? " cho " + esc(rec.sig.controller) : ""}</button></div>`;
+    if (st === "review" && m && m.role >= 2 && (!sb.to || sb.to.id === m.id || m.role >= 3) && !(mine && m.role < 3)) {
+      const fwd = reviewers(m.id).filter(p => !rec.owner || p.id !== rec.owner.id);
+      rv = `<div class="wf">${m.role >= 3 ? "" : `<label class="f"><span>Người duyệt final (cấp 3)</span>${personSel("wf_final", finals(), (rec.finalTo || {}).id || store.get("lastFinal", ""), "— Chọn người duyệt final —")}</label>`}
+        <div class="arow"><button class="btn pri" data-act="approve">✓ ${m.role >= 3 ? "Duyệt kiểm soát + final" : "Duyệt kiểm soát → chuyển final"}</button><button class="btn" data-act="return">↩ Trả lại</button></div>
+        <label class="f"><span>Hoặc chuyển cho người kiểm soát khác (cấp 2 / 3)</span>${personSel("wf_fwd", fwd, "", "— Chọn người —")}</label>
+        <div class="arow"><button class="btn" data-act="forward">↪ Chuyển người khác</button></div></div>`;
+    }
+    if (st === "final" && m && m.role >= 3) rv = `<div class="arow"><button class="btn pri" data-act="final">✓ Duyệt final (cho in, cho tải)</button><button class="btn" data-act="return">↩ Trả lại</button></div>`;
+    if (st === "done" && m && m.role >= 3) rv = `<div class="arow"><button class="btn" data-act="unapprove">Huỷ duyệt</button></div>`;
+    const L = lv1(), ok = isFinal(rec), fl = rec.summary && !rec.summary.pass;
+    const exp = ok ? `<button class="btn pri" data-pdf="cert">Chứng chỉ <small>2 trang</small></button>
         ${L ? `<button class="btn" data-act="viewqtg">Biên bản QTG <small>chỉ xem</small></button>`
         : `<button class="btn" data-pdf="qtg">Biên bản QTG <small>PDF</small></button>
         <button class="btn" data-pdf="all">Trọn bộ <small>QTG + GCN</small></button>
         <button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`}
-        <button class="btn wide2" data-act="preview">Xem trước trọn bộ</button></div></div>
+        <button class="btn wide2" data-act="preview">Xem trước trọn bộ</button>`
+      : `<button class="btn wide2" data-act="preview">Xem trước trọn bộ <small>(chưa được in / tải)</small></button>${L ? "" : `<button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`}`;
+    return `<div class="acts">
+      <div class="agrp"><div class="alab">Hồ sơ</div><div class="arow">
+        <button class="btn pri" data-act="save">💾 Lưu hồ sơ</button><button class="btn" data-act="new">＋ Hồ sơ mới</button></div></div>
+      <div class="agrp"><div class="alab">Duyệt</div><div class="astat">${stHtml}</div>${ret}${rv}</div>
+      ${fl ? `<div class="hint bad">⚠ KHÔNG ĐẠT${rec.summary.why ? ": " + esc(rec.summary.why) : ""}. Không cấp số, không xuất chứng chỉ; chỉ có Biên bản QTG ghi nhận kết quả.</div>` : ""}
+      <div class="agrp"><div class="alab">Xuất tài liệu${ok ? "" : " – chỉ in / tải sau khi duyệt final"}</div><div class="agrid">${exp}</div></div>
     </div>`;
+  }
+  /* ---------- luồng duyệt 2 bước (NGOC 10/11/2026, v49) ----------
+   * Người nhập chọn Người kiểm soát (cấp 2/3) → Chuyển duyệt. Người kiểm soát: Duyệt và chuyển người duyệt final (cấp 3), hoặc chuyển
+   * cho cấp 2/3 khác, hoặc trả lại. Cấp 3 duyệt final → mới cho in / tải. Ai nhận hồ sơ thì được thêm vào rec.viewers: máy chủ chỉ cho
+   * người nhập, người trong viewers và cấp 3 đọc / sửa hồ sơ. Hồ sơ duyệt theo cách cũ (trước v49, không có flow2) coi như đã final. */
+  function wfCheck() {
+    if (!rec.h.tag) { toast("Nhập Tag trước"); return null; }
+    const c = compute(); if (!c.res) { toast(c.errors[0] || "Chưa đủ số liệu"); return null; }
+    if (!rec.sig.inspector) { toast("Chưa có tên Kiểm định viên"); return null; }
+    return c;
+  }
+  function wfSave(msg) { rec.flow2 = true; if (rec.owner) addViewer(rec, rec.owner.id); saveRecord(true); persistCurrent(); renderEntry(); badge(); if (msg) toast(msg); }
+  const clearFlow = r => { delete r.submitted; delete r.approved; delete r.final; delete r.finalTo; };
+  function wf(act) {
+    const m = A.me(); if (!m) return;
+    const now = new Date().toISOString();
+    if (act === "submit") {
+      if (!wfCheck()) return;
+      const p = personByName(rec.sig.controller);
+      if (!p || p.role < 2) { toast("Chọn Người kiểm soát (cấp 2 / 3) trong danh sách trước khi chuyển duyệt"); focusPath("sig.controller"); return; }
+      if (p.id === m.id) { toast("Không tự chuyển duyệt cho chính mình – chọn người khác"); return; }
+      clearFlow(rec); delete rec.returned;
+      rec.submitted = { by: m.name, byId: m.id, at: now, to: { id: p.id, name: p.name } };
+      addViewer(rec, p.id); logAct(`Chuyển duyệt → ${p.name}`); wfSave(`Đã chuyển cho ${p.name}`);
+      if (!A.cloud()) submitReview();   // chế độ PIN trên máy (chưa có máy chủ): vẫn đóng gói file để gửi qua Zalo / email
+      return;
+    }
+    if (m.role < 2) return;
+    if (act === "forward") {
+      const p = people.find(x => x.id === ($("#wf_fwd") || {}).value);
+      if (!p) { toast("Chọn người kiểm soát để chuyển"); return; }
+      rec.submitted = { by: m.name, byId: m.id, at: now, to: { id: p.id, name: p.name } }; rec.sig.controller = p.name;
+      addViewer(rec, p.id); logAct(`Chuyển tiếp → ${p.name}`); wfSave(`Đã chuyển cho ${p.name}`); return;
+    }
+    if (act === "return") {
+      const note = prompt("Lý do trả lại (người nhập sẽ thấy):", ""); if (note == null) return;
+      clearFlow(rec); rec.returned = { by: m.name, at: now, note: note.trim() };
+      logAct("Trả lại" + (note.trim() ? ": " + note.trim() : "")); wfSave("Đã trả lại người nhập"); return;
+    }
+    if (act === "approve") {
+      if (!wfCheck()) return;
+      const ex = expiredUsed(rec); if (ex.length) { toast(`Không duyệt được: chuẩn ${ex.map(s => s.key).join(", ")} đã hết hạn`); return; }
+      if (rec.owner && rec.owner.id === m.id && m.role < 3) { toast("Không tự duyệt hồ sơ của chính mình"); return; }
+      let fin = null;
+      if (m.role < 3) { fin = people.find(x => x.id === ($("#wf_final") || {}).value && x.role >= 3); if (!fin) { toast("Chọn người duyệt final (cấp 3)"); return; } store.set("lastFinal", fin.id); }
+      rec.sig.controller = m.name; rec.approved = { by: m.name, byId: m.id, role: m.role, at: now }; delete rec.submitted;
+      if (!fin) { rec.final = { by: m.name, byId: m.id, at: now }; delete rec.finalTo; logAct("Duyệt kiểm soát + final"); wfSave("Đã duyệt final – được in / tải"); }
+      else { rec.finalTo = { id: fin.id, name: fin.name }; addViewer(rec, fin.id); logAct(`Duyệt kiểm soát → chờ final ${fin.name}`); wfSave(`Đã duyệt, chuyển ${fin.name} duyệt final`); }
+      return;
+    }
+    if (act === "final" && m.role >= 3) { if (!wfCheck()) return; rec.final = { by: m.name, byId: m.id, at: now }; delete rec.finalTo; logAct("Duyệt final"); wfSave("Đã duyệt final – được in / tải"); return; }
+    if (act === "unapprove" && m.role >= 3) { clearFlow(rec); logAct("Huỷ duyệt"); wfSave("Đã huỷ duyệt"); }
   }
   function logAct(act) { (rec.log = rec.log || []).push({ at: new Date().toISOString(), by: A.me() ? A.me().name : "", act }); }
   function approve(on) {
@@ -1117,8 +1222,9 @@
   }
   // Mọi chỉnh sửa số liệu sau khi duyệt đều huỷ duyệt
   function touched() {
-    if (rec.approved) { delete rec.approved; delete rec.submitted; logAct("Sửa sau duyệt – huỷ duyệt"); toast("Đã sửa: hồ sơ cần duyệt lại"); return true; }
-    if (rec.submitted) { delete rec.submitted; logAct("Sửa sau khi gửi duyệt"); toast("Đã sửa: cần Gửi duyệt lại"); }
+    if (rec.approved || rec.final) { clearFlow(rec); logAct("Sửa sau duyệt – huỷ duyệt"); toast("Đã sửa: hồ sơ cần chuyển duyệt lại"); return true; }
+    // người kiểm soát đang giữ hồ sơ được sửa số liệu rồi duyệt luôn; người khác sửa thì phải chuyển duyệt lại
+    if (rec.submitted && !(rec.submitted.to && A.me() && rec.submitted.to.id === A.me().id)) { delete rec.submitted; logAct("Sửa sau khi chuyển duyệt"); toast("Đã sửa: cần Chuyển duyệt lại"); }
     return false;
   }
   function rememberNames() {
@@ -1138,7 +1244,8 @@
       else { toast(`Không lưu: số ${rec.certNo} đã dùng cho ${dupNo.h.tag || "hồ sơ khác"} – nhập số khác`); return; }
     }
     rec.saved = true; rec.updated = new Date().toISOString();
-    rec.summary = c.res ? { pass: c.res.pass, U: summaryU(rec.type, c.res) } : null;
+    rec.summary = c.res ? { pass: c.res.pass, U: summaryU(rec.type, c.res), why: c.res.pass ? "" : failWhy(c) } : null;
+    if (rec.owner) addViewer(rec, rec.owner.id);
     const i = records.findIndex(r => r.id === rec.id);
     if (i >= 0) records[i] = clone(rec); else records.unshift(clone(rec));
     store.set("records", records); rememberNames(); if (quiet !== true) toast("Đã lưu " + rec.certNo);
@@ -1149,7 +1256,7 @@
     const c = compute();
     const s1 = standById(rec.h.stand1), s2 = standById(rec.h.stand2), s3 = standById(rec.h.stand3), T = rec.type;
     const exp = expiredUsed(rec);   // luôn đóng dấu, không phụ thuộc Cài đặt (NGOC 06/11/2026)
-    return { c, info: { stand1: s1, stand2: ["PT", "TT", "RTD", "TG", "TC"].includes(T) ? s2 : null, stand3: s3, heat: T === "TS" ? s1 : null, loc: recLoc(), draft: exp.length ? "CHUẨN HẾT HẠN, CẦN CẬP NHẬT" : (!rec.sig.inspector || !rec.sig.controller ? "CHƯA ĐỦ CHỮ KÝ" : (rec.approved ? "" : "CHƯA DUYỆT")) } };
+    return { c, info: { stand1: s1, stand2: ["PT", "TT", "RTD", "TG", "TC"].includes(T) ? s2 : null, stand3: s3, heat: T === "TS" ? s1 : null, loc: recLoc(), draft: exp.length ? "CHUẨN HẾT HẠN, CẦN CẬP NHẬT" : (!rec.sig.inspector || !rec.sig.controller ? "CHƯA ĐỦ CHỮ KÝ" : (isFinal(rec) ? "" : "CHƯA DUYỆT")) } };
   }
   function pagesHtml(which) {
     const { c, info } = docInfo();
@@ -1223,6 +1330,7 @@
   }
   const fileTag = () => `${(rec.certNo || "").replace(/[^\w.-]+/g, "_")}_${(rec.h.tag || "").replace(/[^\w.-]+/g, "_")}`;
   async function makePdf(which, htmlIn, nameIn, outSel) {
+    if (!htmlIn && which !== "unc" && !isFinal(rec)) { toast("Chỉ in / tải sau khi hồ sơ được duyệt final"); return; }
     if (!htmlIn && lv1()) { if (which === "qtg") { renderPreview("qtg"); return; } if (which === "all") which = "certunc"; if (which === "unc") { toast("Bảng Uncer chỉ dành cho Người kiểm soát / Trưởng phòng"); return; } }
     const html = htmlIn || pagesHtml(which); if (!html) return;
     const out = $(outSel || "#pdfout"); out.innerHTML = `<p class="mut">Đang tạo PDF…</p>`;
@@ -1240,7 +1348,6 @@
     const c = compute(); if (!c.res) { toast(c.errors[0] || "Chưa đủ số liệu"); return; }
     if (!rec.sig.inspector) { toast("Chưa có tên Kiểm định viên"); return; }
     const html = failed(c) ? "" : pagesHtml("certunc"); if (!html && !failed(c)) return;   // không đạt: chỉ gửi hồ sơ JSON, Uncer dựng lại từ JSON
-    const m = A.me(); rec.submitted = { by: m ? m.name : "", at: new Date().toISOString() }; logAct("Gửi duyệt"); saveRecord(true); persistCurrent();
     const out = $("#pdfout"); out.innerHTML = `<p class="mut">Đang đóng gói hồ sơ gửi duyệt…</p>`;
     try {
       const pdf = html ? new File([await buildPdf(html)], `GuiDuyet_${fileTag()}.pdf`, { type: "application/pdf" }) : null;
@@ -1249,7 +1356,7 @@
       const js = new File([JSON.stringify({ app: "lab-pvgas-services", kind: "review", records: [rec], photos }, null, 1)], `GuiDuyet_${fileTag()}.json`, { type: "application/json" });
       renderEntry();
       const o = $("#pdfout");
-      o.innerHTML = `<div class="pdfready"><b>Đã đánh dấu Chờ duyệt</b><span class="mut">${pdf ? esc(pdf.name) + " (" + (pdf.size / 1024).toFixed(0) + " KB) + " : ""}${esc(js.name)}</span>
+      o.innerHTML = `<div class="pdfready"><b>Đã chuyển duyệt – gói file để gửi kèm</b><span class="mut">${pdf ? esc(pdf.name) + " (" + (pdf.size / 1024).toFixed(0) + " KB) + " : ""}${esc(js.name)}</span>
         <div class="btns"><button class="btn pri" data-act="sendpkg">Chuyển cho người duyệt</button></div></div>`;
       lastPkg = pdf ? [pdf, js] : [js];
       sendPkg();
@@ -1280,50 +1387,67 @@
 
   /* ---------- records tab ---------- */
   let mineOnly = false;
+  const dmy = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ""); return m ? `${m[3]}/${m[2]}/${m[1]}` : "chưa có ngày"; };
+  const recDay = r => r.h.calDate || (r.updated || "").slice(0, 10);
+  const stageTag = r => { const [c, t] = STAGE[stage(r)]; return `<span class="${c}">${t}${stage(r) === "review" && r.submitted.to ? " · " + esc(r.submitted.to.name) : stage(r) === "final" && r.finalTo ? " · " + esc(r.finalTo.name) : ""}</span>`; };
+  const whyOf = r => (r.summary && r.summary.why) || failWhy(compute(r));
   function renderRecords() {
     const q = ($("#rq") && $("#rq").value || "").toLowerCase();
-    const m = A.me();
-    const list = records.filter(r => (!mineOnly || (m && r.owner && r.owner.id === m.id)) && (!q || [r.h.tag, r.certNo, r.h.model, r.h.location, r.h.locFree, r.owner ? r.owner.name : ""].join(" ").toLowerCase().includes(q)));
-    // Hàng chờ duyệt (cấp 2/3): hồ sơ cấp 1 đã Gửi duyệt nhảy lên đầu tab Hồ sơ (yêu cầu NGOC 01/11/2026)
-    const pend = A.can("approve") ? records.filter(r => r.submitted && !r.approved) : [];
+    const m = A.me(), vis = records.filter(visible);
+    const list = vis.filter(r => (!mineOnly || (m && r.owner && r.owner.id === m.id)) && (!q || [r.h.tag, r.certNo, r.h.model, r.h.location, r.h.locFree, r.owner ? r.owner.name : ""].join(" ").toLowerCase().includes(q)));
+    // Báo động hồ sơ KHÔNG ĐẠT (mọi cấp, trong phạm vi hồ sơ mình được xem)
+    const fails = vis.filter(isFail);
+    store.set("failSeen", Array.from(new Set(store.get("failSeen", []).concat(fails.map(r => r.id)))).slice(-500));
+    const failCard = fails.length ? `<div class="card failc"><h2>⚠ ${fails.length} hồ sơ KHÔNG ĐẠT</h2>
+      <p class="hint">Thiết bị không đạt: không cấp số, không xuất chứng chỉ; chỉ có Biên bản QTG ghi nhận kết quả (vẫn qua duyệt kiểm soát + final).</p>
+      ${fails.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> <span class="bad">Fail</span> ${stageTag(r)}<br>
+        <small class="bad">${esc(whyOf(r))}</small><br><small class="mut">${esc(r.owner ? r.owner.name : "—")} · ${esc(dmy(recDay(r)))} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)}</small></div>
+        <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở</button></div></div>`).join("")}</div>` : "";
+    // Hàng chờ mình duyệt (bước kiểm soát hoặc bước final)
+    const pend = vis.filter(myTurn);
     const byF = new Map(); pend.forEach(r => { const k = folderKey(r); if (!byF.has(k)) byF.set(k, []); byF.get(k).push(r); });
-    const queue = pend.length ? `<div class="card hl"><h2>⏳ Chờ duyệt <small>(${pend.length})</small></h2>
-      ${[...byF].map(([k, a]) => `<div class="qf"><b>📁 ${esc(a[0].owner ? a[0].owner.name : "Chưa rõ người nhập")}</b><small class="mut">${a.length} hồ sơ chờ duyệt</small>
+    const needFinal = m && m.role < 3 && pend.some(r => stage(r) === "review");
+    const queue = pend.length ? `<div class="card hl"><h2>📥 Chờ tôi duyệt <small>(${pend.length})</small></h2>
+      ${needFinal ? `<label class="f"><span>Người duyệt final (cấp 3) cho các hồ sơ duyệt cả gói</span>${personSel("apf_final", finals(), store.get("lastFinal", ""), "— Chọn người duyệt final —")}</label>` : ""}
+      ${[...byF].map(([k, a]) => `<div class="qf"><b>📁 ${esc(folderName(a[0]))}</b><small class="mut">${a.length} hồ sơ</small>
         <button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${a.length})</button></div>`).join("")}
-      <details class="qd"><summary>Xem từng hồ sơ</summary>${pend.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""}<br>
-        <small class="mut">${esc(r.certNo)} · ${esc(r.submitted.by)} gửi ${esc(new Date(r.submitted.at).toLocaleString("vi-VN", { hour12: false }))}</small></div>
+      <details class="qd" open><summary>Xem từng hồ sơ</summary>${pend.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} ${stageTag(r)}<br>
+        <small class="mut">${esc(r.certNo || "")} · ${esc(stage(r) === "final" ? r.approved.by + " đã duyệt kiểm soát" : r.submitted.by + " chuyển " + new Date(r.submitted.at).toLocaleString("vi-VN", { hour12: false }))}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở xem</button></div></div>`).join("")}</details></div>` : "";
-    $("#v-records").innerHTML = queue + `<div class="card"><h2>Hồ sơ đã lưu <small>(${records.length})</small></h2>
+    $("#v-records").innerHTML = failCard + queue + `<div class="card"><h2>Hồ sơ <small>(${vis.length})</small></h2>
+      <p class="hint">${m && m.role >= 3 ? "Cấp 3: xem toàn bộ hồ sơ." : "Chỉ hiện hồ sơ bạn nhập và hồ sơ được chuyển tới bạn duyệt."} Mỗi thư mục = Người nhập – ngày hiệu chuẩn. Viền xanh: đã duyệt final hết; viền vàng: còn chờ duyệt.</p>
       <input id="rq" placeholder="Tìm tag, số chứng chỉ, model, người nhập…" value="${esc(q)}">
-      <div class="btns"><button class="btn sm${mineOnly ? "" : " pri"}" data-r="all">Tất cả</button><button class="btn sm${mineOnly ? " pri" : ""}" data-r="mine">Hồ sơ của tôi</button></div>
+      <div class="btns"><button class="btn sm${mineOnly ? "" : " pri"}" data-r="all">Tất cả</button><button class="btn sm${mineOnly ? " pri" : ""}" data-r="mine">Hồ sơ tôi nhập</button></div>
       <div class="btns"><button class="btn pri" data-r="qcPT">Bảng kiểm tra PT (QC)</button><button class="btn pri" data-r="qcPS">Bảng kiểm tra PS (QC)</button></div><div id="qcout"></div>
       <div class="btns"><button class="btn" data-r="csv">Xuất danh mục CSV</button><button class="btn" data-r="backup">Sao lưu JSON</button><label class="btn">Nhập JSON<input type="file" id="imp" accept=".json,application/json" hidden></label></div>
-      ${list.length ? folders(list, r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} <span class="${r.approved ? "ok" : r.submitted ? "warn" : "mut"}">${r.approved ? "Đã duyệt" : r.submitted ? "Chờ duyệt" : "Chưa duyệt"}</span><br>
+      ${list.length ? folders(list, r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} ${stageTag(r)}<br>
         <small class="mut">${esc(r.certNo)} · ${esc(r.h.calDate)} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)} · U=${esc(r.summary ? r.summary.U : "—")} · Người nhập: ${esc(r.owner ? r.owner.name : "—")}${(r.photos || []).some(x => x.has) ? ` · 📷 ${(r.photos || []).filter(x => x.has).length}` : ""}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở</button><button class="btn sm" data-r="dup" data-id="${r.id}">Nhân bản</button>${A.can("deleteRecord") ? `<button class="btn sm" data-r="del" data-id="${r.id}">Xoá</button>` : ""}</div></div>`) : `<p class="mut">Chưa có hồ sơ.</p>`}</div>`;
     const imp = $("#imp"); if (imp) imp.onchange = importJson;
     $$("details.fold").forEach(d => d.addEventListener("toggle", () => { if (d.open) openFolders.add(d.dataset.f); else openFolders.delete(d.dataset.f); }));
     const rq = $("#rq"); rq.oninput = () => { const pos = rq.selectionStart; renderRecords(); const n = $("#rq"); n.focus(); n.setSelectionRange(pos, pos); };
+    badge();
   }
-  // Mỗi người nhập liệu một thư mục (yêu cầu NGOC 31/10/2026): tài khoản lưu hồ sơ chịu trách nhiệm hồ sơ trong thư mục mang tên mình.
-  // Thư mục của người đang đăng nhập đứng đầu và mở sẵn; hồ sơ cũ chưa có người nhập vào thư mục "Chưa rõ người nhập".
+  // Thư mục "Họ và Tên - dd/mm/yyyy" (NGOC 10/11/2026): người nhập + ngày hiệu chuẩn. Thư mục mới nhất đứng đầu, của mình trước.
   let openFolders = null;
-  const folderKey = r => r.owner ? r.owner.id || r.owner.name : "_none";
+  const folderKey = r => (r.owner ? r.owner.id || r.owner.name : "_none") + "|" + recDay(r);
+  const folderName = r => `${r.owner ? r.owner.name : "Chưa rõ người nhập"} - ${dmy(recDay(r))}`;
   function folders(list, row) {
     const m = A.me(), G = new Map();
-    list.forEach(r => { const k = folderKey(r); if (!G.has(k)) G.set(k, { name: r.owner ? r.owner.name : "Chưa rõ người nhập", items: [] }); G.get(k).items.push(r); });
-    const keys = [...G.keys()].sort((a, b) => (m && a === m.id ? -1 : m && b === m.id ? 1 : G.get(a).name.localeCompare(G.get(b).name, "vi")));
-    if (!openFolders) openFolders = new Set(m ? [m.id] : []);
-    return keys.map(k => { const f = G.get(k), n = f.items.length, ok = f.items.filter(r => r.approved).length;
-      return `<details class="fold" data-f="${esc(k)}"${openFolders.has(k) || keys.length === 1 ? " open" : ""}><summary>📁 <b>${esc(f.name)}</b>${m && k === m.id ? " <span class=\"tag\">của tôi</span>" : ""} <small class="mut">${n} hồ sơ · ${ok} đã duyệt</small></summary>
-        <div class="btns">${A.can("approve") && f.items.some(r => r.submitted && !r.approved) ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${f.items.filter(r => r.submitted && !r.approved).length})</button>` : ""}<button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button><button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button></div>
+    list.forEach(r => { const k = folderKey(r); if (!G.has(k)) G.set(k, { name: folderName(r), day: recDay(r), mine: !!(m && r.owner && r.owner.id === m.id), items: [] }); G.get(k).items.push(r); });
+    const keys = [...G.keys()].sort((a, b) => { const A1 = G.get(a), B1 = G.get(b); return (B1.mine - A1.mine) || (B1.day || "").localeCompare(A1.day || "") || A1.name.localeCompare(B1.name, "vi"); });
+    if (!openFolders) openFolders = new Set(keys.slice(0, 1));
+    return keys.map(k => { const f = G.get(k), n = f.items.length, ok = f.items.filter(isFinal).length, fl = f.items.filter(isFail).length, mq = f.items.filter(myTurn).length;
+      const cls = ok === n ? "done" : f.items.some(r => stage(r) !== "draft") ? "wait" : "";
+      return `<details class="fold ${cls}" data-f="${esc(k)}"${openFolders.has(k) || keys.length === 1 ? " open" : ""}><summary>📁 <b>${esc(f.name)}</b>${f.mine ? " <span class=\"tag\">của tôi</span>" : ""} <small class="mut">${n} hồ sơ · ${ok}/${n} đã duyệt final</small>${ok === n ? ' <span class="ok">✓ Đã duyệt</span>' : ""}${fl ? ` <span class="bad">⚠ ${fl} không đạt</span>` : ""}</summary>
+        <div class="btns">${mq ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${mq})</button>` : ""}<button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button><button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button></div>
         ${f.items.map(row).join("")}</details>`; }).join("");
   }
   function onRecordsClick(e) {
     const b = e.target.closest("button[data-r]"); if (!b) return;
     const r = records.find(x => x.id === b.dataset.id);
     if (b.dataset.r === "all" || b.dataset.r === "mine") { mineOnly = b.dataset.r === "mine"; renderRecords(); return; }
-    if (b.dataset.r === "open" && r) { rec = normalize(clone(r)); persistCurrent(); go("entry"); }
+    if (b.dataset.r === "open" && r && visible(r)) { rec = normalize(clone(r)); persistCurrent(); go("entry"); }
     if (b.dataset.r === "dup" && r) {
       rec = clone(r); rec.id = "r" + Date.now().toString(36); rec.fv = 2; rec.saved = false; rec.summary = null; rec.h.tag = ""; rec.h.serial = "";
       const b = newRecord(r.type);
@@ -1341,7 +1465,7 @@
     }
     if (b.dataset.r === "qcPT" || b.dataset.r === "qcPS") {
       const type = b.dataset.r.slice(2), q = ($("#rq") && $("#rq").value || "").toLowerCase();
-      const items = records.filter(x => x.type === type && (!q || [x.h.tag, x.certNo, x.h.model, x.h.location, x.h.locFree].join(" ").toLowerCase().includes(q)))
+      const items = records.filter(visible).filter(x => x.type === type && (!q || [x.h.tag, x.certNo, x.h.model, x.h.location, x.h.locFree].join(" ").toLowerCase().includes(q)))
         .map(x => { const c = compute(x); const s1 = standById(x.h.stand1), s2 = standById(x.h.stand2); return c.res ? { rec: Object.assign(clone(x), { s1key: s1 ? s1.key : x.h.stand1, s2key: s2 ? s2.key : x.h.stand2 }), res: c.res } : null; })
         .filter(Boolean).sort((a, z) => a.rec.certNo.localeCompare(z.rec.certNo));
       if (!items.length) { toast(`Chưa có hồ sơ ${type} tính được`); return; }
@@ -1352,8 +1476,8 @@
     if (b.dataset.r === "share") { sharePdf(); return; }
     if (b.dataset.r === "download") { downloadPdf(); return; }
     // backupf / csvf: chỉ hồ sơ trong thư mục của một người, tên file mang tên người đó
-    const fk = b.dataset.f, sel = fk ? records.filter(r => folderKey(r) === fk) : records;
-    const fname = fk ? "_" + ((sel[0] && sel[0].owner ? sel[0].owner.name : "ChuaRo").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").replace(/[^\w.-]+/g, "_")) : "";
+    const fk = b.dataset.f, vis = records.filter(visible), sel = fk ? vis.filter(r => folderKey(r) === fk) : vis;
+    const fname = fk ? "_" + ((sel[0] ? folderName(sel[0]) : "ChuaRo").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").replace(/[^\w.-]+/g, "_")) : "";
     if (b.dataset.r === "backup" || b.dataset.r === "backupf") {
       P.all().catch(() => ({})).then(all => {
         const photos = {}; Object.keys(all).forEach(k => { if (sel.some(r => k.startsWith(r.id + ":"))) photos[k] = all[k]; });
@@ -1370,17 +1494,28 @@
   // Duyệt cả gói (yêu cầu NGOC 01/11/2026): cấp 2/3 duyệt một lần mọi hồ sơ "Chờ duyệt" trong thư mục của một người.
   // Mỗi hồ sơ vẫn qua đủ kiểm tra như duyệt lẻ; hồ sơ thiếu số liệu bị bỏ qua và báo tên. Bấm 2 lần để xác nhận.
   function approveFolder(b) {
-    if (!A.can("approve")) return;
-    const list = records.filter(r => folderKey(r) === b.dataset.f && r.submitted && !r.approved);
+    const m = A.me(); if (!m || m.role < 2) return;
+    const list = records.filter(r => folderKey(r) === b.dataset.f && myTurn(r));
     if (!list.length) return;
+    let fin = null;
+    if (m.role < 3 && list.some(r => stage(r) === "review")) {
+      fin = people.find(x => x.id === ($("#apf_final") || {}).value && x.role >= 3);
+      if (!fin) { toast("Chọn người duyệt final (cấp 3) ở đầu thẻ Chờ tôi duyệt"); return; }
+      store.set("lastFinal", fin.id);
+    }
     if (!b.dataset.armed) { b.dataset.armed = 1; const t = b.textContent; b.textContent = `Xác nhận duyệt ${list.length} hồ sơ?`; b.classList.add("danger"); setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = t; b.classList.remove("danger"); } }, 4000); return; }
-    const m = A.me(), now = new Date().toISOString(), skip = [];
+    const now = new Date().toISOString(), skip = [];
     let n = 0;
     list.forEach(r => {
       const c = compute(r);
       if (!r.h.tag || !c.res || !r.sig.inspector || expiredUsed(r).length) { skip.push(r.h.tag || r.certNo || "?"); return; }
-      r.sig.controller = m.name; r.approved = { by: m.name, role: m.role, at: now, batch: true }; delete r.submitted;
-      (r.log = r.log || []).push({ at: now, by: m.name, act: "Duyệt (cả gói)" }); r.updated = now; n++;
+      const lg = (r.log = r.log || []);
+      if (stage(r) === "review") {
+        r.sig.controller = m.name; r.approved = { by: m.name, byId: m.id, role: m.role, at: now, batch: true }; delete r.submitted;
+        if (fin) { r.finalTo = { id: fin.id, name: fin.name }; addViewer(r, fin.id); lg.push({ at: now, by: m.name, act: `Duyệt kiểm soát (cả gói) → chờ final ${fin.name}` }); }
+        else { r.final = { by: m.name, byId: m.id, at: now, batch: true }; lg.push({ at: now, by: m.name, act: "Duyệt kiểm soát + final (cả gói)" }); }
+      } else { r.final = { by: m.name, byId: m.id, at: now, batch: true }; delete r.finalTo; lg.push({ at: now, by: m.name, act: "Duyệt final (cả gói)" }); }
+      r.flow2 = true; r.updated = now; n++;
       if (rec && rec.id === r.id) rec = normalize(clone(r));
     });
     store.set("records", records); persistCurrent(); renderRecords();
@@ -1615,12 +1750,18 @@
       getShared: k => k === "stands" ? stands : settings,
       setShared: (k, v) => { fromCloud = true; if (k === "stands") { stands = v; store.set("stands", stands); } else { settings = deepMerge(SEED.settings, v); settings.ver = SEED.settings.ver; store.set("settings", settings); } fromCloud = false; },
       onRemote: () => {
+        badge();
         if (curView !== "entry") { VIEWS[curView](); return; }
         const r = rec.saved && records.find(x => x.id === rec.id);
         if (r && (r.updated || "") > (rec.updated || "")) { rec = normalize(clone(r)); persistCurrent(); renderEntry(); toast("Hồ sơ vừa được cập nhật từ máy khác"); }
       }
     });
-    A.start(m => { if (!rec.saved) { rec.owner = { id: m.id, name: m.name }; rec.sig.inspector = m.name; } go("entry"); });   // an unsaved draft belongs to whoever is logged in   // nothing renders before PIN login
+    A.start(m => {
+      if (rec.saved && !visible(rec)) rec = newRecord(rec.type || "PT");   // máy dùng chung: không mở tiếp hồ sơ của người khác
+      if (!rec.saved) { rec.owner = { id: m.id, name: m.name }; rec.sig.inspector = m.name; }
+      go("entry"); badge();
+      loadPeople().then(() => { if (curView === "entry") renderEntry(); });
+    });   // an unsaved draft belongs to whoever is logged in   // nothing renders before PIN login
     // New version: check sw.js on every open, and reload once when the new worker takes over (unsaved drafts are kept in lab.current)
     if ("serviceWorker" in navigator && location.protocol === "https:") {
       const had = !!navigator.serviceWorker.controller;

@@ -184,3 +184,39 @@ grant usage on schema public to anon, authenticated;
 grant select, update on public.profiles to authenticated;
 grant select, insert, update on public.records to authenticated;
 grant select, insert, update on public.shared to authenticated;
+
+-- 8. Luồng duyệt 2 bước + phân quyền xem hồ sơ (10/11/2026, app v49) -------------------------------------------
+-- Cấp 1/2 chỉ đọc / sửa hồ sơ mình nhập và hồ sơ được chuyển tới mình (cột viewers); cấp 3 xem tất cả.
+-- Chỉ cấp 3 được ghi bước "final" (sau đó mới in / tải); cấp 1 không được duyệt, không được xoá (như cũ).
+alter table public.records add column if not exists viewers uuid[] not null default '{}';
+create index if not exists records_viewers on public.records using gin (viewers);
+
+create or replace function public.guard_records() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if public.my_role() < 2 then
+    if new.deleted then raise exception 'Chỉ cấp 2/3 được xoá hồ sơ'; end if;
+    if new.data->'approved' is not null and new.data->'approved' <> 'null'::jsonb
+       and (tg_op = 'INSERT' or (new.data->'approved') is distinct from (old.data->'approved')) then
+      raise exception 'Cấp 1 không được duyệt hồ sơ';
+    end if;
+  end if;
+  if public.my_role() < 3 and new.data->'final' is not null and new.data->'final' <> 'null'::jsonb
+     and (tg_op = 'INSERT' or (new.data->'final') is distinct from (old.data->'final')) then
+    raise exception 'Chỉ cấp 3 được duyệt final';
+  end if;
+  new.updated_at := clock_timestamp();
+  new.updated_by := auth.uid();
+  return new;
+end $$;
+
+drop policy if exists "rec read" on public.records;
+create policy "rec read" on public.records for select to authenticated using (
+  public.my_role() >= 3 or (public.my_role() >= 1 and (owner = auth.uid() or auth.uid() = any(viewers))));
+drop policy if exists "rec insert" on public.records;
+create policy "rec insert" on public.records for insert to authenticated with check (
+  public.my_role() >= 3 or (public.my_role() >= 1 and owner = auth.uid()));
+drop policy if exists "rec update" on public.records;
+create policy "rec update" on public.records for update to authenticated
+  using (public.my_role() >= 3 or (public.my_role() >= 1 and (owner = auth.uid() or auth.uid() = any(viewers))))
+  with check (public.my_role() >= 3 or (public.my_role() >= 1 and (owner = auth.uid() or auth.uid() = any(viewers))));
