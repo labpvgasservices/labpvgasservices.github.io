@@ -177,3 +177,10 @@ revoke all on function public.my_pin_changed() from public, anon;
 grant execute on function public.admin_create_user(text, text, int, text) to authenticated;
 grant execute on function public.admin_set_pin(uuid, text) to authenticated;
 grant execute on function public.my_pin_changed() to authenticated;
+
+-- 7. Quyền bảng cho Data API (cấp tường minh, để app vẫn chạy kể cả khi tắt "Automatically expose new tables").
+-- RLS ở trên vẫn quyết định ai đọc / ghi được dòng nào; khách chưa đăng nhập (anon) không đọc được gì.
+grant usage on schema public to anon, authenticated;
+grant select, update on public.profiles to authenticated;
+grant select, insert, update on public.records to authenticated;
+grant select, insert, update on public.shared to authenticated;
