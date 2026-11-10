@@ -315,14 +315,16 @@ $$;
 revoke all on function public.cert_used(text) from public, anon;
 grant execute on function public.cert_used(text) to authenticated;
 
-do $$
-declare d text;
-begin
-  select string_agg(k || ' (' || n || ' hồ sơ)', ', ') into d from (
-    select public.cert_key(data->>'certNo') k, count(*) n from public.records
-    where not deleted and coalesce(trim(data->>'certNo'), '') <> '' group by 1 having count(*) > 1) x;
-  if d is not null then raise exception 'Đã có đuôi số trùng giữa các loại thiết bị, chưa bật chặn chung: %', d; end if;
-end $$;
-create unique index if not exists records_certkey_uq on public.records (public.cert_key(data->>'certNo'))
-  where not deleted and coalesce(trim(data->>'certNo'), '') <> '';
+-- Số cũ đã trùng giữa các loại từ trước v52 (VD CN.PT.26.9001 và CN.PS.26.9001 theo cách đánh số riêng từng loại):
+-- giữ nguyên, đánh dấu cert_legacy và không đưa vào chỉ mục chặn trùng. Hồ sơ mới vẫn bị chặn trùng như thường.
+alter table public.records add column if not exists cert_legacy boolean not null default false;
+update public.records set cert_legacy = true
+where not deleted and not cert_legacy and coalesce(trim(data->>'certNo'), '') <> ''
+  and public.cert_key(data->>'certNo') in (
+    select public.cert_key(data->>'certNo') from public.records
+    where not deleted and coalesce(trim(data->>'certNo'), '') <> '' group by 1 having count(*) > 1);
+drop index if exists public.records_certkey_uq;
+create unique index records_certkey_uq on public.records (public.cert_key(data->>'certNo'))
+  where not deleted and not cert_legacy and coalesce(trim(data->>'certNo'), '') <> '';
 drop index if exists public.records_certno_uq;
+-- Xem các hồ sơ số cũ bị trùng: select id, data->>'certNo' so, data#>>'{h,tag}' tag, data#>>'{owner,name}' nguoi from public.records where cert_legacy order by 2;
