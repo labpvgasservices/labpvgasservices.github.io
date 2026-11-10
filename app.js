@@ -1798,14 +1798,14 @@
     const rows = RANGES().slice().sort((a, b) => a.lo - b.lo).map(g => {
       const runs = freeRuns(g, used), nFree = runs.reduce((t, [a, b]) => t + b - a + 1, 0), size = g.hi - g.lo + 1;
       const sites = (g.locs || []).map(c => siteName(c)).join(", ");
-      return `<tr${nFree === 0 ? ' class="bad"' : nFree < size * 0.1 ? ' class="warnrow"' : ""}><td>${esc(g.grp)}</td><td>${esc(g.name)}${sites ? `<br><small class="mut">${esc(sites)}</small>` : ""}</td>
-        <td>${pad4(g.lo)}–${pad4(g.hi)}</td><td>${size - nFree}</td><td><b>${nFree}</b></td><td>${runs.length ? esc(runs.map(runTxt).join(", ")) : "HẾT SỐ"}</td></tr>`;
+      return `<tr${nFree === 0 ? ' class="bad"' : nFree < size * 0.1 ? ' class="warnrow"' : ""}><td><b>${esc(g.name)}</b> <small class="mut">· dải ${pad4(g.lo)}–${pad4(g.hi)}</small>${sites ? `<br><small class="mut">${esc(sites)}</small>` : ""}
+        <br>Số trống: <b>${runs.length ? esc(runs.map(runTxt).join(", ")) : "HẾT SỐ"}</b></td><td>${size - nFree}</td><td><b>${nFree}</b></td></tr>`;
     }).join("");
     const yOpts = [y0 - 1, y0, y0 + 1].map(y => `<option value="${y}"${y === frYY ? " selected" : ""}>20${y}</option>`).join("");
     return `<details class="card" id="frcard"${frOpen ? " open" : ""}><summary><h2>📋 Số tem / GCN còn trống theo site</h2></summary>
       <p class="hint">Các khoảng số chưa dùng trong từng dải (PT, PS, TT… dùng chung một dải; số đã cấp cho loại này thì loại khác không dùng lại). ${A.cloud() ? "Tính trên toàn hệ thống (máy chủ) + hồ sơ trên máy này." : "Chỉ tính hồ sơ trên máy này."} PG (N256…) không tính ở đây.</p>
       <div class="btns"><label class="f"><span>Năm</span><select id="fryy">${yOpts}</select></label>${A.cloud() ? '<button class="btn sm" data-t="frreload">↻ Tải lại từ máy chủ</button>' : ""}</div>
-      <div class="tblwrap"><table class="entry rgt"><thead><tr><th>Khối</th><th>Site / công trình</th><th>Dải</th><th>Đã dùng</th><th>Còn trống</th><th>Khoảng số trống</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+      <div class="tblwrap"><table class="entry rgt"><thead><tr><th>Site / công trình</th><th>Đã dùng</th><th>Còn trống</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
   }
   function rangesCard() {
     const known = new Set(SEED.locations.map(l => l[0])), used = new Set(RANGES().flatMap(g => g.locs || []));
