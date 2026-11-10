@@ -15,7 +15,7 @@ Ghi chú
 - Bên trong, ID được đổi thành email nội bộ `<id>@lab-pvgas.local` (không gửi thư). Phải trùng `public.lab_domain()` trong setup.sql và `CONFIG.domain` trong cloud.js.
 - Danh sách thiết bị (devices.js) và thư viện chuẩn mặc định nằm sẵn trong mã app, không cần nhập vào Supabase.
 - Chống tạm dừng: workflow `.github/workflows/supabase-keepalive.yml` gọi máy chủ 2 lần/tuần.
-- Gói Free không có bản sao lưu tải về được: cấp 3 xuất Sao lưu JSON định kỳ (mỗi tuần) và cất ở máy / ổ công ty.
+- Gói Free không có bản sao lưu tải về được: cấp 3 vào Cài đặt › Sao lưu toàn bộ mỗi tuần (app nhắc khi quá 7 ngày), cất file ở ổ công ty + USB. Khôi phục bằng nút "Khôi phục từ file sao lưu".
 - App vẫn chạy offline; có mạng lại thì tự đồng bộ. Hai người sửa cùng một hồ sơ: bản lưu sau cùng thắng.
 - Số GCN tự động tính trên máy: nên đồng bộ (có mạng) trước khi tạo hồ sơ mới để không trùng số.
 
