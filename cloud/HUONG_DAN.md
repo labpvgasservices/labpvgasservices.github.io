@@ -18,3 +18,8 @@ Ghi chú
 - Gói Free không có bản sao lưu tải về được: cấp 3 xuất Sao lưu JSON định kỳ (mỗi tuần) và cất ở máy / ổ công ty.
 - App vẫn chạy offline; có mạng lại thì tự đồng bộ. Hai người sửa cùng một hồ sơ: bản lưu sau cùng thắng.
 - Số GCN tự động tính trên máy: nên đồng bộ (có mạng) trước khi tạo hồ sơ mới để không trùng số.
+
+Luồng duyệt 2 bước (v49, 10/11/2026)
+- Người nhập chọn Người kiểm soát (cấp 2/3) → Chuyển duyệt. Người kiểm soát: Duyệt kiểm soát và chọn người duyệt final (cấp 3), hoặc chuyển cho cấp 2/3 khác, hoặc Trả lại.
+- Cấp 3 Duyệt final → mới được in / tải PDF. Hồ sơ không đạt: không có chứng chỉ, chỉ có Biên bản QTG; báo động đỏ ở tab Hồ sơ.
+- Cấp 1/2 chỉ thấy hồ sơ mình nhập và hồ sơ được chuyển tới mình (máy chủ chặn bằng cột records.viewers); cấp 3 thấy tất cả.
