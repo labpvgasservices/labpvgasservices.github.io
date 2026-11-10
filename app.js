@@ -1419,7 +1419,7 @@
       <input id="rq" placeholder="Tìm tag, số chứng chỉ, model, người nhập…" value="${esc(q)}">
       <div class="btns"><button class="btn sm${mineOnly ? "" : " pri"}" data-r="all">Tất cả</button><button class="btn sm${mineOnly ? " pri" : ""}" data-r="mine">Hồ sơ tôi nhập</button></div>
       <div class="btns"><button class="btn pri" data-r="qcPT">Bảng kiểm tra PT (QC)</button><button class="btn pri" data-r="qcPS">Bảng kiểm tra PS (QC)</button></div><div id="qcout"></div>
-      <div class="btns"><button class="btn" data-r="csv">Xuất danh mục CSV</button><button class="btn" data-r="backup">Sao lưu JSON</button><label class="btn">Nhập JSON<input type="file" id="imp" accept=".json,application/json" hidden></label></div>
+      <div class="btns"><button class="btn" data-r="csv">Xuất danh mục CSV</button>${A.cloud() ? "" : `<button class="btn" data-r="backup">Sao lưu JSON</button><label class="btn">Nhập JSON<input type="file" id="imp" accept=".json,application/json" hidden></label>`}</div>
       ${list.length ? folders(list, r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} ${stageTag(r)}<br>
         <small class="mut">${esc(r.certNo)} · ${esc(r.h.calDate)} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)} · U=${esc(r.summary ? r.summary.U : "—")} · Người nhập: ${esc(r.owner ? r.owner.name : "—")}${(r.photos || []).some(x => x.has) ? ` · 📷 ${(r.photos || []).filter(x => x.has).length}` : ""}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở</button><button class="btn sm" data-r="dup" data-id="${r.id}">Nhân bản</button>${A.can("deleteRecord") ? `<button class="btn sm" data-r="del" data-id="${r.id}">Xoá</button>` : ""}</div></div>`) : `<p class="mut">Chưa có hồ sơ.</p>`}</div>`;
@@ -1440,7 +1440,7 @@
     return keys.map(k => { const f = G.get(k), n = f.items.length, ok = f.items.filter(isFinal).length, fl = f.items.filter(isFail).length, mq = f.items.filter(myTurn).length;
       const cls = ok === n ? "done" : f.items.some(r => stage(r) !== "draft") ? "wait" : "";
       return `<details class="fold ${cls}" data-f="${esc(k)}"${openFolders.has(k) || keys.length === 1 ? " open" : ""}><summary>📁 <b>${esc(f.name)}</b>${f.mine ? " <span class=\"tag\">của tôi</span>" : ""} <small class="mut">${n} hồ sơ · ${ok}/${n} đã duyệt final</small>${ok === n ? ' <span class="ok">✓ Đã duyệt</span>' : ""}${fl ? ` <span class="bad">⚠ ${fl} không đạt</span>` : ""}</summary>
-        <div class="btns">${mq ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${mq})</button>` : ""}<button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button><button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button></div>
+        <div class="btns">${mq ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${mq})</button>` : ""}<button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button>${A.cloud() ? "" : `<button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button>`}</div>
         ${f.items.map(row).join("")}</details>`; }).join("");
   }
   function onRecordsClick(e) {
@@ -1601,9 +1601,9 @@
     const sel = (lab, p, opts) => `<label class="f"><span>${lab}</span><select data-sp="${p}">${opts.map(([v, t]) => `<option value="${v}"${!!getPath(settings, p) === !!v ? " selected" : ""}>${t}</option>`).join("")}</select></label>`;
     const tail = `<div class="card"><h2>Tự kiểm tra công thức</h2><p class="hint">Chạy lại 2 ca thật từ file DGCP 10/2026 (PT-1506A, PSHH-0522) và so sánh từng số.</p>
         <div class="btns"><button class="btn pri" data-t="selftest">Chạy kiểm tra</button></div><div id="stout"></div></div>
-      <div class="card"><h2>Về ứng dụng</h2><p class="hint">LAB PVGAS Services · bản thử nghiệm PT, PS, PG, TS, TT, RTD, TG · chạy offline, dữ liệu chỉ lưu trên máy này (dùng Sao lưu JSON ở tab Hồ sơ).</p></div>`;
+      <div class="card"><h2>Về ứng dụng</h2><p class="hint">LAB PVGAS Services · bản thử nghiệm PT, PS, PG, TS, TT, RTD, TG · ${A.cloud() ? "dữ liệu đồng bộ qua máy chủ Supabase; vẫn nhập liệu được khi mất mạng, có mạng lại tự đồng bộ." : "chạy offline, dữ liệu chỉ lưu trên máy này (dùng Sao lưu JSON ở tab Hồ sơ)."}</p></div>`;
     if (!A.can("settings")) { $("#v-settings").innerHTML = A.accountCard() + (canCheck() ? checkCard() : "") + `<div class="card"><p class="hint">Cài đặt chứng chỉ chỉ dành cho Trưởng phòng / Quản trị (cấp 3).</p></div>` + tail; return; }
-    $("#v-settings").innerHTML = A.accountCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
+    $("#v-settings").innerHTML = A.accountCard() + backupCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
         ${f("Chức danh trái", "sig1Title")}${f("Tên", "sig1Name")}${f("Chức danh trái (EN)", "sig1TitleEn", 1)}
         ${f("Chức danh phải", "sig2Title")}${f("Tên", "sig2Name")}${f("Chức danh phải (EN)", "sig2TitleEn", 1)}
         ${f("Nơi cấp (dòng ngày)", "place")}${f("Chu kỳ HC (tháng)", "dueMonths")}
@@ -1670,11 +1670,41 @@
     const ks = p.split("."); const last = ks.pop(); const t = ks.reduce((a, k) => a[k], settings); t[last] = v;
     store.set("settings", settings);
   }
+  /* ---------- sao lưu định kỳ (cấp 3, NGOC 10/11/2026) ----------
+   * Mỗi tuần cấp 3 bấm Sao lưu toàn bộ: 1 file chứa mọi hồ sơ trên máy chủ + thư viện chuẩn + cài đặt + danh sách người dùng.
+   * Quá 7 ngày chưa sao lưu thì nhắc đỏ ở Cài đặt và nhắc khi đăng nhập. Ảnh bằng chứng nằm trong kho ảnh Supabase, không nằm trong file. */
+  const BK_DAYS = 7;
+  const bkAge = () => { const t = store.get("lastBackup", ""); return t ? Math.floor((Date.now() - new Date(t)) / 864e5) : null; };
+  function backupCard() {
+    if (!A.cloud() || !A.can("settings")) return "";
+    const age = bkAge(), late = age === null || age >= BK_DAYS;
+    return `<div class="card${late ? " failc" : ""}"><h2>💾 Sao lưu dữ liệu máy chủ</h2>
+      <p class="${late ? "bad" : "hint"}">${age === null ? "Máy này chưa sao lưu lần nào." : `Lần sao lưu gần nhất trên máy này: ${esc(new Date(store.get("lastBackup")).toLocaleString("vi-VN", { hour12: false }))} (${age} ngày trước).`}${late ? " Đã đến hạn sao lưu (mỗi 7 ngày)." : ""}</p>
+      <div class="btns"><button class="btn pri" data-t="bkall">⬇ Sao lưu toàn bộ (1 file)</button><label class="btn">Khôi phục từ file sao lưu<input type="file" id="bkrest" accept=".json,application/json" hidden></label></div>
+      <p class="hint">File gồm toàn bộ hồ sơ, thư viện chuẩn, cài đặt và danh sách người dùng (không có PIN). Lưu file vào ổ D:/ổ công ty và 1 USB, giữ ít nhất 8 bản gần nhất. Khôi phục: ghi đè hồ sơ trên máy chủ bằng nội dung trong file, chỉ dùng khi mất dữ liệu.</p></div>`;
+  }
+  async function backupNow(b) {
+    b.disabled = true; toast("Đang tải dữ liệu từ máy chủ…");
+    try {
+      const d = await LabCloud.backupAll();
+      await saveFile(new Blob([JSON.stringify(d)], { type: "application/json" }), `LAB_PVGAS_SaoLuu_${todayISO()}.json`);
+      store.set("lastBackup", new Date().toISOString()); toast(`Đã sao lưu ${d.records.length} hồ sơ`); renderSettings();
+    } catch (x) { toast("Không sao lưu được: " + (x.message || x)); b.disabled = false; }
+  }
+  function onRestoreFile(e) {
+    const f = e.target.files[0]; if (!f || !A.can("settings")) return;
+    f.text().then(async t => {
+      const d = JSON.parse(t);
+      if (!confirm(`Khôi phục ${(d.records || []).length} hồ sơ từ bản sao lưu ${d.at || ""}? Hồ sơ cùng mã trên máy chủ sẽ bị ghi đè.`)) return;
+      const n = await LabCloud.restoreAll(d); toast(`Đã khôi phục ${n} hồ sơ – đang đồng bộ`);
+    }).catch(x => toast("Không khôi phục được: " + (x.message || x)));
+  }
   function onSettingsClick(e) {
     if (e.target.closest("button[data-u]")) { A.onAccountClick(e, renderSettings, toast); return; }
     const b = e.target.closest("button[data-t]"); if (!b) return;
     if (b.dataset.t === "resetset" && A.can("settings")) { settings = clone(SEED.settings); store.set("settings", settings); renderSettings(); toast("Đã về mặc định"); }
     if (b.dataset.t === "selftest") $("#stout").innerHTML = selfTest();
+    if (b.dataset.t === "bkall") backupNow(b);
     if (b.dataset.t === "mocshow") { const i = $("#mockey"); i.type = i.type === "password" ? "text" : "password"; }
     if (b.dataset.t === "mocnew" && A.can("settings")) {
       if (settings.mocKey && !b.dataset.armed) { b.dataset.armed = 1; b.textContent = "Chắc chắn đổi? GCN cũ cần khóa cũ để kiểm tra"; return; }
@@ -1742,6 +1772,7 @@
     });
     $("#v-settings").addEventListener("input", onSettingsInput);
     $("#v-settings").addEventListener("change", onSettingsInput);
+    $("#v-settings").addEventListener("change", e => { if (e.target.id === "bkrest") onRestoreFile(e); });
     $("#v-settings").addEventListener("click", onSettingsClick);
     // Đồng bộ máy chủ (cloud.js): app trao quyền đọc/ghi dữ liệu cục bộ; thay đổi từ máy khác vẽ lại màn hình đang xem
     if (window.LabCloud) LabCloud.attach({
@@ -1760,6 +1791,7 @@
       if (rec.saved && !visible(rec)) rec = newRecord(rec.type || "PT");   // máy dùng chung: không mở tiếp hồ sơ của người khác
       if (!rec.saved) { rec.owner = { id: m.id, name: m.name }; rec.sig.inspector = m.name; }
       go("entry"); badge();
+      if (A.cloud() && A.can("settings") && (bkAge() === null || bkAge() >= BK_DAYS)) setTimeout(() => toast("💾 Đến hạn sao lưu dữ liệu – vào Cài đặt › Sao lưu toàn bộ"), 2600);
       loadPeople().then(() => { if (curView === "entry") renderEntry(); });
     });   // an unsaved draft belongs to whoever is logged in   // nothing renders before PIN login
     // New version: check sw.js on every open, and reload once when the new worker takes over (unsaved drafts are kept in lab.current)

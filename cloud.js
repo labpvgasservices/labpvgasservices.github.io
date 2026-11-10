@@ -222,5 +222,25 @@
     }
   }
   // Lần đầu nối máy chủ trên một máy đã có dữ liệu: mọi hồ sơ cũ được coi là "chưa gửi" và sẽ đẩy lên (cấp 3 đẩy tất cả)
-  window.LabCloud = { enabled, attach, start, stop, sync, schedule, deleted, signIn, signUp, signOut, currentProfile, changePassword, createUser, resetPin, listUsers, setRole, paint, pending, isUuid };
+  /* ---------- sao lưu / khôi phục toàn bộ (cấp 3, v50) ---------- */
+  // Gói Free không có bản sao lưu tải về được: cấp 3 tải 1 file chứa toàn bộ hồ sơ, thư viện chuẩn, cài đặt, danh sách người dùng (không có PIN).
+  async function backupAll() {
+    const c = client(), out = { app: "lab-pvgas-services", kind: "server-backup", at: new Date().toISOString(), records: [], shared: [], profiles: [] };
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await c.from("records").select("id,owner,viewers,data,deleted,updated_at").order("id").range(from, from + 999);
+      if (error) throw error; out.records.push(...(data || [])); if (!data || data.length < 1000) break;
+    }
+    const s = await c.from("shared").select("key,data,updated_at"); if (s.error) throw s.error; out.shared = s.data || [];
+    const p = await c.from("profiles").select("id,login,name,role,created_at"); if (p.error) throw p.error; out.profiles = p.data || [];
+    return out;
+  }
+  async function restoreAll(dump) {
+    if (!dump || dump.kind !== "server-backup") throw new Error("Không phải file sao lưu máy chủ");
+    const c = client(), recs = (dump.records || []).map(r => ({ id: r.id, owner: r.owner, viewers: r.viewers || [], data: r.data, deleted: !!r.deleted }));
+    for (let i = 0; i < recs.length; i += 200) { const { error } = await c.from("records").upsert(recs.slice(i, i + 200), { onConflict: "id" }); if (error) throw error; }
+    for (const s of dump.shared || []) { const { error } = await c.from("shared").upsert({ key: s.key, data: s.data }, { onConflict: "key" }); if (error) throw error; }
+    ls.set("cursor", "1970-01-01T00:00:00Z"); ls.set("sharedAt", {}); sync();
+    return recs.length;
+  }
+  window.LabCloud = { enabled, attach, start, stop, sync, schedule, deleted, backupAll, restoreAll, signIn, signUp, signOut, currentProfile, changePassword, createUser, resetPin, listUsers, setRole, paint, pending, isUuid };
 })();
