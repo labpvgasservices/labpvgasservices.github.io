@@ -135,6 +135,19 @@
       if (!part.length) continue;
       const rows = part.map(r => ({ id: r.id, owner: r.owner && isUuid(r.owner.id) ? r.owner.id : me.id, viewers: (r.viewers || []).filter(isUuid), data: r, deleted: false }));
       const { error } = await c.from("records").upsert(rows, { onConflict: "id" });
+      if (error && error.code === "23505") {
+        // trùng số GCN trên máy chủ (v51): đẩy từng hồ sơ, hồ sơ trùng giữ lại trên máy và báo người dùng, hồ sơ khác vẫn lên
+        const bad = [];
+        for (let j = 0; j < rows.length; j++) {
+          const r1 = await c.from("records").upsert([rows[j]], { onConflict: "id" });
+          if (r1.error && r1.error.code === "23505") { bad.push(part[j]); continue; }
+          if (r1.error) throw r1.error;
+          sent[part[j].id] = part[j].updated;
+        }
+        ls.set("sent", sent);
+        if (bad.length && app.onCertConflict) app.onCertConflict(bad);
+        continue;
+      }
       if (error) throw error;
       part.forEach(r => { sent[r.id] = r.updated; }); ls.set("sent", sent);
     }
@@ -242,5 +255,8 @@
     ls.set("cursor", "1970-01-01T00:00:00Z"); ls.set("sharedAt", {}); sync();
     return recs.length;
   }
-  window.LabCloud = { enabled, attach, start, stop, sync, schedule, deleted, backupAll, restoreAll, signIn, signUp, signOut, currentProfile, changePassword, createUser, resetPin, listUsers, setRole, paint, pending, isUuid };
+  /* ---------- số GCN duy nhất toàn hệ thống (v51) ---------- */
+  async function certNext(pre, lo, hi, id) { const { data, error } = await client().rpc("cert_next", { p_pre: pre, p_lo: lo, p_hi: hi, p_id: id || "" }); if (error) throw error; return data || 0; }
+  async function certWho(no, id) { const { data, error } = await client().rpc("cert_who", { p_no: no, p_id: id || "" }); if (error) throw error; return data || null; }
+  window.LabCloud = { enabled, attach, start, stop, sync, schedule, deleted, backupAll, restoreAll, certNext, certWho, signIn, signUp, signOut, currentProfile, changePassword, createUser, resetPin, listUsers, setRole, paint, pending, isUuid };
 })();
