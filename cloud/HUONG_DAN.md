@@ -17,9 +17,17 @@ Ghi chú
 - Chống tạm dừng: workflow `.github/workflows/supabase-keepalive.yml` gọi máy chủ 2 lần/tuần.
 - Gói Free không có bản sao lưu tải về được: cấp 3 vào Cài đặt › Sao lưu toàn bộ mỗi tuần (app nhắc khi quá 7 ngày), cất file ở ổ công ty + USB. Khôi phục bằng nút "Khôi phục từ file sao lưu".
 - App vẫn chạy offline; có mạng lại thì tự đồng bộ. Hai người sửa cùng một hồ sơ: bản lưu sau cùng thắng.
-- Số GCN tự động tính trên máy: nên đồng bộ (có mạng) trước khi tạo hồ sơ mới để không trùng số.
+- Số GCN tự chạy trong dải của công trình và hỏi máy chủ số lớn nhất đã cấp; máy chủ chặn trùng số (v51).
 
 Luồng duyệt 2 bước (v49, 10/11/2026)
 - Người nhập chọn Người kiểm soát (cấp 2/3) → Chuyển duyệt. Người kiểm soát: Duyệt kiểm soát và chọn người duyệt final (cấp 3), hoặc chuyển cho cấp 2/3 khác, hoặc Trả lại.
 - Cấp 3 Duyệt final → mới được in / tải PDF. Hồ sơ không đạt: không có chứng chỉ, chỉ có Biên bản QTG; báo động đỏ ở tab Hồ sơ.
 - Cấp 1/2 chỉ thấy hồ sơ mình nhập và hồ sơ được chuyển tới mình (máy chủ chặn bằng cột records.viewers); cấp 3 thấy tất cả.
+
+Dải số GCN / QTG theo công trình (v51, 10/11/2026)
+- Chạy `04_v51_so_gcn.sql` (hoặc mục 9 của setup.sql) trong SQL Editor TRƯỚC khi merge PR v51.
+- Bảng phân dải (anh Khai, 2025_Rev1) nằm ở Cài đặt › Dải số chứng chỉ; cấp 3 sửa từ/đến và mã công trình.
+- GCN và QTG cùng đuôi: CN.PT.26.2301 ↔ BB.PT.26.2301. "26" lấy theo năm của ngày hiệu chuẩn (2027 → 27).
+- Số ngoài dải, sai dạng/năm, hoặc đã có người dùng (app báo thiết bị, người nhập, tình trạng) → không chuyển duyệt / duyệt được.
+- Địa điểm gõ tay: chọn ô "Dải số chứng chỉ". Công trình chưa có dải: chỉ cảnh báo, vẫn kiểm trùng.
+

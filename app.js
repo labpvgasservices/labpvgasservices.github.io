@@ -137,7 +137,7 @@
         min: "", max: "", unit: T ? "°C" : (type === "PG" ? "bar" : "kPa"), tcType: "J", acc: type === "PT" ? 0.25 : type === "PS" ? 1 : "", calDate: todayISO(), issueDate: todayISO(),
         procedure: st.procedure, env: st.env, envOk: "1", stand1: "", stand2: type === "PT" ? (stands.find(s => s.kind === "e") || {}).id || "" : "",
         pset: "", unitPset: "kPa", psType: ["PS", "TS"].includes(type) ? "As Found" : "As Left", micro: "NC", dirQTG: "Rising", resolution: 0, note: "",
-        stand3: "", tset: "", scale: "", res: "", errFactor: "0.8", heightDiff: "0", verType: "Định kỳ", extCheck: "1", techCheck: "1", stamp: "", typeEN: "Spring", insul: "", sens: "0.385", indType: "Analog"
+        stand3: "", tset: "", scale: "", res: "", errFactor: "0.8", heightDiff: "0", verType: "Định kỳ", extCheck: "1", techCheck: "1", stamp: "", typeEN: "Spring", insul: "", sens: "0.385", indType: "Analog", rangeId: ""
       },
       pt: { points: ["", "", "", "", ""], rise: ["", "", "", "", ""], fall: ["", "", "", "", ""] },
       ps: { set: ["", "", "", "", ""], reset: ["", "", "", "", ""] },
@@ -178,7 +178,8 @@
     return l;
   }
   function makerSel(h, type = rec.type) { return h.makerSel || (makersFor(type).includes(h.maker) ? h.maker : (h.maker ? OTHER : "")); }
-  function yy() { const d = D.toDate(rec.h.calDate) || new Date(); return String(d.getFullYear()).slice(2); }
+  // "26" = năm 2026 theo Ngày hiệu chuẩn; sang năm 2027 tự thành "27"
+  function yy(r = rec) { const d = D.toDate(r.h.calDate) || new Date(); return String(d.getFullYear()).slice(2); }
   // PS: QTG ghi Áp suất tác động / Áp suất trả về theo chiều tác động -> P.High (tăng áp) / P.Low (giảm áp) cho sheet DLVN133
   /* Số chữ số thập phân chuẩn hiển thị được (yêu cầu 30/10/2026: số đọc chuẩn không được nhiều chữ số hơn màn hình của chuẩn).
    * Áp suất: màn hình có D chữ số (D = số chữ số phần nguyên của Max + số lẻ của độ phân giải trên GCN), giống bảng đơn vị của
@@ -277,12 +278,53 @@
     else suit(s1, "°C", mn, mx, mpe, "Chuẩn nhiệt", W);
   }
   function psHL(r) { const rising = r.h.dirQTG !== "Falling"; const S = r.ps.set.map(num), R = r.ps.reset.map(num); return rising ? { H: S, L: R } : { H: R, L: S }; }
+  /* ---------- dải số GCN / QTG theo công trình (bảng phân dải của anh Khai, NGOC 10/11/2026) ----------
+   * Mỗi công trình một dải đuôi số (GDC Phú Mỹ 2301–2500…); GCN và QTG cùng đuôi: CN.PT.26.2301 ↔ BB.PT.26.2301. Số tự chạy trong dải
+   * (theo loại + năm), không vượt dải; số trùng bị chặn trên toàn hệ thống (máy chủ kiểm tra, kể cả hồ sơ người khác mình không xem được). */
+  const RANGES = () => (settings.ranges || []).filter(g => g && g.id);
+  function rangeOf(r = rec) {
+    const h = r.h;
+    if (h.locMode === "free") return RANGES().find(g => g.id === h.rangeId) || null;
+    return h.location ? RANGES().find(g => (g.locs || []).includes(h.location)) || null : null;
+  }
+  function certPre(r = rec) { const S0 = settings[r.type], pg = r.type === "PG"; return `${S0.prefix}.${yy(r)}${pg ? S0.series || "" : ""}.`; }
+  const tailOf = (no, pre) => { no = String(no || "").trim().toUpperCase(); return no.startsWith(pre.toUpperCase()) ? parseInt(no.slice(pre.length), 10) : NaN; };
+  let srvMax = {};                       // pre|lo|hi → số lớn nhất máy chủ đã cấp trong dải (không tính hồ sơ đang mở)
   function autoCertNo() {
-    const S0 = settings[rec.type], pg = rec.type === "PG";
-    const pre = `${S0.prefix}.${yy()}${pg ? S0.series || "" : ""}.`;
-    let max = 0;
-    records.forEach(r => { if (r.id !== rec.id && r.type === rec.type && r.certNo && r.certNo.startsWith(pre)) { const n = parseInt(r.certNo.slice(pre.length), 10); if (n > max) max = n; } });
+    const pre = certPre(), g = rangeOf(), pg = rec.type === "PG", lo = g ? g.lo : 1, hi = g ? g.hi : 99999;
+    let max = lo - 1;
+    records.forEach(r => { if (r.id !== rec.id && r.certNo) { const n = tailOf(r.certNo, pre); if (n >= lo && n <= hi && n > max) max = n; } });
+    const k = `${pre}|${lo}|${hi}|${rec.id}`;
+    if (srvMax[k] != null) max = Math.max(max, srvMax[k]);
+    else if (A.cloud() && window.LabCloud) { srvMax[k] = null; LabCloud.certNext(pre, lo, hi, rec.id).then(v => { srvMax[k] = v || 0; if (rec.certAuto && rec.certNo && tailOf(rec.certNo, pre) <= v) { rec.certNo = autoCertNo(); const f = $("#f_certNo"); if (f) f.value = rec.certNo; persistCurrent(); } paintCert(); }).catch(() => { delete srvMax[k]; }); }
     return pre + String(max + 1).padStart(pg ? 5 : 4, "0");
+  }
+  // Kiểm tra số đang dùng: ngoài dải / trùng (trên máy này và trên máy chủ). Trả về danh sách lỗi chặn chuyển duyệt.
+  function certIssues(r = rec) {
+    const out = [], no = (r.certNo || "").trim(); if (!no || (r.summary && r.summary.pass === false)) return out;
+    const pre = certPre(r), g = rangeOf(r), n = tailOf(no, pre);
+    if (isNaN(n)) out.push(`Số ${no} không đúng dạng ${pre}xxxx (loại ${r.type}, năm 20${yy(r)})`);
+    else if (g && (n < g.lo || n > g.hi)) out.push(`Số tem ${no} NGOÀI DẢI của ${g.name}: chỉ được ${pad4(g.lo)}–${pad4(g.hi)}`);
+    if (!g) out.push(NORANGE + " – báo cấp 3 gắn dải ở Cài đặt › Dải số" + (r.h.locMode === "free" ? " (hoặc chọn ô Dải số)" : "") + "; vẫn được chuyển duyệt, chỉ kiểm trùng");
+    const dl = records.find(x => x.id !== r.id && (x.certNo || "").trim().toUpperCase() === no.toUpperCase());
+    if (dl) out.push(`Số ${no} đã dùng cho ${dl.h.tag || "hồ sơ khác"} (${dl.owner ? dl.owner.name : "—"}) – ${STAGE[stage(dl)][1]}`);
+    const sv = srvWho[no.toUpperCase() + "|" + r.id];
+    if (!dl && sv) out.push(`Số ${no} đã có người dùng cho thiết bị ${sv.tag || "?"} (${sv.owner || "—"}) – ${sv.stage}`);
+    return out;
+  }
+  const NORANGE = "Công trình này chưa có dải số";
+  const pad4 = n => String(n).padStart(4, "0");
+  let srvWho = {};
+  function checkCertServer(r = rec) {
+    const no = (r.certNo || "").trim(); if (!no || !A.cloud() || !window.LabCloud) return Promise.resolve(null);
+    const k = no.toUpperCase() + "|" + r.id;
+    return LabCloud.certWho(no, r.id).then(v => { if (v) srvWho[k] = v; else delete srvWho[k]; paintCert(); return v; }).catch(() => null);
+  }
+  function paintCert() {
+    const el = document.getElementById("certchk"); if (!el) return;
+    const g = rangeOf(), iss = certIssues();
+    el.innerHTML = (g ? `<span class="mut">Dải số ${esc(g.name)}: ${pad4(g.lo)}–${pad4(g.hi)} · QTG cùng số: ${esc((rec.certNo || "").replace(/^CN\./, "BB."))}</span>` : "")
+      + iss.map(t => `<br><b class="bad">⚠ ${esc(t)}</b>`).join("");
   }
   function getPath(o, p) { return p.split(".").reduce((a, k) => a == null ? a : a[k], o); }
   function setPath(o, p, v) { const ks = p.split("."); const last = ks.pop(); const t = ks.reduce((a, k) => a[k], o); t[last] = v; }
@@ -648,7 +690,8 @@
           ? fld("Địa điểm 2 – nơi lắp đặt", "h.locFree", { wide: 1, ph: "Theo gói thầu, VD: Giàn …" }) + fld("Cơ sở sử dụng (Customer)", "h.custFree", { wide: 1, ph: "Tên đơn vị sử dụng in trên chứng chỉ" })
           : fld("Khách hàng (Customer)", "h.cust", { options: custOpts, wide: 1 }) + fld("Công trình khí (Location)", "h.location", { options: locOpts, wide: 1 })
             + (L0 ? `<div class="f wide locprint"><span>In trên chứng chỉ</span><div>Cơ sở sử dụng: <b>${esc(L0.custVN || "—")}</b><br>Địa điểm lắp đặt: <b>${esc(L0.locVN)}</b></div></div>` : "")}
-        ${fld("Số chứng chỉ", "certNo", { ph: autoCertNo(), ro: !A.can("certNo") })}`;
+        ${h.locMode === "free" ? fld("Dải số chứng chỉ (địa điểm nhập tay)", "h.rangeId", { options: [["", "— chọn dải số —"]].concat(RANGES().map(g => [g.id, `${g.grp} · ${g.name} (${pad4(g.lo)}–${pad4(g.hi)})`])), wide: 1 }) : ""}
+        ${fld("Số chứng chỉ / số tem", "certNo", { ph: autoCertNo(), ro: !A.can("certNo") })}<div class="hint wide" id="certchk"></div>`;
     let dev = `
       <div class="grid">
         ${locHtml}
@@ -716,6 +759,7 @@
       <div id="preview"></div>`;
     if (!rec.certNo) rec.certNo = autoCertNo();
     $("#f_certNo").value = rec.certNo;
+    paintCert(); checkCertServer();
     renderResult();   // syncCertNo blanks the number when the result fails
     loadThumbs();
   }
@@ -989,7 +1033,7 @@
     setPath(rec, p, e.target.value);
     if (p === "h.tag") showSuggest(e.target);
     const wasApproved = touched();
-    if (p === "certNo") rec.certAuto = false;
+    if (p === "certNo") { rec.certAuto = false; clearTimeout(onInput._ct); onInput._ct = setTimeout(() => { paintCert(); checkCertServer(); }, 500); }
     if (p === "h.makerSel") { rec.h.maker = e.target.value === OTHER ? "" : e.target.value; renderEntry(); if (e.target.value === OTHER) focusPath("h.maker"); persistCurrent(); return; }
     if (p.startsWith("pt.points") || p.startsWith("pg.std") || p.startsWith("dpg.std") || p.startsWith("tt.nom") || p.startsWith("tg.nom") || p.startsWith("tc.nom")) rec.ptAuto = false;
     if (/^(tt|tg)\.(sr|sf)\.|^tc\.std\.|^rtd\.std\./.test(p) && rec.stdAuto) { rec.stdAuto = rec.stdAuto.filter(x => x !== p); e.target.classList.remove("auto"); }   // gõ tay → không tự điền đè nữa
@@ -997,9 +1041,9 @@
     if (p.startsWith("h.stand")) fillStd();
     if (["PT", "PG", "TT", "TG", "DPG", "TC", "RTD"].includes(rec.type) && (p === "h.min" || p === "h.max") && rec.ptAuto) { genPoints(); renderEntry(); focusPath(p); }
     else if (p === "h.psType" && rec.type === "TS") { renderEntry(); focusPath(p); }
-    else if (p === "h.unit" || p === "h.unitPset" || p === "h.description" || p === "h.calDate" || p === "h.dirQTG" || p === "h.location" || p === "h.cust" || p === "h.locFree" || p.startsWith("h.stand") || ["h.min", "h.max", "h.acc", "h.pset", "h.tset", "h.tcType", "h.sens"].includes(p)) {
-      if (p === "h.calDate" && rec.certAuto) rec.certNo = autoCertNo();
+    else if (p === "h.unit" || p === "h.unitPset" || p === "h.description" || p === "h.calDate" || p === "h.dirQTG" || p === "h.location" || p === "h.cust" || p === "h.rangeId" || p === "h.locFree" || p.startsWith("h.stand") || ["h.min", "h.max", "h.acc", "h.pset", "h.tset", "h.tcType", "h.sens"].includes(p)) {
       if (p === "h.cust") { const c = CUSTS.find(x => x.key === rec.h.cust); rec.h.location = c && c.locs.length === 1 ? c.locs[0][0] : ""; persistCurrent(); }
+      if (["h.calDate", "h.location", "h.cust", "h.rangeId"].includes(p) && rec.certAuto) rec.certNo = autoCertNo();
       renderEntry(); focusPath(p === "h.cust" && !rec.h.location ? "h.location" : p);
     } else renderResult();
     if (p.startsWith("pt.points") || p === "h.min" || p === "h.max") updateIdeal();
@@ -1166,9 +1210,14 @@
   }
   function wfSave(msg) { rec.flow2 = true; if (rec.owner) addViewer(rec, rec.owner.id); saveRecord(true); persistCurrent(); renderEntry(); badge(); if (msg) toast(msg); }
   const clearFlow = r => { delete r.submitted; delete r.approved; delete r.final; delete r.finalTo; };
-  function wf(act) {
+  async function wf(act) {
     const m = A.me(); if (!m) return;
     const now = new Date().toISOString();
+    if (["submit", "approve", "final"].includes(act)) {
+      const sv = await checkCertServer();   // số trùng trên toàn hệ thống (máy chủ)
+      if (sv && rec.certAuto) { srvMax = {}; rec.certNo = autoCertNo(); renderEntry(); toast(`Số cũ đã có người dùng cho ${sv.tag || "thiết bị khác"} – app đang lấy số mới, kiểm tra rồi bấm lại`); return; }
+      const iss = certIssues().filter(t => !t.startsWith(NORANGE)); if (iss.length) { toast("Không chuyển / duyệt được: " + iss[0]); paintCert(); return; }
+    }
     if (act === "submit") {
       if (!wfCheck()) return;
       const p = personByName(rec.sig.controller);
@@ -1508,7 +1557,7 @@
     let n = 0;
     list.forEach(r => {
       const c = compute(r);
-      if (!r.h.tag || !c.res || !r.sig.inspector || expiredUsed(r).length) { skip.push(r.h.tag || r.certNo || "?"); return; }
+      if (!r.h.tag || !c.res || !r.sig.inspector || expiredUsed(r).length || certIssues(r).some(t => !t.startsWith(NORANGE))) { skip.push(r.h.tag || r.certNo || "?"); return; }
       const lg = (r.log = r.log || []);
       if (stage(r) === "review") {
         r.sig.controller = m.name; r.approved = { by: m.name, byId: m.id, role: m.role, at: now, batch: true }; delete r.submitted;
@@ -1519,7 +1568,7 @@
       if (rec && rec.id === r.id) rec = normalize(clone(r));
     });
     store.set("records", records); persistCurrent(); renderRecords();
-    toast(`Đã duyệt ${n} hồ sơ${skip.length ? ` · bỏ qua ${skip.length} (thiếu số liệu / chuẩn hết hạn): ${skip.join(", ")}` : ""}`);
+    toast(`Đã duyệt ${n} hồ sơ${skip.length ? ` · bỏ qua ${skip.length} (thiếu số liệu / chuẩn hết hạn / số tem ngoài dải hoặc trùng): ${skip.join(", ")}` : ""}`);
   }
   async function saveFile(blob, name) {
     const file = new File([blob], name, { type: blob.type });
@@ -1603,7 +1652,7 @@
         <div class="btns"><button class="btn pri" data-t="selftest">Chạy kiểm tra</button></div><div id="stout"></div></div>
       <div class="card"><h2>Về ứng dụng</h2><p class="hint">LAB PVGAS Services · bản thử nghiệm PT, PS, PG, TS, TT, RTD, TG · ${A.cloud() ? "dữ liệu đồng bộ qua máy chủ Supabase; vẫn nhập liệu được khi mất mạng, có mạng lại tự đồng bộ." : "chạy offline, dữ liệu chỉ lưu trên máy này (dùng Sao lưu JSON ở tab Hồ sơ)."}</p></div>`;
     if (!A.can("settings")) { $("#v-settings").innerHTML = A.accountCard() + (canCheck() ? checkCard() : "") + `<div class="card"><p class="hint">Cài đặt chứng chỉ chỉ dành cho Trưởng phòng / Quản trị (cấp 3).</p></div>` + tail; return; }
-    $("#v-settings").innerHTML = A.accountCard() + backupCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
+    $("#v-settings").innerHTML = A.accountCard() + backupCard() + rangesCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
         ${f("Chức danh trái", "sig1Title")}${f("Tên", "sig1Name")}${f("Chức danh trái (EN)", "sig1TitleEn", 1)}
         ${f("Chức danh phải", "sig2Title")}${f("Tên", "sig2Name")}${f("Chức danh phải (EN)", "sig2TitleEn", 1)}
         ${f("Nơi cấp (dòng ngày)", "place")}${f("Chu kỳ HC (tháng)", "dueMonths")}
@@ -1699,12 +1748,39 @@
       const n = await LabCloud.restoreAll(d); toast(`Đã khôi phục ${n} hồ sơ – đang đồng bộ`);
     }).catch(x => toast("Không khôi phục được: " + (x.message || x)));
   }
+  /* Bảng dải số (cấp 3): sửa tên, từ số, đến số, mã công trình gắn với dải (cách nhau dấu phẩy). Lưu vào Cài đặt chung, đồng bộ cho mọi người. */
+  let rgOpen = false;
+  function rangesCard() {
+    const known = new Set(SEED.locations.map(l => l[0])), used = new Set(RANGES().flatMap(g => g.locs || []));
+    const free = SEED.locations.filter(l => !l[5] && !used.has(l[0])).map(l => l[0]);
+    const rows = (settings.ranges || []).map((g, i) => `<tr><td><input data-rg="${i}.grp" value="${esc(g.grp)}" size="6"></td><td><input data-rg="${i}.name" value="${esc(g.name)}"></td>
+      <td><input data-rg="${i}.lo" value="${g.lo}" inputmode="numeric" size="5"></td><td><input data-rg="${i}.hi" value="${g.hi}" inputmode="numeric" size="5"></td>
+      <td><input data-rg="${i}.locs" value="${esc((g.locs || []).join(", "))}"${(g.locs || []).some(c => !known.has(c)) ? ' class="bad"' : ""}>${g.note ? `<br><small class="mut">${esc(g.note)}</small>` : ""}</td>
+      <td><button class="btn sm" data-t="rgdel" data-i="${i}">Xoá</button></td></tr>`).join("");
+    const ov = []; const R2 = RANGES().slice().sort((a, b) => a.lo - b.lo);
+    for (let i = 1; i < R2.length; i++) if (R2[i].lo <= R2[i - 1].hi) ov.push(`${R2[i - 1].name} ↔ ${R2[i].name}`);
+    return `<details class="card" id="rgcard"${rgOpen ? " open" : ""}><summary><h2>🔢 Dải số chứng chỉ / tem theo công trình <small>(${RANGES().length})</small></h2></summary>
+      <p class="hint">Theo bảng phân dải của anh Khai (2025_Rev1). Số GCN và QTG cùng đuôi trong dải của công trình; năm (26, 27…) tự lấy theo ngày hiệu chuẩn. Cột "Công trình" là mã trong danh mục, cách nhau dấu phẩy.</p>
+      ${ov.length ? `<p class="bad">⚠ Dải chồng nhau: ${esc(ov.join("; "))}</p>` : ""}
+      ${free.length ? `<p class="bad">Công trình chưa có dải: ${esc(free.join(", "))}</p>` : ""}
+      <div class="tblwrap"><table class="entry rgt"><thead><tr><th>Khối</th><th>Công trình / site</th><th>Từ</th><th>Đến</th><th>Công trình (mã)</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="btns"><button class="btn" data-t="rgadd">＋ Thêm dải</button></div></details>`;
+  }
+  function onRangeInput(e) {
+    const k = e.target.dataset.rg; if (!k || !A.can("settings")) return;
+    const [i, f] = k.split("."), g = settings.ranges[Number(i)]; if (!g) return;
+    const v = e.target.value;
+    g[f] = f === "lo" || f === "hi" ? (parseInt(v, 10) || 0) : f === "locs" ? v.split(",").map(x => x.trim()).filter(Boolean) : v;
+    store.set("settings", settings); srvMax = {};
+  }
   function onSettingsClick(e) {
     if (e.target.closest("button[data-u]")) { A.onAccountClick(e, renderSettings, toast); return; }
     const b = e.target.closest("button[data-t]"); if (!b) return;
     if (b.dataset.t === "resetset" && A.can("settings")) { settings = clone(SEED.settings); store.set("settings", settings); renderSettings(); toast("Đã về mặc định"); }
     if (b.dataset.t === "selftest") $("#stout").innerHTML = selfTest();
     if (b.dataset.t === "bkall") backupNow(b);
+    if (b.dataset.t === "rgadd" && A.can("settings")) { settings.ranges = (settings.ranges || []).concat([{ id: "rg" + Date.now().toString(36), grp: "", name: "Dải mới", lo: 0, hi: 0, locs: [], note: "" }]); store.set("settings", settings); rgOpen = true; renderSettings(); }
+    if (b.dataset.t === "rgdel" && A.can("settings")) { if (!b.dataset.armed) { b.dataset.armed = 1; b.textContent = "Xoá thật?"; return; } settings.ranges.splice(Number(b.dataset.i), 1); store.set("settings", settings); rgOpen = true; renderSettings(); }
     if (b.dataset.t === "mocshow") { const i = $("#mockey"); i.type = i.type === "password" ? "text" : "password"; }
     if (b.dataset.t === "mocnew" && A.can("settings")) {
       if (settings.mocKey && !b.dataset.armed) { b.dataset.armed = 1; b.textContent = "Chắc chắn đổi? GCN cũ cần khóa cũ để kiểm tra"; return; }
@@ -1772,7 +1848,7 @@
     });
     $("#v-settings").addEventListener("input", onSettingsInput);
     $("#v-settings").addEventListener("change", onSettingsInput);
-    $("#v-settings").addEventListener("change", e => { if (e.target.id === "bkrest") onRestoreFile(e); });
+    $("#v-settings").addEventListener("change", e => { if (e.target.id === "bkrest") onRestoreFile(e); if (e.target.dataset.rg) onRangeInput(e); });
     $("#v-settings").addEventListener("click", onSettingsClick);
     // Đồng bộ máy chủ (cloud.js): app trao quyền đọc/ghi dữ liệu cục bộ; thay đổi từ máy khác vẽ lại màn hình đang xem
     if (window.LabCloud) LabCloud.attach({
@@ -1780,6 +1856,7 @@
       setRecords: list => { records = list; fromCloud = true; store.set("records", records); fromCloud = false; },
       getShared: k => k === "stands" ? stands : settings,
       setShared: (k, v) => { fromCloud = true; if (k === "stands") { stands = v; store.set("stands", stands); } else { settings = deepMerge(SEED.settings, v); settings.ver = SEED.settings.ver; store.set("settings", settings); } fromCloud = false; },
+      onCertConflict: list => toast(`⚠ Số ${list.map(r => r.certNo).join(", ")} đã có người dùng trên hệ thống – mở hồ sơ ${list.map(r => r.h.tag).join(", ")} để lấy số khác`),
       onRemote: () => {
         badge();
         if (curView !== "entry") { VIEWS[curView](); return; }
