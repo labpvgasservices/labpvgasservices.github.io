@@ -357,6 +357,31 @@ label.f{position:relative}
 .sugi.on,.sugi:hover{background:var(--clay-soft)}
 option.optx{color:#999}.rec.stx{opacity:.55;filter:grayscale(1)}
 .dvh{margin:14px 0 4px;font:600 15px var(--f-head)}.rec.dv small{line-height:1.45}
+
+/* ---------- v55: bố cục máy tính (NGOC 11/11/2026). Điện thoại giữ nguyên. ---------- */
+.ecols{display:flex;flex-direction:column}.ecl,.ecr{display:contents}
+.o1{order:1}.o2{order:2}.o3{order:3}.o4{order:4}.o5{order:5}.o6{order:6}.o7{order:7}
+nav.tabs .lbl{display:none}
+@media (min-width:1100px){
+  :root{--side-w:196px}
+  body{padding-left:var(--side-w)}
+  header.top{padding-left:24px}
+  nav.tabs{top:0;bottom:0;left:0;right:auto;width:var(--side-w);display:flex;flex-direction:column;gap:2px;padding:14px 10px;border-top:0;border-right:1px solid var(--line);overflow-y:auto}
+  nav.tabs .lbl{display:block;font:600 13px var(--f-head);color:var(--ink);padding:4px 10px 14px}
+  nav.tabs button{height:42px;flex-direction:row;justify-content:flex-start;gap:10px;padding:0 12px;border-radius:10px;font:500 14px var(--f-ui);text-align:left}
+  nav.tabs button:hover{background:var(--sunk)}
+  nav.tabs button.on{background:var(--sunk);font-weight:600}
+  nav.tabs button svg{width:20px;height:20px;flex:none}
+  .bdg{position:static;margin-left:auto}
+  .wrap{max-width:1560px;padding:18px 24px 40px}
+  .toast{bottom:24px;left:calc(50% + var(--side-w) / 2)}
+  #wdock{bottom:16px;left:calc(var(--side-w) + 16px)}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+  .chips{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .ecols{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;align-items:start}
+  .ecl,.ecr{display:block;min-width:0}
+  .ecr{position:sticky;top:76px;max-height:calc(100vh - 92px);overflow-y:auto;padding-right:4px}
+}
 </style>
 <link rel="stylesheet" href="vendor/temml-local.css">
 </head>
@@ -372,6 +397,7 @@ option.optx{color:#999}.rec.stx{opacity:.55;filter:grayscale(1)}
   <section id="v-settings" hidden></section>
 </main>
 <nav class="tabs">
+  <div class="lbl">LAB PVGAS Services</div>
   <button data-v="entry" class="on"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 16l9.5-9.5 3 3L9 19H6z"/></svg>Nhập liệu</button>
   <button data-v="records"><svg viewBox="0 0 24 24"><path d="M5 4h10l4 4v12H5z M14 4v5h5 M8 13h8 M8 17h6"/></svg>Hồ sơ</button>
   <button data-v="devices"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10 M18 16l2 2 -2 2"/></svg>Thiết bị</button>
