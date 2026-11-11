@@ -766,16 +766,20 @@
         ${fld("Ghi chú QTG", "h.note", { wide: 1 })}
         <div class="hint wide">Trang 1 chứng chỉ ký: ${esc(settings.sig1Title)} <b>${esc(settings.sig1Name)}</b> và ${esc(settings.sig2Title)} <b>${esc(settings.sig2Name)}</b> (đổi trong Cài đặt).</div>
       </div><datalist id="names">${names.map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
-    $("#v-entry").innerHTML = `
-      <div class="card"><h2><i>1</i> Loại thiết bị</h2><div class="chips">${types}</div></div>
-      <div class="card" id="c2"><h2><i>2</i> Thông tin thiết bị <small>(phần ghi tay trên QTG)</small></h2>${dev}</div>
-      <div class="card" id="c3"><h2><i>3</i> Chuẩn sử dụng</h2>${std}</div>
-      <div class="card" id="c4"><h2><i>4</i> Số liệu đo ${ptsTitle}</h2>${pts}</div>
-      ${photoCard()}
-      <div class="card"><h2><i>5</i> Kết quả & ĐKĐBĐ</h2><div id="result"></div></div>
-      <div class="card"><h2><i>6</i> Ký tên & xuất hồ sơ</h2>${sig}
+    // Máy tính (≥ 1100 px): 2 cột – trái = thông tin (1, 2, 3, ảnh), phải = số đo + kết quả + ký (4, 5, 6).
+    // Điện thoại: .ecl/.ecr là display:contents, thứ tự thẻ giữ như cũ nhờ class o1…o8 (index.html).
+    $("#v-entry").innerHTML = `<div class="ecols"><div class="ecl">
+      <div class="card o1"><h2><i>1</i> Loại thiết bị</h2><div class="chips">${types}</div></div>
+      <div class="card o2" id="c2"><h2><i>2</i> Thông tin thiết bị <small>(phần ghi tay trên QTG)</small></h2>${dev}</div>
+      <div class="card o3" id="c3"><h2><i>3</i> Chuẩn sử dụng</h2>${std}</div>
+      <div class="o5">${photoCard()}</div>
+      </div><div class="ecr">
+      <div class="card o4" id="c4"><h2><i>4</i> Số liệu đo ${ptsTitle}</h2>${pts}</div>
+      <div class="card o6"><h2><i>5</i> Kết quả & ĐKĐBĐ</h2><div id="result"></div></div>
+      <div class="card o7"><h2><i>6</i> Ký tên & xuất hồ sơ</h2>${sig}
         ${ownerHtml()}${actionsHtml()}
         <div id="pdfout"></div></div>
+      </div></div>
       <div id="preview"></div>`;
     if (!rec.certNo) rec.certNo = autoCertNo();
     $("#f_certNo").value = rec.certNo;
