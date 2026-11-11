@@ -115,7 +115,7 @@
   const finals = () => people.filter(p => p.role >= 3);
   function addViewer(r, id) { if (!id) return; r.viewers = Array.isArray(r.viewers) ? r.viewers : []; if (!r.viewers.includes(id)) r.viewers.push(id); }
   const personByName = n => { n = String(n || "").trim().toLowerCase(); return n ? people.find(p => String(p.name || "").trim().toLowerCase() === n) : null; };
-  const personSel = (id, list, cur, ph) => `<select id="${id}"><option value="">${esc(ph)}</option>${list.map(p => `<option value="${esc(p.id)}"${cur === p.id ? " selected" : ""}>${esc(p.name)} (cấp ${p.role})</option>`).join("")}</select>`;
+  const personSel = (id, list, cur, ph) => `<select id="${id}"><option value="">${esc(ph)}</option>${list.map(p => `<option value="${esc(p.id)}"${cur === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select>`;
   function failWhy(c) {
     const w = (c.warns || []).filter(x => /^Không đạt/.test(x) && !/không cấp số/.test(x));
     return w.length ? w[0].replace(/^Không đạt:\s*/, "") : "Sai số + độ không đảm bảo đo vượt sai số cho phép (MPE)";
@@ -123,7 +123,7 @@
   // Ô Người kiểm soát: chọn từ danh sách cấp 2 / 3 (trừ người nhập hồ sơ)
   function ctlField() {
     const list = reviewers(rec.owner ? rec.owner.id : (A.me() || {}).id), cur = rec.sig.controller || "";
-    const opts = [["", list.length ? "— Chọn Người kiểm soát (cấp 2 / 3) —" : "— Chưa tải được danh sách người dùng —"]].concat(list.map(p => [p.name, `${p.name} (cấp ${p.role})`]));
+    const opts = [["", list.length ? "— Chọn Người kiểm soát —" : "— Chưa tải được danh sách người dùng —"]].concat(list.map(p => [p.name, p.name]));
     if (cur && !list.some(p => p.name === cur)) opts.push([cur, cur]);
     return fld("Người soát lại / kiểm tra (Người kiểm soát)", "sig.controller", { options: opts });
   }
@@ -1186,8 +1186,8 @@
   function actionsHtml() {
     const m = A.me(), st = stage(rec), sb = rec.submitted, a = rec.approved, f = rec.final;
     const stHtml = st === "done" ? `<span class="stp ok">✓ Đã duyệt final</span><span>${f ? `bởi <b>${esc(f.by)}</b> · ${when(f.at)}` : `bởi <b>${esc(a.by)}</b> · ${when(a.at)}`} · được in / tải</span>`
-      : st === "final" ? `<span class="stp wait">⏳ Chờ duyệt final</span><span>Kiểm soát <b>${esc(a.by)}</b> đã duyệt ${when(a.at)} → chờ <b>${esc(rec.finalTo ? rec.finalTo.name : "cấp 3")}</b> duyệt final</span>`
-      : st === "review" ? `<span class="stp wait">⏳ Chờ kiểm soát</span><span>${esc(sb.by)} chuyển ${when(sb.at)} → <b>${esc(sb.to ? sb.to.name : "cấp 2 / 3")}</b></span>`
+      : st === "final" ? `<span class="stp wait">⏳ Chờ duyệt final</span><span>Kiểm soát <b>${esc(a.by)}</b> đã duyệt ${when(a.at)} → chờ <b>${esc(rec.finalTo ? rec.finalTo.name : "người duyệt final")}</b> duyệt final</span>`
+      : st === "review" ? `<span class="stp wait">⏳ Chờ kiểm soát</span><span>${esc(sb.by)} chuyển ${when(sb.at)} → <b>${esc(sb.to ? sb.to.name : "người kiểm soát")}</b></span>`
       : `<span class="stp no">Chưa chuyển duyệt</span><span>Chọn Người kiểm soát ở trên rồi bấm Chuyển duyệt. Chỉ in / tải PDF sau khi duyệt final.</span>`;
     const ret = rec.returned && st === "draft" ? `<div class="hint bad">↩ ${esc(rec.returned.by)} trả lại ${when(rec.returned.at)}${rec.returned.note ? ": " + esc(rec.returned.note) : ""}</div>` : "";
     const mine = m && rec.owner && rec.owner.id === m.id;
@@ -1195,9 +1195,9 @@
     if (st === "draft" && m && (mine || !rec.owner || m.role >= 3)) rv = `<div class="arow"><button class="btn pri" data-act="submit">➜ Chuyển duyệt${rec.sig.controller ? " cho " + esc(rec.sig.controller) : ""}</button></div>`;
     if (st === "review" && m && m.role >= 2 && (!sb.to || sb.to.id === m.id || m.role >= 3) && !(mine && m.role < 3)) {
       const fwd = reviewers(m.id).filter(p => !rec.owner || p.id !== rec.owner.id);
-      rv = `<div class="wf">${m.role >= 3 ? "" : `<label class="f"><span>Người duyệt final (cấp 3)</span>${personSel("wf_final", finals(), (rec.finalTo || {}).id || store.get("lastFinal", ""), "— Chọn người duyệt final —")}</label>`}
+      rv = `<div class="wf">${m.role >= 3 ? "" : `<label class="f"><span>Người duyệt final</span>${personSel("wf_final", finals(), (rec.finalTo || {}).id || store.get("lastFinal", ""), "— Chọn người duyệt final —")}</label>`}
         <div class="arow"><button class="btn pri" data-act="approve">✓ ${m.role >= 3 ? "Duyệt kiểm soát + final" : "Duyệt kiểm soát → chuyển final"}</button><button class="btn" data-act="return">↩ Trả lại</button></div>
-        <label class="f"><span>Hoặc chuyển cho người kiểm soát khác (cấp 2 / 3)</span>${personSel("wf_fwd", fwd, "", "— Chọn người —")}</label>
+        <label class="f"><span>Hoặc chuyển cho người kiểm soát khác</span>${personSel("wf_fwd", fwd, "", "— Chọn người —")}</label>
         <div class="arow"><button class="btn" data-act="forward">↪ Chuyển người khác</button></div></div>`;
     }
     if (st === "final" && m && m.role >= 3) rv = `<div class="arow"><button class="btn pri" data-act="final">✓ Duyệt final (cho in, cho tải)</button><button class="btn" data-act="return">↩ Trả lại</button></div>`;
@@ -1241,7 +1241,7 @@
     if (act === "submit") {
       if (!wfCheck()) return;
       const p = personByName(rec.sig.controller);
-      if (!p || p.role < 2) { toast("Chọn Người kiểm soát (cấp 2 / 3) trong danh sách trước khi chuyển duyệt"); focusPath("sig.controller"); return; }
+      if (!p || p.role < 2) { toast("Chọn Người kiểm soát trong danh sách trước khi chuyển duyệt"); focusPath("sig.controller"); return; }
       if (p.id === m.id) { toast("Không tự chuyển duyệt cho chính mình – chọn người khác"); return; }
       clearFlow(rec); delete rec.returned;
       rec.submitted = { by: m.name, byId: m.id, at: now, to: { id: p.id, name: p.name } };
@@ -1266,7 +1266,7 @@
       const ex = expiredUsed(rec); if (ex.length) { toast(`Không duyệt được: chuẩn ${ex.map(s => s.key).join(", ")} đã hết hạn`); return; }
       if (rec.owner && rec.owner.id === m.id && m.role < 3) { toast("Không tự duyệt hồ sơ của chính mình"); return; }
       let fin = null;
-      if (m.role < 3) { fin = people.find(x => x.id === ($("#wf_final") || {}).value && x.role >= 3); if (!fin) { toast("Chọn người duyệt final (cấp 3)"); return; } store.set("lastFinal", fin.id); }
+      if (m.role < 3) { fin = people.find(x => x.id === ($("#wf_final") || {}).value && x.role >= 3); if (!fin) { toast("Chọn người duyệt final"); return; } store.set("lastFinal", fin.id); }
       rec.sig.controller = m.name; rec.approved = { by: m.name, byId: m.id, role: m.role, at: now }; delete rec.submitted;
       if (!fin) { rec.final = { by: m.name, byId: m.id, at: now }; delete rec.finalTo; logAct("Duyệt kiểm soát + final"); wfSave("Đã duyệt final – được in / tải"); }
       else { rec.finalTo = { id: fin.id, name: fin.name }; addViewer(rec, fin.id); logAct(`Duyệt kiểm soát → chờ final ${fin.name}`); wfSave(`Đã duyệt, chuyển ${fin.name} duyệt final`); }
@@ -1477,7 +1477,7 @@
     const byF = new Map(); pend.forEach(r => { const k = folderKey(r); if (!byF.has(k)) byF.set(k, []); byF.get(k).push(r); });
     const needFinal = m && m.role < 3 && pend.some(r => stage(r) === "review");
     const queue = pend.length ? `<div class="card hl"><h2>📥 Chờ tôi duyệt <small>(${pend.length})</small></h2>
-      ${needFinal ? `<label class="f"><span>Người duyệt final (cấp 3) cho các hồ sơ duyệt cả gói</span>${personSel("apf_final", finals(), store.get("lastFinal", ""), "— Chọn người duyệt final —")}</label>` : ""}
+      ${needFinal ? `<label class="f"><span>Người duyệt final cho các hồ sơ duyệt cả gói</span>${personSel("apf_final", finals(), store.get("lastFinal", ""), "— Chọn người duyệt final —")}</label>` : ""}
       ${[...byF].map(([k, a]) => `<div class="qf"><b>📁 ${esc(folderName(a[0]))}</b><small class="mut">${a.length} hồ sơ</small>
         <button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${a.length})</button></div>`).join("")}
       <details class="qd" open><summary>Xem từng hồ sơ</summary>${pend.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} ${stageTag(r)}<br>
@@ -1569,7 +1569,7 @@
     let fin = null;
     if (m.role < 3 && list.some(r => stage(r) === "review")) {
       fin = people.find(x => x.id === ($("#apf_final") || {}).value && x.role >= 3);
-      if (!fin) { toast("Chọn người duyệt final (cấp 3) ở đầu thẻ Chờ tôi duyệt"); return; }
+      if (!fin) { toast("Chọn người duyệt final ở đầu thẻ Chờ tôi duyệt"); return; }
       store.set("lastFinal", fin.id);
     }
     if (!b.dataset.armed) { b.dataset.armed = 1; const t = b.textContent; b.textContent = `Xác nhận duyệt ${list.length} hồ sơ?`; b.classList.add("danger"); setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = t; b.classList.remove("danger"); } }, 4000); return; }
