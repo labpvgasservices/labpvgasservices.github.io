@@ -1,5 +1,9 @@
 # LAB PVGAS Services
 
+App: **https://labpvgasservices.github.io/** · Repo: `labpvgasservices/labpvgasservices.github.io` (GitHub Pages từ `main`, thư mục gốc).
+Từ 11/11/2026 repo chuyển từ `ngoc-12/lab-pvgas-services`; link cũ `ngoc-12.github.io/lab-pvgas-services` không còn chạy.
+Mọi đường dẫn trong app là tương đối (`./`), nên chạy được cả ở gốc domain lẫn thư mục con.
+
 PWA (chạy offline, cài lên màn hình chính) để nhập số liệu QTG, tính độ không đảm bảo đo và xuất
 Giấy chứng nhận hiệu chuẩn + Biên bản QTG + Bảng tính ĐKĐBĐ dạng PDF (lưu vào Tệp / chia sẻ trên iPhone).
 
