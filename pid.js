@@ -99,26 +99,43 @@
     return synced;
   }
   // Cấp 3: đưa gói đang nạp từ file lên máy chủ cho mọi người. onProg(i, n)
+  // v70: ảnh đã có trên máy chủ cùng dung lượng thì bỏ qua (bấm lại là chạy tiếp chỗ dở); mỗi ảnh chờ tối đa 90 s, thử lại 3 lần.
+  let UP = null;
+  const busy = () => UP;
+  const withTimeout = (pr, ms, what) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(new Error("Quá " + ms / 1000 + " s không phản hồi khi gửi " + what + " – mạng chập chờn?")), ms))]);
+  async function put(st, path, blob, type) {
+    let last;
+    for (let k = 0; k < 3; k++) {
+      try { const { error } = await withTimeout(st.upload(path, blob, { upsert: true, contentType: type }), 90000, path); if (!error) return; last = new Error(error.message || String(error)); if (/row-level|policy|not found|bucket/i.test(last.message)) break; }
+      catch (e) { last = e; }
+      await new Promise(r => setTimeout(r, 1500 * (k + 1)));
+    }
+    throw last;
+  }
   async function upload(id, onProg) {
+    if (UP) throw new Error("Đang đưa một gói khác lên, chờ xong đã");
     const st = C(); if (!st) throw new Error("Chưa đăng nhập máy chủ");
     const pk = PK[id]; if (!pk) throw new Error("Không có gói " + id);
     const n = pk.drawings.length;
-    for (let i = 0; i < n; i++) {
-      const d = pk.drawings[i], b = await get(`img:${id}:${d.id}`);
-      if (!b) throw new Error("Thiếu ảnh " + d.id + " trên máy – nạp lại gói từ file");
-      const { error } = await st.upload(`${id}/${d.id}.png`, b, { upsert: true, contentType: b.type || "image/png" });
-      if (error) throw new Error(error.message); if (onProg) onProg(i + 1, n);
-    }
-    const ver = new Date().toISOString();
-    const ix = { format: pk.format, name: pk.name, made: pk.made, ver, sites: pk.sites, note: pk.note, drawings: pk.drawings.map(d => ({ ...d, file: d.id + ".png" })), tags: pk.tags, info: pk.info };
-    let r = await st.upload(`${id}/index.json`, new Blob([JSON.stringify(ix)], { type: "application/json" }), { upsert: true, contentType: "application/json" });
-    if (r.error) throw new Error(r.error.message);
-    const cat = (await catalog(st)).filter(c => c.id !== id);
-    cat.push({ id, name: pk.name, sites: pk.sites, made: pk.made, ver, nd: n, nt: Object.keys(pk.tags).length });
-    r = await st.upload("catalog.json", new Blob([JSON.stringify(cat)], { type: "application/json" }), { upsert: true, contentType: "application/json" });
-    if (r.error) throw new Error(r.error.message);
-    pk.src = "cloud"; pk.ver = ver; await tx("readwrite", s => s.put(PK, "packs")); synced = null;
-    return `Đã đưa gói "${pk.name}" lên máy chủ (${n} bản vẽ). Mọi người đăng nhập app sẽ tự thấy.`;
+    UP = { id, i: 0, n };
+    try {
+      let have = {};
+      try { const { data } = await withTimeout(st.list(id, { limit: 1000 }), 30000, "danh sách"); (data || []).forEach(o => { have[o.name] = o.metadata && o.metadata.size; }); } catch (e) { have = {}; }
+      for (let i = 0; i < n; i++) {
+        const d = pk.drawings[i], b = await get(`img:${id}:${d.id}`);
+        if (!b) throw new Error("Thiếu ảnh " + d.id + " trên máy – nạp lại gói từ file");
+        if (have[d.id + ".png"] !== b.size) await put(st, `${id}/${d.id}.png`, b, b.type || "image/png");
+        UP.i = i + 1; if (onProg) onProg(i + 1, n);
+      }
+      const ver = new Date().toISOString();
+      const ix = { format: pk.format, name: pk.name, made: pk.made, ver, sites: pk.sites, note: pk.note, drawings: pk.drawings.map(d => ({ ...d, file: d.id + ".png" })), tags: pk.tags, info: pk.info };
+      await put(st, `${id}/index.json`, new Blob([JSON.stringify(ix)], { type: "application/json" }), "application/json");
+      const cat = (await catalog(st)).filter(c => c.id !== id);
+      cat.push({ id, name: pk.name, sites: pk.sites, made: pk.made, ver, nd: n, nt: Object.keys(pk.tags).length });
+      await put(st, "catalog.json", new Blob([JSON.stringify(cat)], { type: "application/json" }), "application/json");
+      pk.src = "cloud"; pk.ver = ver; await tx("readwrite", s => s.put(PK, "packs")); synced = null;
+      return `Đã đưa gói "${pk.name}" lên máy chủ (${n} bản vẽ). Mọi người đăng nhập app sẽ tự thấy.`;
+    } finally { UP = null; }
   }
   // Cấp 3: gỡ gói khỏi máy chủ
   async function unpublish(id) {
@@ -218,5 +235,5 @@
     document.removeEventListener("keydown", V.el._key); V.el.remove(); V = null;
   }
 
-  window.LabPID = { init, load, remove, sync, upload, unpublish, packs, status, has, info, tripState, open, close, key: KEY };
+  window.LabPID = { init, load, remove, sync, upload, busy, unpublish, packs, status, has, info, tripState, open, close, key: KEY };
 })();
