@@ -259,5 +259,6 @@
   async function certNext(pre, lo, hi, id) { const { data, error } = await client().rpc("cert_next", { p_pre: pre, p_lo: lo, p_hi: hi, p_id: id || "" }); if (error) throw error; return data || 0; }
   async function certWho(no, id) { const { data, error } = await client().rpc("cert_who", { p_no: no, p_id: id || "" }); if (error) throw error; return data || null; }
   async function certUsed(pool) { const { data, error } = await client().rpc("cert_used", { p_pool: pool }); if (error) throw error; return data || []; }
-  window.LabCloud = { enabled, attach, start, stop, sync, schedule, deleted, backupAll, restoreAll, certNext, certWho, certUsed, signIn, signUp, signOut, currentProfile, changePassword, createUser, resetPin, listUsers, setRole, paint, pending, isUuid };
+  async function usage() { const { data, error } = await client().rpc("storage_usage"); if (error) throw error; return data; }
+  window.LabCloud = { usage, enabled, attach, start, stop, sync, schedule, deleted, backupAll, restoreAll, certNext, certWho, certUsed, signIn, signUp, signOut, currentProfile, changePassword, createUser, resetPin, listUsers, setRole, paint, pending, isUuid };
 })();
