@@ -554,6 +554,54 @@
     return D.rows.map((r, i) => { const o = { i }; D.f.forEach((k, j) => o[k] = r[j] == null ? "" : String(r[j])); o.key = tagKey(o.t); return o; });
   })();
   function tagKey(t) { return String(t || "").toUpperCase().replace(/[\s\-_./]/g, ""); }
+  /* ---------- Danh mục thiết bị tự cập nhật theo hồ sơ đã duyệt final (NGOC 12/11/2026) ----------
+     Thiết bị thay mới / đổi model, hãng, dải đo… trong hồ sơ → khi cấp 3 duyệt final, thông tin mới ghi đè vào danh mục (settings.devOver,
+     đồng bộ cho mọi người); tag chưa có trong danh mục thì thêm thiết bị mới. Danh sách gốc devices.js giữ nguyên, d.o0 = giá trị gốc. */
+  const DF = ["T", "d", "mk", "md", "sn", "mn", "mx", "u", "a", "ps", "pu"];
+  const DFLAB = { T: "Loại", d: "Mô tả", mk: "Hãng", md: "Model", sn: "S/N", mn: "Min", mx: "Max", u: "Đơn vị", a: "Sai số", ps: "Set", pu: "Đơn vị set" };
+  DEVS.forEach(d => { d.o0 = {}; DF.forEach(k => d.o0[k] = d[k]); });
+  const devKey = d => d.s + "|" + d.key;
+  function applyDevOver() {
+    while (DEVS.length && DEVS[DEVS.length - 1].isNew) DEVS.pop();
+    DEVS.forEach(d => { if (d.o0) DF.forEach(k => { d[k] = d.o0[k]; }); delete d.ov; });
+    const idx = new Map(DEVS.map(d => [devKey(d), d])), ov = (typeof settings !== "undefined" && settings.devOver) || {};
+    Object.keys(ov).forEach(k => {
+      const o = ov[k]; let d = idx.get(k);
+      if (!d) { d = { i: DEVS.length, isNew: true, s: o.s, t: o.t, key: tagKey(o.t), T: "", d: "", mk: "", md: "", sn: "", mn: "", mx: "", u: "", a: "", ps: "", pu: "", ar: "", by: "", c: "", cd: "", du: "", r: "", n: "Thêm từ hồ sơ đã duyệt", src: "Bổ sung từ hồ sơ" }; DEVS.push(d); idx.set(k, d); }
+      DF.forEach(f => { if (o.v && o.v[f] !== undefined) d[f] = o.v[f]; }); d.ov = o;
+    });
+    Object.keys(packCache).forEach(k => delete packCache[k]);
+  }
+  // Giá trị thiết bị lấy từ hồ sơ (chỉ ô có giá trị)
+  function devFromRec(r) {
+    const h = r.h, T = r.type, v = { T, mk: h.maker, md: h.model, sn: h.serial };
+    if (T === "PS") { v.ps = h.pset; v.pu = h.unitPset; } else if (T === "TS") v.ps = h.tset; else { v.mn = h.min; v.mx = h.max; v.u = h.unit; }
+    v.a = h.acc;
+    Object.keys(v).forEach(k => { v[k] = v[k] == null ? "" : String(v[k]).trim(); if (v[k] === "") delete v[k]; });
+    return v;
+  }
+  // Ghi đè danh mục theo 1 hồ sơ đã duyệt final. dry = chỉ kiểm tra xem có thay đổi không. Trả về true nếu có thay đổi.
+  function devSync(r, dry) {
+    if (!r || r.deleted || !isFinal(r) || r.h.locMode === "free" || !r.h.location || !r.h.tag) return false;
+    const key = r.h.location + "|" + tagKey(r.h.tag), d = DEVS.find(x => devKey(x) === key), v = devFromRec(r);
+    settings.devOver = settings.devOver || {}; const ex = settings.devOver[key];
+    if (ex && ex.cd && r.h.calDate && ex.cd > r.h.calDate) return false;   // đã có thông tin từ hồ sơ mới hơn
+    const ch = {}; Object.keys(v).forEach(k => { const old = d ? d[k] : ""; if (String(old) !== v[k] && !(k === "a" && Number(old) === Number(v[k]) && old !== "")) ch[k] = [d ? d[k] : "", v[k]]; });
+    if (d && !Object.keys(ch).length) return false;
+    if (dry) return true;
+    const m = A.me(), now = new Date().toISOString();
+    const o = { s: r.h.location, t: d ? d.t : r.h.tag, T: v.T, v: Object.assign({}, ex ? ex.v : {}, v), ch, rid: r.id, certNo: r.certNo || "", cd: r.h.calDate || "", at: now, by: m ? m.name : "", isNew: !d };
+    if (ex) { const p = Object.assign({}, ex); delete p.prev; o.prev = p; }
+    settings.devOver[key] = o; store.set("settings", settings); applyDevOver();
+    return true;
+  }
+  // Huỷ duyệt: trả danh mục về trạng thái trước khi hồ sơ này ghi đè
+  function devRevert(r) {
+    const o = settings.devOver || {}, key = r.h.location + "|" + tagKey(r.h.tag), ex = o[key];
+    if (!ex || ex.rid !== r.id) return;
+    if (ex.prev) o[key] = ex.prev; else delete o[key];
+    store.set("settings", settings); applyDevOver();
+  }
   const siteName = code => { const l = SEED.locations.find(x => x[0] === code); return l ? (SEED.locations.filter(x => x[1] === l[1]).length > 1 ? `${l[1]} (${code})` : l[1]) : `${code} (chưa có trong danh mục Công trình)`; };
   const devRange = d => d.mn !== "" || d.mx !== "" ? `${d.mn}÷${d.mx} ${d.u}` : (d.ps ? `Set ${d.ps} ${d.pu || d.u}` : "");
   // Hồ sơ đã lưu gần nhất của 1 thiết bị (cùng công trình + tag)
@@ -563,6 +611,7 @@
      hiệu chuẩn sau lần KĐHC trong danh sách thì có ✓ xanh, bấm "Thiết bị tiếp theo" để đi tiếp. ---------- */
   const dueMon = d => d.du ? d.du.slice(0, 7) : /^\d{4}-\d{2}/.test(d.cd || "") ? (Number(d.cd.slice(0, 4)) + 1) + d.cd.slice(4, 7) : "";
   const packCache = {};
+  applyDevOver();
   // Xếp tag: nhóm theo chữ đầu (PT, PDT, PS… theo ABC), trong nhóm theo số rồi chữ đuôi (PT-01 < PT-02 < PT-0705A < PT-0705B)
   const tagPre = t => (String(t).match(/[A-Za-z]+/) || ["#"])[0].toUpperCase();
   const tagRest = t => { const m = String(t).match(/[A-Za-z]+/); return (m ? String(t).slice(m.index + m[0].length) : String(t)).replace(/^[^0-9A-Za-z]+/, ""); };
@@ -700,7 +749,8 @@
     const cnt = s => DEVS.filter(d => d.s === s).length;
     const types = [...new Set(DEVS.map(d => d.T))];
     el.innerHTML = `<div class="card"><h2>Danh sách thiết bị theo công trình <small>(${DEVS.length} thiết bị · ${sites.length} công trình)</small></h2>
-      <p class="hint">Nguồn: ${esc((window.LabDevices || {}).note || "—")}. Bấm <b>Nhập hồ sơ</b> để mở hồ sơ mới đã điền sẵn thông số; mọi ô vẫn sửa tay được.</p>
+      <p class="hint">Nguồn: ${esc((window.LabDevices || {}).note || "—")}. Bấm <b>Nhập hồ sơ</b> để mở hồ sơ mới đã điền sẵn thông số; mọi ô vẫn sửa tay được. Khi cấp 3 duyệt final, thông tin thiết bị trong hồ sơ (hãng, model, S/N, dải, sai số) tự cập nhật vào danh mục này.</p>
+      ${A.can("settings") && devBulk(true) ? `<div class="btns"><button class="btn pri" data-dvsync="1">Cập nhật danh mục từ ${devBulk(true)} hồ sơ đã duyệt</button></div>` : ""}
       <div class="grid">
         <label class="f"><span>Công trình</span><select id="dvS"><option value="">Tất cả công trình</option>${sites.map(s => `<option value="${esc(s)}"${devQ.site === s ? " selected" : ""}>${esc(siteName(s))} (${cnt(s)})</option>`).join("")}</select></label>
         <label class="f"><span>Loại</span><select id="dvT"><option value="">Tất cả loại</option>${types.map(t => `<option${devQ.type === t ? " selected" : ""}>${t}</option>`).join("")}</select></label>
@@ -721,13 +771,20 @@
       return `<div class="rec dv"><div><b>${esc(d.t)}</b> <span class="tag">${d.T}</span> <small class="mut">${esc(d.d)}</small><br>
         <small>${esc([d.mk, d.md, d.sn && "S/N " + d.sn, devRange(d), d.a && "±" + d.a + "%"].filter(Boolean).join(" · ") || "—")}</small>
         ${d.ar || d.n ? `<br><small class="mut">${esc([d.ar && "Khu vực: " + d.ar, d.n].filter(Boolean).join(" · "))}</small>` : ""}
+        ${d.ov ? `<br><small class="ok">${d.isNew ? "Thiết bị thêm từ" : "Đã cập nhật theo"} hồ sơ ${esc(d.ov.certNo || "")} (${esc(d.ov.cd || "")})${d.isNew ? "" : ": " + esc(Object.entries(d.ov.ch || {}).map(([k, a]) => `${DFLAB[k] || k} ${a[0] || "—"} → ${a[1]}`).join("; "))}</small>` : ""}
         ${prev ? `<br><small class="mut">${prev}</small>` : ""}</div>
         <div class="ra"><button class="btn sm" data-dv="${d.i}">Nhập hồ sơ</button></div></div>`; };
     $("#dvL").innerHTML = (L.length ? [...G].map(([s, a]) => `<h3 class="dvh">${esc(siteName(s))} <small class="mut">(${L.filter(d => d.s === s).length})</small></h3>${a.map(row).join("")}`).join("") : `<p class="mut">Không có thiết bị khớp.</p>`)
       + (L.length > devQ.n ? `<div class="btns"><button class="btn" data-dvmore="1">Hiện thêm (${L.length - devQ.n} thiết bị còn lại)</button></div>` : "");
   }
+  // Cấp 3: các hồ sơ đã duyệt final từ trước (hoặc duyệt khi chưa có tính năng này) chưa được ghi vào danh mục
+  function devBulk(dry) {
+    const L = records.filter(r => !r.deleted && isFinal(r) && r.h.locMode !== "free" && r.h.location && r.h.tag).sort((a, b) => (a.h.calDate || "").localeCompare(b.h.calDate || "")); let n = 0;
+    L.forEach(r => { if (devSync(r, dry)) n++; }); return n;
+  }
   function onDevicesClick(e) {
     const b = e.target.closest("button"); if (!b) return;
+    if (b.dataset.dvsync) { const n = devBulk(false); toast(n ? `Đã cập nhật ${n} thiết bị trong danh mục theo hồ sơ đã duyệt` : "Danh mục đã khớp các hồ sơ đã duyệt"); renderDevices(); return; }
     if (b.dataset.dvmore) { devQ.n += 300; devList(); return; }
     if (b.dataset.dv == null) return;
     const d = DEVS[Number(b.dataset.dv)]; if (!d) return;
@@ -1314,7 +1371,7 @@
     if (!rec.sig.inspector) { toast("Chưa có tên Kiểm định viên"); return null; }
     return c;
   }
-  function wfSave(msg) { rec.flow2 = true; if (rec.owner) addViewer(rec, rec.owner.id); saveRecord(true); persistCurrent(); renderEntry(); badge(); if (msg) toast(msg); }
+  function wfSave(msg) { rec.flow2 = true; if (rec.owner) addViewer(rec, rec.owner.id); saveRecord(true); if (isFinal(rec) && A.can("settings") && devSync(rec)) msg = (msg || "") + " · đã cập nhật danh mục thiết bị"; persistCurrent(); renderEntry(); badge(); if (msg) toast(msg); }
   const clearFlow = r => { delete r.submitted; delete r.approved; delete r.final; delete r.finalTo; };
   async function wf(act) {
     const m = A.me(); if (!m) return;
@@ -1359,7 +1416,7 @@
       return;
     }
     if (act === "final" && m.role >= 3) { if (!wfCheck()) return; rec.final = { by: m.name, byId: m.id, at: now }; delete rec.finalTo; logAct("Duyệt final"); wfSave("Đã duyệt final – được in / tải"); return; }
-    if (act === "unapprove" && m.role >= 3) { clearFlow(rec); logAct("Huỷ duyệt"); wfSave("Đã huỷ duyệt"); }
+    if (act === "unapprove" && m.role >= 3) { devRevert(rec); clearFlow(rec); logAct("Huỷ duyệt"); wfSave("Đã huỷ duyệt"); }
   }
   function logAct(act) { (rec.log = rec.log || []).push({ at: new Date().toISOString(), by: A.me() ? A.me().name : "", act }); }
   function approve(on) {
@@ -1688,8 +1745,9 @@
       r.flow2 = true; r.updated = now; n++;
       if (rec && rec.id === r.id) rec = normalize(clone(r));
     });
+    let nd = 0; if (A.can("settings")) list.forEach(r => { if (devSync(r)) nd++; });
     store.set("records", records); persistCurrent(); renderRecords();
-    toast(`Đã duyệt ${n} hồ sơ${skip.length ? ` · bỏ qua ${skip.length} (thiếu số liệu / chuẩn hết hạn / số tem ngoài dải hoặc trùng): ${skip.join(", ")}` : ""}`);
+    toast(`Đã duyệt ${n} hồ sơ${nd ? ` · cập nhật ${nd} thiết bị trong danh mục` : ""}${skip.length ? ` · bỏ qua ${skip.length} (thiếu số liệu / chuẩn hết hạn / số tem ngoài dải hoặc trùng): ${skip.join(", ")}` : ""}`);
   }
   async function saveFile(blob, name) {
     const file = new File([blob], name, { type: blob.type });
@@ -2298,7 +2356,7 @@
       getRecords: () => records, normalize, photos: P, seedVersion: SEED.version,
       setRecords: list => { records = list; fromCloud = true; store.set("records", records); fromCloud = false; },
       getShared: k => k === "stands" ? stands : settings,
-      setShared: (k, v) => { fromCloud = true; if (k === "stands") { stands = v; store.set("stands", stands); } else { settings = fixRanges(deepMerge(SEED.settings, v), v && v.rangesVer); settings.ver = SEED.settings.ver; store.set("settings", settings); } fromCloud = false; },
+      setShared: (k, v) => { fromCloud = true; if (k === "stands") { stands = v; store.set("stands", stands); } else { settings = fixRanges(deepMerge(SEED.settings, v), v && v.rangesVer); settings.ver = SEED.settings.ver; store.set("settings", settings); applyDevOver(); } fromCloud = false; },
       onCertConflict: list => toast(`⚠ Số ${list.map(r => r.certNo).join(", ")} đã có người dùng trên hệ thống – mở hồ sơ ${list.map(r => r.h.tag).join(", ")} để lấy số khác`),
       onRemote: () => {
         badge();
