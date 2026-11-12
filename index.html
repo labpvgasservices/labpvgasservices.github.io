@@ -119,8 +119,9 @@ nav.tabs button{position:relative}.bdg{position:absolute;top:4px;left:50%;margin
 .pdfready{background:var(--result);border-radius:12px;padding:12px;margin-top:12px;display:flex;flex-direction:column;gap:2px;overflow-wrap:anywhere}
 .pv{overflow:hidden;position:relative;background:var(--sunk);border-radius:10px}
 .pv-in{transform-origin:0 0;width:794px}
-nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(7,1fr);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-auto-flow:column;grid-auto-columns:1fr;padding-bottom:env(safe-area-inset-bottom,0px)}
 nav.tabs button{height:var(--tabbar-h);border:0;background:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:500 11px var(--f-ui);cursor:pointer}
+nav.tabs button[hidden]{display:none}
 nav.tabs button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
 nav.tabs button.on{color:var(--clay)}
 .toast{position:fixed;left:50%;bottom:calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9;max-width:90vw}
@@ -394,6 +395,7 @@ nav.tabs .lbl{display:none}
   <section id="v-stands" hidden></section>
   <section id="v-formulas" hidden></section>
   <section id="v-refs" hidden></section>
+  <section id="v-report" hidden></section>
   <section id="v-settings" hidden></section>
 </main>
 <nav class="tabs">
@@ -404,6 +406,7 @@ nav.tabs .lbl{display:none}
   <button data-v="stands"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 13l3-3 M12 3v3"/></svg>Chuẩn</button>
   <button data-v="formulas"><svg viewBox="0 0 24 24"><path d="M4 5h9M4 5l6 7-6 7h9 M15 9l5 6 M20 9l-5 6"/></svg>Công thức</button>
   <button data-v="refs"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z M8.5 12l2.5 2.5 4.5-5"/></svg>Căn cứ</button>
+  <button data-v="report" hidden><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Báo cáo</button>
   <button data-v="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Cài đặt</button>
 </nav>
 <div id="toast" class="toast"></div>

@@ -1876,12 +1876,168 @@
     el.onclick = e => { const b = e.target.closest("[data-fj]"); if (!b) return; const d = $("#f-" + b.dataset.fj); d.open = true; d.scrollIntoView({ behavior: "smooth", block: "start" }); };
   }
   function renderRefs() { const m = A.me(); $("#v-refs").innerHTML = window.LabRefs.render(settings, m ? m.role : 0); }
-  const VIEWS = { entry: renderEntry, records: renderRecords, devices: renderDevices, stands: renderStands, formulas: renderFormulas, refs: renderRefs, settings: renderSettings };
+  /* ---------- Báo cáo (v56, NGOC 12/11/2026): chỉ cấp 3 / admin. Lọc theo công trình, loại, người nhập, gói hồ sơ, ngày, trạng thái;
+   * xem tổng số thiết bị đã làm; xuất Excel tổng hợp + chi tiết, danh sách theo mẫu DGCP và Excel Uncer riêng từng loại (ZIP). ---------- */
+  const REP = { site: "", type: "", owner: "", folder: "", from: "", to: "", status: "final" };
+  const repSite = r => (r.h.locMode === "free" ? r.h.locFree : r.h.location) || "(chưa chọn công trình)";
+  const repStat = r => { const s = stage(r); return s === "done" ? "Đã duyệt final" : s === "final" ? "Chờ duyệt final" : s === "review" ? "Chờ kiểm soát" : "Chưa chuyển duyệt"; };
+  const repNext = iso => { const m = /^(\d{4})-(\d{2})/.exec(iso || ""); if (!m) return ""; const d = new Date(Number(m[1]) + 1, Number(m[2]), 0); return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`; };
+  const repDate = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ""); return m ? `${m[3]}-${m[2]}-${m[1]}` : ""; };
+  const typeName = t => (TYPES.find(x => x[0] === t) || [t, t, t])[2];
+  function repList() {
+    return records.filter(r => {
+      if (REP.status === "final" && !isFinal(r)) return false;
+      if (REP.status === "pending" && (isFinal(r) || !r.submitted)) return false;
+      if (REP.status === "draft" && (isFinal(r) || r.submitted)) return false;
+      if (REP.site && repSite(r) !== REP.site) return false;
+      if (REP.type && r.type !== REP.type) return false;
+      if (REP.owner && (r.owner ? r.owner.id || r.owner.name : "") !== REP.owner) return false;
+      if (REP.folder && folderKey(r) !== REP.folder) return false;
+      const d = recDay(r); if (REP.from && d < REP.from) return false; if (REP.to && d > REP.to) return false;
+      return true;
+    }).sort((a, z) => repSite(a).localeCompare(repSite(z)) || a.type.localeCompare(z.type) || String(a.h.tag).localeCompare(String(z.h.tag), "vi", { numeric: true }));
+  }
+  const repRow = r => {
+    const h = r.h, set = r.type === "PS" ? [h.pset, h.unitPset] : r.type === "TS" ? [h.tset, "°C"] : ["", ""];
+    return { r, site: repSite(r), cust: (recLoc(r).custVN || ""), type: r.type, typeName: typeName(r.type), tag: h.tag || "", desc: h.description || "", maker: h.maker || "", model: h.model || "", serial: h.serial || "",
+      min: h.min, max: h.max, unit: h.unit || "", set: set[0], setUnit: set[1], acc: h.acc, cal: repDate(h.calDate), next: repNext(h.calDate), certNo: r.certNo || "",
+      result: r.summary ? (r.summary.pass ? "Đạt (Pass)" : "Không đạt (Fail)") : "", U: r.summary ? r.summary.U : "", owner: r.owner ? r.owner.name : "", ctl: (r.sig && r.sig.controller) || "",
+      fin: r.final ? r.final.by : (r.approved ? r.approved.by : ""), finAt: r.final ? repDate(r.final.at) : (r.approved ? repDate(r.approved.at) : ""), stat: repStat(r) };
+  };
+  const tally = (rows, keyf) => { const m = new Map(); rows.forEach(x => { const k = keyf(x); const o = m.get(k) || { n: 0, ok: 0, fail: 0, fin: 0 }; o.n++; if (x.stat === "Đã duyệt final") o.fin++; if (/^Đạt/.test(x.result)) o.ok++; if (/^Không/.test(x.result)) o.fail++; m.set(k, o); }); return [...m].sort((a, z) => String(a[0]).localeCompare(String(z[0]), "vi", { numeric: true })); };
+  function renderReport() {
+    const m = A.me(), el = $("#v-report");
+    if (!m || m.role < 3) { el.innerHTML = `<div class="card"><h2>Báo cáo</h2><p class="hint">Chỉ Trưởng phòng / Quản trị (cấp 3) xem được mục này.</p></div>`; return; }
+    const all = records;
+    const uniq = f => [...new Set(all.map(f).filter(Boolean))];
+    const sites = uniq(repSite).sort((a, z) => a.localeCompare(z, "vi")), owners = new Map(); all.forEach(r => { if (r.owner) owners.set(r.owner.id || r.owner.name, r.owner.name); });
+    const folders = new Map(); all.forEach(r => { if (!REP.owner || (r.owner ? r.owner.id || r.owner.name : "") === REP.owner) folders.set(folderKey(r), folderName(r)); });
+    const opt = (v, cur, t) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(t)}</option>`;
+    const rows = repList().map(repRow), done = rows.filter(x => x.stat === "Đã duyệt final");
+    const tbl = (head, data) => `<div class="tblwrap"><table class="res" style="width:100%"><thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${data.map(a => `<tr>${a.map((v, i) => `<td${i ? ' style="text-align:right"' : ""}>${i ? v : esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    const line = ([k, o]) => [k, o.n, o.fin, o.ok, o.fail];
+    el.innerHTML = `<div class="card"><h2>Báo cáo <small>(chỉ cấp 3)</small></h2>
+      <div class="grid">
+        <label class="f"><span>Công trình / Site</span><select data-rf="site">${opt("", REP.site, "Tất cả")}${sites.map(s => opt(s, REP.site, s)).join("")}</select></label>
+        <label class="f"><span>Loại thiết bị</span><select data-rf="type">${opt("", REP.type, "Tất cả 9 loại")}${TYPES.map(t => opt(t[0], REP.type, t[1] + " – " + t[2])).join("")}</select></label>
+        <label class="f"><span>Người nhập</span><select data-rf="owner">${opt("", REP.owner, "Tất cả")}${[...owners].sort((a, z) => a[1].localeCompare(z[1], "vi")).map(([k, n]) => opt(k, REP.owner, n)).join("")}</select></label>
+        <label class="f"><span>Gói hồ sơ (người – ngày)</span><select data-rf="folder">${opt("", REP.folder, "Tất cả")}${[...folders].sort((a, z) => a[1].localeCompare(z[1], "vi")).map(([k, n]) => opt(k, REP.folder, n)).join("")}</select></label>
+        <label class="f"><span>Từ ngày HC</span><input type="date" data-rf="from" value="${esc(REP.from)}"></label>
+        <label class="f"><span>Đến ngày HC</span><input type="date" data-rf="to" value="${esc(REP.to)}"></label>
+        <label class="f"><span>Trạng thái</span><select data-rf="status">${opt("final", REP.status, "Đã duyệt final")}${opt("pending", REP.status, "Đang chờ duyệt")}${opt("draft", REP.status, "Chưa chuyển duyệt")}${opt("all", REP.status, "Tất cả")}</select></label>
+      </div>
+      <p><b>${rows.length}</b> thiết bị khớp bộ lọc · <b class="ok">${done.length}</b> đã duyệt final · Đạt ${rows.filter(x => /^Đạt/.test(x.result)).length} · <span class="bad">Không đạt ${rows.filter(x => /^Không/.test(x.result)).length}</span></p>
+      <div class="btns"><button class="btn pri" data-rp="zip">⬇ Tải gói báo cáo <small>ZIP: tổng hợp + danh sách + Uncer từng loại</small></button>
+        <button class="btn" data-rp="sum">Excel tổng hợp + chi tiết</button><button class="btn" data-rp="list">Excel danh sách (mẫu DGCP)</button><button class="btn" data-rp="unc">Excel Uncer (từng loại)</button></div>
+      <div id="repout"></div>
+      <p class="hint">Gói báo cáo và Uncer chỉ lấy hồ sơ <b>đã duyệt final</b> khớp bộ lọc. Thiết bị không đạt có trong tổng hợp nhưng không có GCN. Uncer xuất từ số liệu app tính (giá trị, không phải công thức sống của file Excel gốc).</p></div>
+      ${rows.length ? `<div class="card"><h2>Theo công trình</h2>${tbl(["Công trình", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.site).map(line))}</div>
+      <div class="card"><h2>Theo loại thiết bị</h2>${tbl(["Loại", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.type + " – " + x.typeName).map(line))}</div>
+      <div class="card"><h2>Theo người nhập</h2>${tbl(["Người nhập", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.owner || "—").map(line))}</div>
+      <div class="card"><h2>Danh sách thiết bị <small>(${rows.length})</small></h2>${tbl(["Tag", "Loại", "Công trình", "Số CN", "Ngày HC", "Kết quả", "Người nhập", "Trạng thái"], rows.slice(0, 300).map(x => [x.tag, x.type, x.site, x.certNo, x.cal, x.result, x.owner, x.stat]))}${rows.length > 300 ? `<p class="hint">Hiện 300 dòng đầu; file Excel có đủ ${rows.length}.</p>` : ""}</div>` : `<div class="card"><p class="hint">Không có hồ sơ nào khớp bộ lọc.</p></div>`}`;
+  }
+  let exLoad = null;
+  const loadScript = src => new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error("Không tải được " + src)); document.head.appendChild(s); });
+  const needExcel = async () => { if (!window.ExcelJS) await (exLoad = exLoad || loadScript("vendor/exceljs.min.js")); if (!window.LabZip) await loadScript("zip.js"); };
+  const xBlob = async wb => new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const thin = { style: "thin" }, BOX = { top: thin, left: thin, bottom: thin, right: thin };
+  const hdrStyle = c => { c.font = { bold: true, name: "Times New Roman", size: 11 }; c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; c.border = BOX; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2F0D9" } }; };
+  const bodyStyle = (c, left) => { c.font = { name: "Times New Roman", size: 11 }; c.alignment = { horizontal: left ? "left" : "center", vertical: "middle", wrapText: true }; c.border = BOX; };
+  const xnum = v => (v === "" || v == null || isNaN(Number(String(v).replace(",", "."))) ? v : Number(String(v).replace(",", ".")));
+  const repFilterText = () => {
+    const p = []; if (REP.site) p.push("Công trình: " + REP.site); if (REP.type) p.push("Loại: " + REP.type); if (REP.owner) { const o = records.find(r => r.owner && (r.owner.id || r.owner.name) === REP.owner); p.push("Người nhập: " + (o ? o.owner.name : REP.owner)); }
+    if (REP.folder) { const o = records.find(r => folderKey(r) === REP.folder); p.push("Gói: " + (o ? folderName(o) : "")); } if (REP.from || REP.to) p.push(`Ngày HC: ${repDate(REP.from) || "…"} → ${repDate(REP.to) || "…"}`);
+    p.push("Trạng thái: " + ({ final: "Đã duyệt final", pending: "Đang chờ duyệt", draft: "Chưa chuyển duyệt", all: "Tất cả" })[REP.status]); return p.join(" · ");
+  };
+  async function repSummaryXlsx(rows) {
+    const wb = new ExcelJS.Workbook(); wb.creator = "LAB PVGAS Services";
+    const ws = wb.addWorksheet("Tổng quan"); ws.columns = [{ width: 44 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 12 }];
+    ws.addRow(["BÁO CÁO TỔNG HỢP HIỆU CHUẨN – LAB PVGAS Services"]).font = { bold: true, size: 14 };
+    ws.addRow(["Lập ngày " + repDate(todayISO()) + " bởi " + (A.me() || {}).name]); ws.addRow([repFilterText()]); ws.addRow([]);
+    const block = (title, data) => { const t = ws.addRow([title, "Tổng", "Final", "Đạt", "Không đạt"]); t.eachCell(hdrStyle); data.forEach(([k, o]) => { const r = ws.addRow([k, o.n, o.fin, o.ok, o.fail]); r.eachCell((c, i) => bodyStyle(c, i === 1)); }); const tot = ws.addRow(["Cộng", data.reduce((s, [, o]) => s + o.n, 0), data.reduce((s, [, o]) => s + o.fin, 0), data.reduce((s, [, o]) => s + o.ok, 0), data.reduce((s, [, o]) => s + o.fail, 0)]); tot.font = { bold: true }; tot.eachCell((c, i) => bodyStyle(c, i === 1)); ws.addRow([]); };
+    block("Theo công trình", tally(rows, x => x.site)); block("Theo loại thiết bị", tally(rows, x => x.type + " – " + x.typeName)); block("Theo người nhập", tally(rows, x => x.owner || "—"));
+    const d = wb.addWorksheet("Chi tiết", { views: [{ state: "frozen", ySplit: 1 }] });
+    const cols = [["STT", 6], ["Công trình", 28], ["Khách hàng", 28], ["Loại", 8], ["Tag", 16], ["Mô tả", 28], ["Hãng", 16], ["Model", 16], ["Serial", 14], ["Min", 9], ["Max", 9], ["Đơn vị", 8], ["Giá trị đặt", 10], ["Đv giá trị đặt", 8], ["Sai số cho phép (%)", 10], ["Ngày HC", 12], ["Ngày HC tiếp theo", 12], ["Số CN", 18], ["U", 12], ["Kết quả", 14], ["Người nhập", 20], ["Người kiểm soát", 20], ["Duyệt final", 20], ["Ngày duyệt", 12], ["Trạng thái", 18]];
+    d.columns = cols.map(c => ({ width: c[1] })); d.addRow(cols.map(c => c[0])).eachCell(hdrStyle);
+    rows.forEach((x, i) => d.addRow([i + 1, x.site, x.cust, x.type, x.tag, x.desc, x.maker, x.model, x.serial, xnum(x.min), xnum(x.max), x.unit, xnum(x.set), x.setUnit, xnum(x.acc), x.cal, x.next, x.certNo, x.U, x.result, x.owner, x.ctl, x.fin, x.finAt, x.stat]).eachCell((c, k) => bodyStyle(c, [2, 3, 6].includes(k))));
+    d.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
+    return xBlob(wb);
+  }
+  // Danh sách theo mẫu "DANH SÁCH HIỆU CHUẨN … THÁNG … NĂM …" (file DGCP 10/2025 NGOC gửi): mỗi loại một sheet
+  async function repListXlsx(rows) {
+    const wb = new ExcelJS.Workbook(); wb.creator = "LAB PVGAS Services"; const S = settings;
+    const byType = new Map(); rows.forEach(x => { if (!byType.has(x.type)) byType.set(x.type, []); byType.get(x.type).push(x); });
+    for (const [t, list] of byType) {
+      const ws = wb.addWorksheet(t, { pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+      const W = [5, 22, 18, 16, 20, 18, 11, 11, 9, 12, 10, 12, 13, 12, 18, 14]; ws.columns = W.map(w => ({ width: w })); const N = W.length;
+      const put = (txt, o = {}) => { const r = ws.addRow([txt]); ws.mergeCells(r.number, 1, r.number, o.to || N); const c = r.getCell(1); c.font = { name: "Times New Roman", size: o.size || 11, bold: !!o.bold }; c.alignment = { horizontal: o.left ? "left" : "center", vertical: "middle", wrapText: true }; return r; };
+      put((S.certLines || [])[1] || "CÔNG TY DỊCH VỤ KHÍ", { bold: true, left: true, to: 6 }); put(S.labName || "PHÒNG THỬ NGHIỆM HIỆU CHUẨN", { bold: true, left: true, to: 6 });
+      put(String(S.addrVN || "").replace(/<[^>]+>/g, ""), { left: true, to: 8, size: 10 }); put(String(S.tel || "").replace(/<[^>]+>/g, ""), { left: true, to: 8, size: 10 }); ws.addRow([]);
+      const dts = list.map(x => x.r.h.calDate).filter(Boolean).sort(), mm = dts.length ? dts[dts.length - 1].slice(5, 7) : "", yy = dts.length ? dts[dts.length - 1].slice(0, 4) : "";
+      const sites = [...new Set(list.map(x => x.site))];
+      put(`DANH SÁCH HIỆU CHUẨN ${typeName(t).toUpperCase()}${sites.length === 1 ? " TẠI " + sites[0].toUpperCase() : ""}${mm ? ` THÁNG ${mm} NĂM ${yy}` : ""}`, { bold: true, size: 13 }).height = 24; ws.addRow([]);
+      ws.addRow(["TT", "Vị trí lắp đặt", "Tên thiết bị", "Hãng sản xuất", "Loại thiết bị", "Kiểu thiết bị", "Min Range", "Max Range", "Đơn vị", "Sai số cho phép (±x %FS)", "Tần xuất HC", "Ngày HC", "Ngày HC tiếp theo", "Cơ quan thực hiện", "Số CN", "Ghi chú"]).eachCell(hdrStyle);
+      ws.lastRow.height = 42;
+      list.forEach((x, i) => ws.addRow([i + 1, x.site, x.tag, x.maker, x.desc || x.typeName, x.model, xnum(x.min), xnum(x.max), x.unit, x.acc === "" || x.acc == null ? "" : "±" + x.acc, "1 năm", x.cal, x.next, "DVK", x.certNo, /^Không/.test(x.result) ? "Không đạt (Fail)" : x.result ? "Đạt (Pass)" : ""]).eachCell((c, k) => bodyStyle(c, [2, 3].includes(k))));
+      ws.addRow([]); const f = ws.addRow([]); const rn = f.number;
+      ws.getCell(rn, 2).value = "Trưởng Phòng Thử nghiệm Hiệu chuẩn"; ws.getCell(rn, 12).value = "Người lập";
+      const g = ws.addRow([]); ws.addRow([]); ws.addRow([]); const nm = ws.addRow([]);
+      ws.getCell(nm.number, 2).value = S.sig1Name || ""; ws.getCell(nm.number, 12).value = (A.me() || {}).name || "";
+      [rn, nm.number].forEach(n => [2, 12].forEach(k => { const c = ws.getCell(n, k); c.font = { name: "Times New Roman", size: 11, bold: true }; c.alignment = { horizontal: "center" }; }));
+      ws.mergeCells(rn, 2, rn, 4); ws.mergeCells(nm.number, 2, nm.number, 4); ws.mergeCells(rn, 12, rn, 14); ws.mergeCells(nm.number, 12, nm.number, 14);
+    }
+    if (!byType.size) wb.addWorksheet("Trống").addRow(["Không có hồ sơ khớp bộ lọc"]);
+    return xBlob(wb);
+  }
+  // Uncer: mỗi loại 1 file, mỗi thiết bị 1 sheet – nội dung lấy từ chính trang Bảng Uncer của app (mọi bảng chuyển thành ô Excel)
+  function uncSheet(wb, used, r, info) {
+    const base = String(r.h.tag || r.certNo || r.id).replace(/[\\/?*\[\]:]/g, "-").slice(0, 28) || "TB"; let n = base, i = 1; while (used.has(n.toLowerCase())) n = `${base.slice(0, 26)}_${++i}`; used.add(n.toLowerCase());
+    const ws = wb.addWorksheet(n), doc = new DOMParser().parseFromString("<body>" + info.html + "</body>", "text/html"); ws.columns = [{ width: 10 }, { width: 44 }].concat(Array.from({ length: 14 }, () => ({ width: 14 })));
+    const txt = el => (el.textContent || "").replace(/\s+/g, " ").trim(); let row = 1;
+    const head = doc.querySelector(".uhead"); if (head) { ws.getCell(row, 1).value = (head.innerText || head.textContent).replace(/\s+/g, " ").trim(); ws.getCell(row, 1).font = { bold: true }; row += 2; }
+    doc.body.querySelectorAll(".ulbl, table, .unote, .ufoot").forEach(el => {
+      if (el.classList.contains("ulbl") || el.classList.contains("unote") || el.classList.contains("ufoot")) { ws.getCell(row, 1).value = txt(el); if (el.classList.contains("ulbl")) ws.getCell(row, 1).font = { bold: true }; row += el.classList.contains("ulbl") ? 1 : 2; return; }
+      el.querySelectorAll("tr").forEach(tr => { let col = 1; tr.querySelectorAll("th,td").forEach(td => { const c = ws.getCell(row, col), v = txt(td), nv = /^[-+]?\d+([.,]\d+)?(e[-+]?\d+)?$/i.test(v) ? Number(v.replace(",", ".")) : v; c.value = nv; c.border = BOX; c.alignment = { vertical: "middle", wrapText: true, horizontal: typeof nv === "number" ? "right" : "left" }; if (td.tagName === "TH") hdrStyle(c); col += Number(td.getAttribute("colspan") || 1); }); row++; });
+      row++;
+    });
+  }
+  async function repUncXlsx(done, onProg) {
+    const keep = rec, out = [], byType = new Map(); done.forEach(x => { if (!byType.has(x.type)) byType.set(x.type, []); byType.get(x.type).push(x); }); let k = 0;
+    try {
+      for (const [t, list] of byType) {
+        const wb = new ExcelJS.Workbook(), used = new Set(); let n = 0;
+        for (const x of list) {
+          onProg && onProg(`Uncer ${t}: ${++k}/${done.length} ${x.tag}`); await new Promise(r => setTimeout(r, 0));
+          rec = normalize(clone(x.r)); const { c, info } = docInfo(); if (!c.res) continue;
+          const html = pagesHtml("unc"); if (!html) continue; uncSheet(wb, used, rec, { html }); n++;
+        }
+        if (n) out.push({ name: `Uncer/Uncer_${t}_${typeName(t).replace(/\s+/g, "_")}.xlsx`, blob: await xBlob(wb) });
+      }
+    } finally { rec = keep; }
+    return out;
+  }
+  async function onReportClick(e) {
+    const b = e.target.closest("[data-rp]"); if (!b) return; const out = $("#repout"), say = h => { out.innerHTML = h; };
+    const rows = repList().map(repRow), done = rows.filter(x => x.stat === "Đã duyệt final"), what = b.dataset.rp, stamp = `${REP.site ? REP.site.replace(/[^\w]+/g, "_").slice(0, 24) + "_" : ""}${todayISO()}`;
+    if (!rows.length) { say(`<p class="bad">Không có hồ sơ khớp bộ lọc.</p>`); return; }
+    try {
+      say(`<p class="mut">Đang nạp thư viện Excel…</p>`); await needExcel(); const files = [];
+      if (what === "sum" || what === "zip") { say(`<p class="mut">Đang tạo Excel tổng hợp…</p>`); files.push({ name: `BaoCao_TongHop_${stamp}.xlsx`, blob: await repSummaryXlsx(rows) }); }
+      if (what === "list" || what === "zip") { say(`<p class="mut">Đang tạo danh sách mẫu DGCP…</p>`); files.push({ name: `DanhSach_HieuChuan_${stamp}.xlsx`, blob: await repListXlsx(done) }); }
+      if (what === "unc" || what === "zip") files.push(...await repUncXlsx(done, t => say(`<p class="mut">${esc(t)}</p>`)));
+      if (what === "sum" || what === "list" || (what === "unc" && files.length === 1)) { const f = files[0]; await saveFile(f.blob, f.name.replace(/^.*\//, "")); say(`<p class="ok">Đã tạo ${esc(f.name.replace(/^.*\//, ""))}</p>`); return; }
+      const blob = await LabZip.make(files), name = `BaoCao_${stamp}.zip`; await saveFile(blob, name);
+      say(`<p class="ok"><b>${esc(name)}</b> · ${(blob.size / 1048576).toFixed(1)} MB · ${files.length} file Excel (${done.length} hồ sơ đã duyệt final)</p>`);
+    } catch (err) { say(`<p class="bad">Không tạo được: ${esc(err.message)}</p>`); }
+  }
+  function onReportChange(e) { const k = e.target.dataset.rf; if (!k) return; REP[k] = e.target.value; if (k === "owner") REP.folder = ""; renderReport(); }
+  const VIEWS = { report: renderReport, entry: renderEntry, records: renderRecords, devices: renderDevices, stands: renderStands, formulas: renderFormulas, refs: renderRefs, settings: renderSettings };
   let curView = "entry";
   function go(v) {
     curView = v;
     $$("main > section").forEach(s => s.hidden = s.id !== "v-" + v);
     $$("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+    const rb = $('nav.tabs button[data-v="report"]'); if (rb) rb.hidden = !(A.me() && A.me().role >= 3);
     VIEWS[v](); window.scrollTo(0, 0);
     const wd = $("#wdock"); if (wd && v !== "entry") { wd.hidden = true; document.body.classList.remove("hasdock"); }
   }
@@ -1893,6 +2049,7 @@
     $("#v-entry").addEventListener("change", e => { if (e.target.dataset.photo != null) onPhotoChange(e); });
     $("#v-entry").addEventListener("click", e => { const im = e.target.closest("img[data-phview]"); if (im) { const w = window.open(); if (w) w.document.write(`<title>Ảnh</title><img src="${im.src}" style="max-width:100%">`); } });
     $("#v-records").addEventListener("click", onRecordsClick);
+    $("#v-report").addEventListener("click", onReportClick); $("#v-report").addEventListener("change", onReportChange);
     $("#v-devices").addEventListener("click", onDevicesClick);
     // Gợi ý Tag (như Excel): bàn phím ↑ ↓ Enter Esc, chuột / chạm chọn; rời ô thì ẩn
     $("#v-entry").addEventListener("keydown", e => { if (e.target.dataset.p !== "h.tag" || !$("#tagsug")) return;
