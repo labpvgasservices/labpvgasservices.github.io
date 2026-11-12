@@ -563,11 +563,15 @@
      hiệu chuẩn sau lần KĐHC trong danh sách thì có ✓ xanh, bấm "Thiết bị tiếp theo" để đi tiếp. ---------- */
   const dueMon = d => d.du ? d.du.slice(0, 7) : /^\d{4}-\d{2}/.test(d.cd || "") ? (Number(d.cd.slice(0, 4)) + 1) + d.cd.slice(4, 7) : "";
   const packCache = {};
+  // Xếp tag: nhóm theo chữ đầu (PT, PDT, PS… theo ABC), trong nhóm theo số rồi chữ đuôi (PT-01 < PT-02 < PT-0705A < PT-0705B)
+  const tagPre = t => (String(t).match(/[A-Za-z]+/) || ["#"])[0].toUpperCase();
+  const tagRest = t => { const m = String(t).match(/[A-Za-z]+/); return (m ? String(t).slice(m.index + m[0].length) : String(t)).replace(/^[^0-9A-Za-z]+/, ""); };
+  const tagCmp = (a, b) => tagPre(a.t).localeCompare(tagPre(b.t)) || tagRest(a.t).localeCompare(tagRest(b.t), "en", { numeric: true, sensitivity: "base" }) || a.t.localeCompare(b.t, "en", { numeric: true });
   function sitePacks(site) {
     if (packCache[site]) return packCache[site];
     const m = new Map();
     DEVS.forEach(d => { if (d.s !== site) return; const k = dueMon(d); if (!k) return; if (!m.has(k)) m.set(k, []); m.get(k).push(d); });
-    return (packCache[site] = [...m.keys()].sort().map(k => ({ id: site + "|" + k, site, name: `Tháng ${Number(k.slice(5))}/${k.slice(0, 4)}`, devs: m.get(k) })));
+    return (packCache[site] = [...m.keys()].sort().map(k => ({ id: site + "|" + k, site, name: `Tháng ${Number(k.slice(5))}/${k.slice(0, 4)}`, devs: m.get(k).sort(tagCmp) })));
   }
   let curPackId = store.get("curPack", "");
   const packDevs = p => p.devs;
@@ -589,7 +593,8 @@
     if (p) {
       const ds = p.devs, dn = packDoneSet(p), done = ds.filter(d => dn.has(d.key)).length, ck = tagKey(h.tag);
       body = `<div class="pkbar"><b>${done}/${ds.length}</b> đã lưu hồ sơ<span class="pkprog"><i style="width:${ds.length ? done / ds.length * 100 : 0}%"></i></span></div>
-        <div class="pkchips">${ds.map(d => `<button type="button" class="pkc${dn.has(d.key) ? " ok" : ""}${d.key === ck ? " cur" : ""}" data-pkt="${d.i}">${dn.has(d.key) ? "✓ " : ""}${esc(d.t)}</button>`).join("")}</div>
+        <div class="pkcols">${[...new Set(ds.map(d => tagPre(d.t)))].map(g => { const gd = ds.filter(d => tagPre(d.t) === g), n = gd.filter(d => dn.has(d.key)).length;
+          return `<div class="pkcol"><div class="pkh">${esc(g)} <small>${n}/${gd.length}</small></div>${gd.map(d => `<button type="button" class="pkc${dn.has(d.key) ? " ok" : ""}${d.key === ck ? " cur" : ""}" data-pkt="${d.i}">${dn.has(d.key) ? "✓ " : ""}${esc(d.t)}</button>`).join("")}</div>`; }).join("")}</div>
         <div class="btns"><button type="button" class="btn pri" data-pknext="1">▶ Thiết bị tiếp theo</button></div>`;
     }
     return `<div class="f wide pk" id="pkpanel"><span>Gói thiết bị đến hạn (theo danh sách thiết bị)</span><select data-pk="sel">${opts}</select>${body}</div>`;
