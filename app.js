@@ -2048,7 +2048,7 @@
   function renderRefs() { const m = A.me(); $("#v-refs").innerHTML = window.LabRefs.render(settings, m ? m.role : 0); }
   /* ---------- Báo cáo (v56, NGOC 12/11/2026): chỉ cấp 3 / admin. Lọc theo công trình, loại, người nhập, gói hồ sơ, ngày, trạng thái;
    * xem tổng số thiết bị đã làm; xuất Excel tổng hợp + chi tiết, danh sách theo mẫu DGCP và Excel Uncer riêng từng loại (ZIP). ---------- */
-  const REP = { view: "over", year: new Date().getFullYear(), dueWin: 90, site: "", type: "", owner: "", folder: "", from: "", to: "", status: "final" };
+  const REP = { plan: { site: "", type: "", n: 12, by: "saved", col: "" }, view: "over", year: new Date().getFullYear(), dueWin: 90, site: "", type: "", owner: "", folder: "", from: "", to: "", status: "final" };
   const repSite = r => (r.h.locMode === "free" ? r.h.locFree : r.h.location) || "(chưa chọn công trình)";
   const repStat = r => { const s = stage(r); return s === "done" ? "Đã duyệt final" : s === "final" ? "Chờ duyệt final" : s === "review" ? "Chờ kiểm soát" : "Chưa chuyển duyệt"; };
   const repDueDate = iso => { const m = /^(\d{4})-(\d{2})/.exec(iso || ""); if (!m) return null; const n = Number(settings.dueMonths) || 12; return new Date(Number(m[1]), Number(m[2]) - 1 + n + 1, 0); };
@@ -2099,7 +2099,7 @@
         <label class="f"><span>Đến ngày HC</span><input type="date" data-rf="to" value="${esc(REP.to)}"></label>
         <label class="f"><span>Trạng thái</span><select data-rf="status">${opt("final", REP.status, "Đã duyệt final")}${opt("pending", REP.status, "Đang chờ duyệt")}${opt("draft", REP.status, "Chưa chuyển duyệt")}${opt("all", REP.status, "Tất cả")}</select></label>
       </div>
-      <div class="rtabs">${[["over", "Tổng quan"], ["month", "Theo tháng"], ["due", "Đến hạn HC"], ["stand", "Chuẩn"], ["people", "Năng suất"], ["fail", "Không đạt"], ["queue", "Chờ duyệt"], ["pack", "Gói khách hàng"]].map(([k, t]) => `<button class="${REP.view === k ? "on" : ""}" data-rv="${k}">${t}</button>`).join("")}</div>
+      <div class="rtabs">${[["over", "Tổng quan"], ["month", "Theo tháng"], ["due", "Đến hạn HC"], ["stand", "Chuẩn"], ["people", "Năng suất"], ["fail", "Không đạt"], ["queue", "Chờ duyệt"], ["plan", "Kế hoạch năm"], ["pack", "Gói khách hàng"]].map(([k, t]) => `<button class="${REP.view === k ? "on" : ""}" data-rv="${k}">${t}</button>`).join("")}<span class="rcolb"><button data-rcol="none" title="Thu gọn tất cả các mục">▸ Thu gọn</button><button data-rcol="all" title="Mở tất cả các mục">▾ Mở hết</button></span></div>
       ${REP.view !== "over" ? "" : `<div class="kpis">${kpi(rows.length, "thiết bị khớp bộ lọc")}${kpi(done.length, "đã duyệt final", "ok")}${kpi(okN, "đạt")}${kpi(badN, "không đạt", badN ? "bad" : "")}</div>
       <div class="btns"><button class="btn pri" data-rp="zip">⬇ Tải gói báo cáo <small>ZIP: tổng hợp + danh sách + Uncer từng loại</small></button>
         <button class="btn" data-rp="sum">Excel tổng hợp + chi tiết</button><button class="btn" data-rp="list">Excel danh sách</button><button class="btn" data-rp="unc">Excel Uncer (từng loại)</button></div>
@@ -2109,6 +2109,13 @@
       <div class="card"><h2>Theo loại thiết bị</h2>${tbl(["Loại", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.type + " – " + x.typeName).map(line))}</div>
       <div class="card"><h2>Theo người nhập</h2>${tbl(["Người nhập", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.owner || "—").map(line))}</div></div>
       <div class="card"><h2>Danh sách thiết bị <small>(${rows.length})</small></h2>${tbl(["Tag", "Loại", "Công trình", "Số CN", "Ngày HC", "Kết quả", "Người nhập", "Trạng thái"], rows.slice(0, 300).map(x => [x.tag, x.type, x.site, x.certNo, x.cal, x.result, x.owner, x.stat]))}${rows.length > 300 ? `<p class="hint">Hiện 300 dòng đầu; file Excel có đủ ${rows.length}.</p>` : ""}</div>` : `<div class="card"><p class="hint">Không có hồ sơ nào khớp bộ lọc.</p></div>`}`;
+
+    repCollapse();  }
+  // Thu gọn / mở từng mục báo cáo (nhớ trạng thái trên máy)
+  const colSet = new Set(store.get("repCol", []));
+  const colKey = c => { const h = c.querySelector(":scope > h2"); return h ? h.textContent.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim().slice(0, 48) : ""; };
+  function repCollapse() {
+    $$("#v-report .card").forEach((c, i) => { const h = c.querySelector(":scope > h2"); if (!h) return; if (i === 0) c.dataset.top = "1"; h.classList.add("colh"); if (!c.dataset.top && colSet.has(colKey(c))) c.classList.add("rcol"); });
   }
   let exLoad = null;
   const loadScript = src => new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error("Không tải được " + src)); document.head.appendChild(s); });
@@ -2209,6 +2216,38 @@
     return stands.map(s => { const used = fin.filter(r => usedStands(r).some(u => u.id === s.id)); const due = s.due ? new Date(s.due + "T00:00:00") : null; return { s, used, due, days: due ? dayDiff(due, today) : NaN }; }).sort((a, z) => (isNaN(a.days) ? 9e9 : a.days) - (isNaN(z.days) ? 9e9 : z.days));
   }
   const selOpt = (v, cur, t) => `<option value="${v}"${String(v) === String(cur) ? " selected" : ""}>${t}</option>`;
+  // Kế hoạch năm: mỗi cột tháng = số thiết bị đến hạn (đỏ) và số đã làm (xanh); theo danh mục thiết bị, từ tháng hiện tại (NGOC 12/11/2026)
+  function planData() {
+    const P = REP.plan, now = new Date(), cur = now.getFullYear() * 12 + now.getMonth(), keys = [];
+    for (let i = 0; i < P.n; i++) { const t = cur + i; keys.push(Math.floor(t / 12) + "-" + String(t % 12 + 1).padStart(2, "0")); }
+    const ds = DEVS.filter(d => (!P.site || d.s === P.site) && (!P.type || d.T === P.type)), last = {}, y0 = (now.getFullYear() - 1) + "-12-31";
+    records.forEach(r => { if (r.deleted || r.h.locMode === "free" || !r.h.calDate || (P.by === "final" && !isFinal(r))) return; const k = r.h.location + "|" + tagKey(r.h.tag); if (!(k in last) || r.h.calDate > last[k]) last[k] = r.h.calDate; });
+    const isDone = d => (last[devKey(d)] || "") > (d.cd || y0);
+    const cols = [{ k: "over", label: "Quá hạn", devs: [] }].concat(keys.map(k => ({ k, label: `T${Number(k.slice(5))}/${k.slice(2, 4)}`, devs: [] })), [{ k: "none", label: "Chưa rõ hạn", devs: [] }]);
+    const by = new Map(cols.map(c => [c.k, c])); let beyond = 0;
+    ds.forEach(d => { const m = dueMon(d); if (!m) by.get("none").devs.push(d); else if (m < keys[0]) by.get("over").devs.push(d); else if (by.has(m)) by.get(m).devs.push(d); else beyond++; });
+    cols.forEach(c => { c.done = c.devs.filter(isDone).length; c.todo = c.devs.filter(d => !isDone(d)); });
+    return { cols: cols.filter(c => c.devs.length || /^\d/.test(c.k)), beyond, total: ds.length, isDone, last };
+  }
+  function planView(card) {
+    const P = REP.plan, D = planData(), cols = D.cols, mx = Math.max(1, ...cols.map(c => c.devs.length));
+    const dsum = cols.reduce((s, c) => s + c.devs.length, 0), ddone = cols.reduce((s, c) => s + c.done, 0), pc = (a, b) => b ? Math.round(a / b * 100) : 0;
+    const selK = cols.some(c => c.k === P.col) ? P.col : (cols.find(c => c.todo.length) || cols[0] || {}).k, sel = cols.find(c => c.k === selK);
+    const sites = [...new Set(DEVS.map(d => d.s))];
+    const chart = cols.map(c => `<div class="pcol${c.k === selK ? " on" : ""}${c.k === "over" ? " pover" : ""}" data-pcol="${c.k}" title="${c.label}: ${c.done}/${c.devs.length} đã làm"><div class="pbars">
+        <div class="pb" style="height:${Math.max(3, c.devs.length / mx * 100)}%"><em>${c.devs.length}</em><i class="pr"></i></div><div class="pb" style="height:${Math.max(3, c.done / mx * 100)}%"><em>${c.done}</em><i class="pg"></i></div></div><b>${c.label}</b><small>${pc(c.done, c.devs.length)}%</small></div>`).join("");
+    const todoRows = sel ? sel.todo.slice(0, 300).map(d => [esc(d.t), d.T, esc(siteName(d.s)), esc([d.mk, d.md].filter(Boolean).join(" ") || "—"), esc(devRange(d) || "—"), d.cd ? dmy(d.cd) : "—", dueMon(d) ? dueMon(d).slice(5) + "/" + dueMon(d).slice(0, 4) : "—"]) : [];
+    return card(`Kế hoạch năm: thiết bị phải làm và đã làm theo tháng <small>(theo danh mục thiết bị, không dùng bộ lọc phía trên)</small>`, `<div class="rfil">
+      <label class="f"><span>Công trình / Site</span><select data-rpl="site"><option value="">Tất cả công trình</option>${sites.map(x => selOpt(esc(x), P.site, esc(siteName(x)))).join("")}</select></label>
+      <label class="f"><span>Loại thiết bị</span><select data-rpl="type"><option value="">Tất cả loại</option>${TYPES.map(t => selOpt(t[0], P.type, t[1])).join("")}</select></label>
+      <label class="f"><span>Số tháng (từ tháng hiện tại)</span><select data-rpl="n">${[3, 6, 12, 18, 24].map(n => selOpt(n, P.n, n + " tháng")).join("")}</select></label>
+      <label class="f"><span>Tính "đã làm" theo</span><select data-rpl="by">${selOpt("saved", P.by, "Hồ sơ đã lưu")}${selOpt("final", P.by, "Đã duyệt final")}</select></label></div>
+      <div class="kpis"><div class="kpi"><b>${dsum}</b><span>thiết bị phải làm</span></div><div class="kpi ok"><b>${ddone}</b><span>đã làm (${pc(ddone, dsum)}%)</span></div><div class="kpi ${dsum - ddone ? "bad" : ""}"><b>${dsum - ddone}</b><span>còn lại</span></div>${D.beyond ? `<div class="kpi"><b>${D.beyond}</b><span>đến hạn sau ${P.n} tháng</span></div>` : ""}</div>
+      <div class="pchart">${chart}</div><p class="hint"><i class="lg pr"></i>Phải làm (đến hạn trong tháng) <i class="lg pg"></i>Đã làm. Bấm vào một tháng để xem danh sách còn lại. "Quá hạn" là thiết bị đã đến hạn trước tháng này; "Chưa rõ hạn" là thiết bị danh mục chưa có ngày đến hạn.</p>
+      ${rtable(["Tháng", "Phải làm", "Đã làm", "Còn lại", "Tiến độ"], cols.map(c => [c.label, c.devs.length, c.done, c.devs.length - c.done, pc(c.done, c.devs.length) + "%"]), [1, 2, 3, 4])}
+      <h3 class="dvh">Còn lại – ${sel ? sel.label : "—"} <small class="mut">(${sel ? sel.todo.length : 0} thiết bị)</small></h3>${todoRows.length ? rtable(["Tag", "Loại", "Công trình", "Hãng / Model", "Dải", "Ngày KĐHC trước", "Đến hạn"], todoRows) : `<p class="ok">Không còn thiết bị nào.</p>`}
+      <div class="btns"><button class="btn pri" data-rp="plan">Excel kế hoạch năm (tiến độ + còn lại + đã làm)</button></div><div id="repout"></div>`);
+  }
   function repExtra(rows, done) {
     const v = REP.view, card = (h, body) => `<div class="card"><h2>${h}</h2>${body}</div>`;
     if (v === "month") {
@@ -2235,6 +2274,7 @@
         ${rtable(["Chuẩn", "S/N", "Hạn kiểm định", "Còn lại", "Số thiết bị đã dùng"], sr.map(o => Object.assign([esc(o.s.key || o.s.name), esc(o.s.serial || ""), o.due ? dfmt(o.due) : "—", isNaN(o.days) ? "—" : o.days < 0 ? `<b class="bad">quá ${-o.days} ngày</b>` : o.days + " ngày", o.used.length], { _cls: !isNaN(o.days) && o.days < 0 ? "bad" : "" })), [3, 4])}
         <p class="hint">Đếm trong các hồ sơ đã duyệt final. Cần truy vết một chuẩn (nếu phát hiện sai) thì file Excel xuất kèm sheet danh sách thiết bị đã dùng chuẩn đó.</p>`);
     }
+    if (v === "plan") return planView(card);
     if (v === "people") {
       const m = new Map(); rows.forEach(x => { const k = x.owner || "—"; const o = m.get(k) || { n: 0, fin: 0, ret: 0, fail: 0, days: [] }; o.n++; if (x.stat === "Đã duyệt final") { o.fin++; const f = tms(x.r.final ? x.r.final.at : x.r.approved && x.r.approved.at), b = born(x.r); if (f && b) o.days.push((f - b) / 864e5); } if (/^Không/.test(x.result)) o.fail++; o.ret += (x.r.log || []).filter(l => /^Trả lại/.test(l.act)).length; m.set(k, o); });
       const data = [...m].sort((a, z) => z[1].n - a[1].n).map(([k, o]) => [esc(k), o.n, o.fin, o.ret, pctS(o.ret, o.n), o.fail, o.days.length ? (o.days.reduce((s, d) => s + d, 0) / o.days.length).toFixed(1) + " ngày" : "—"]);
@@ -2279,8 +2319,23 @@
   const safeTagName = t => String(t || "").trim().replace(/[\\/:*?"<>|]+/g, "-") || "KhongTag";
   async function onReportClick(e) {
     const rv = e.target.closest("[data-rv]"); if (rv) { REP.view = rv.dataset.rv; renderReport(); return; }
+    const pcol = e.target.closest("[data-pcol]"); if (pcol) { REP.plan.col = pcol.dataset.pcol; renderReport(); return; }
+    const cb = e.target.closest("[data-rcol]"); if (cb) { colSet.clear(); if (cb.dataset.rcol === "none") $$("#v-report .card").forEach(c => { if (!c.dataset.top && c.querySelector(":scope > h2")) colSet.add(colKey(c)); }); store.set("repCol", [...colSet]); renderReport(); return; }
+    const colh = e.target.closest("#v-report .colh"); if (colh) { const c = colh.parentElement, k = colKey(c); if (colSet.has(k)) colSet.delete(k); else colSet.add(k); c.classList.toggle("rcol", colSet.has(k)); store.set("repCol", [...colSet]); return; }
     const b = e.target.closest("[data-rp]"); if (!b) return; const out = $("#repout"), say = h => { out.innerHTML = h; };
     const rows = repList().map(repRow), done = rows.filter(x => x.stat === "Đã duyệt final"), what = b.dataset.rp, stamp = `${REP.site ? REP.site.replace(/[^\w]+/g, "_").slice(0, 24) + "_" : ""}${todayISO()}`;
+    if (what === "plan") {
+      try {
+        say(`<p class="mut">Đang nạp thư viện Excel…</p>`); await needExcel();
+        const D = planData(), P = REP.plan, tag = d => [d.t, d.T, siteName(d.s), d.mk, d.md, d.sn, devRange(d), d.cd || "", dueMon(d) || ""];
+        const head = ["Cột", "Tag", "Loại", "Công trình", "Hãng", "Model", "Serial", "Dải / Set", "Ngày KĐHC trước", "Tháng đến hạn"], todo = [], did = [];
+        D.cols.forEach(c => c.devs.forEach(d => (D.isDone(d) ? did : todo).push([c.label].concat(tag(d)))));
+        const w = [12, 16, 8, 26, 16, 18, 14, 18, 16, 14];
+        await saveFile(await simpleXlsx([["Tiến độ", ["Tháng", "Phải làm", "Đã làm", "Còn lại", "Tiến độ %"], D.cols.map(c => [c.label, c.devs.length, c.done, c.devs.length - c.done, c.devs.length ? Math.round(c.done / c.devs.length * 100) : 0])], ["Còn lại", head, todo, w], ["Đã làm", head, did, w]]), `KeHoachNam_${P.site ? P.site.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/gi, "d").replace(/[^\w]+/g, "_") + "_" : ""}${todayISO()}.xlsx`);
+        say(`<p class="ok">Đã tạo file Excel kế hoạch năm.</p>`);
+      } catch (err) { say(`<p class="bad">Không tạo được: ${esc(err.message)}</p>`); }
+      return;
+    }
     if (what === "due" || what === "stand") {
       try {
         say(`<p class="mut">Đang nạp thư viện Excel…</p>`); await needExcel();
@@ -2310,7 +2365,7 @@
       say(`<p class="ok"><b>${esc(name)}</b> · ${(blob.size / 1048576).toFixed(1)} MB · ${files.length} file Excel (${done.length} hồ sơ đã duyệt final)</p>`);
     } catch (err) { say(`<p class="bad">Không tạo được: ${esc(err.message)}</p>`); }
   }
-  function onReportChange(e) { if (e.target.dataset.ry) { REP[e.target.dataset.ry] = Number(e.target.value); renderReport(); return; } const k = e.target.dataset.rf; if (!k) return; REP[k] = e.target.value; if (k === "owner") REP.folder = ""; renderReport(); }
+  function onReportChange(e) { const pl = e.target.dataset.rpl; if (pl) { REP.plan[pl] = pl === "n" ? Number(e.target.value) : e.target.value; REP.plan.col = ""; renderReport(); return; } if (e.target.dataset.ry) { REP[e.target.dataset.ry] = Number(e.target.value); renderReport(); return; } const k = e.target.dataset.rf; if (!k) return; REP[k] = e.target.value; if (k === "owner") REP.folder = ""; renderReport(); }
   const VIEWS = { report: renderReport, entry: renderEntry, records: renderRecords, devices: renderDevices, stands: renderStands, formulas: renderFormulas, refs: renderRefs, settings: renderSettings };
   let curView = "entry";
   function go(v) {
