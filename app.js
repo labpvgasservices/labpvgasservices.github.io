@@ -1898,10 +1898,11 @@
   function renderRefs() { const m = A.me(); $("#v-refs").innerHTML = window.LabRefs.render(settings, m ? m.role : 0); }
   /* ---------- Báo cáo (v56, NGOC 12/11/2026): chỉ cấp 3 / admin. Lọc theo công trình, loại, người nhập, gói hồ sơ, ngày, trạng thái;
    * xem tổng số thiết bị đã làm; xuất Excel tổng hợp + chi tiết, danh sách theo mẫu DGCP và Excel Uncer riêng từng loại (ZIP). ---------- */
-  const REP = { site: "", type: "", owner: "", folder: "", from: "", to: "", status: "final" };
+  const REP = { view: "over", year: new Date().getFullYear(), dueWin: 90, site: "", type: "", owner: "", folder: "", from: "", to: "", status: "final" };
   const repSite = r => (r.h.locMode === "free" ? r.h.locFree : r.h.location) || "(chưa chọn công trình)";
   const repStat = r => { const s = stage(r); return s === "done" ? "Đã duyệt final" : s === "final" ? "Chờ duyệt final" : s === "review" ? "Chờ kiểm soát" : "Chưa chuyển duyệt"; };
-  const repNext = iso => { const m = /^(\d{4})-(\d{2})/.exec(iso || ""); if (!m) return ""; const d = new Date(Number(m[1]) + 1, Number(m[2]), 0); return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`; };
+  const repDueDate = iso => { const m = /^(\d{4})-(\d{2})/.exec(iso || ""); if (!m) return null; const n = Number(settings.dueMonths) || 12; return new Date(Number(m[1]), Number(m[2]) - 1 + n + 1, 0); };
+  const repNext = iso => { const m = /^(\d{4})-(\d{2})/.exec(iso || ""); if (!m) return ""; const d = repDueDate(iso); return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`; };
   const repDate = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ""); return m ? `${m[3]}-${m[2]}-${m[1]}` : ""; };
   const typeName = t => (TYPES.find(x => x[0] === t) || [t, t, t])[2];
   function repList() {
@@ -1948,12 +1949,13 @@
         <label class="f"><span>Đến ngày HC</span><input type="date" data-rf="to" value="${esc(REP.to)}"></label>
         <label class="f"><span>Trạng thái</span><select data-rf="status">${opt("final", REP.status, "Đã duyệt final")}${opt("pending", REP.status, "Đang chờ duyệt")}${opt("draft", REP.status, "Chưa chuyển duyệt")}${opt("all", REP.status, "Tất cả")}</select></label>
       </div>
-      <div class="kpis">${kpi(rows.length, "thiết bị khớp bộ lọc")}${kpi(done.length, "đã duyệt final", "ok")}${kpi(okN, "đạt")}${kpi(badN, "không đạt", badN ? "bad" : "")}</div>
+      <div class="rtabs">${[["over", "Tổng quan"], ["month", "Theo tháng"], ["due", "Đến hạn HC"], ["stand", "Chuẩn"], ["people", "Năng suất"], ["fail", "Không đạt"], ["queue", "Chờ duyệt"], ["pack", "Gói khách hàng"]].map(([k, t]) => `<button class="${REP.view === k ? "on" : ""}" data-rv="${k}">${t}</button>`).join("")}</div>
+      ${REP.view !== "over" ? "" : `<div class="kpis">${kpi(rows.length, "thiết bị khớp bộ lọc")}${kpi(done.length, "đã duyệt final", "ok")}${kpi(okN, "đạt")}${kpi(badN, "không đạt", badN ? "bad" : "")}</div>
       <div class="btns"><button class="btn pri" data-rp="zip">⬇ Tải gói báo cáo <small>ZIP: tổng hợp + danh sách + Uncer từng loại</small></button>
         <button class="btn" data-rp="sum">Excel tổng hợp + chi tiết</button><button class="btn" data-rp="list">Excel danh sách</button><button class="btn" data-rp="unc">Excel Uncer (từng loại)</button></div>
       <div id="repout"></div>
-      <p class="hint">Gói báo cáo và Uncer chỉ lấy hồ sơ <b>đã duyệt final</b> khớp bộ lọc. Thiết bị không đạt có trong tổng hợp nhưng không có GCN. Uncer xuất từ số liệu app tính (giá trị, không phải công thức sống của file Excel gốc).</p></div>
-      ${rows.length ? `<div class="rgrid"><div class="card"><h2>Theo công trình</h2>${tbl(["Công trình", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.site).map(line))}</div>
+      <p class="hint">Gói báo cáo và Uncer chỉ lấy hồ sơ <b>đã duyệt final</b> khớp bộ lọc. Thiết bị không đạt có trong tổng hợp nhưng không có GCN. Uncer xuất từ số liệu app tính (giá trị, không phải công thức sống của file Excel gốc).</p>`}</div>
+      ${REP.view !== "over" ? repExtra(rows, done) : rows.length ? `<div class="rgrid"><div class="card"><h2>Theo công trình</h2>${tbl(["Công trình", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.site).map(line))}</div>
       <div class="card"><h2>Theo loại thiết bị</h2>${tbl(["Loại", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.type + " – " + x.typeName).map(line))}</div>
       <div class="card"><h2>Theo người nhập</h2>${tbl(["Người nhập", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.owner || "—").map(line))}</div></div>
       <div class="card"><h2>Danh sách thiết bị <small>(${rows.length})</small></h2>${tbl(["Tag", "Loại", "Công trình", "Số CN", "Ngày HC", "Kết quả", "Người nhập", "Trạng thái"], rows.slice(0, 300).map(x => [x.tag, x.type, x.site, x.certNo, x.cal, x.result, x.owner, x.stat]))}${rows.length > 300 ? `<p class="hint">Hiện 300 dòng đầu; file Excel có đủ ${rows.length}.</p>` : ""}</div>` : `<div class="card"><p class="hint">Không có hồ sơ nào khớp bộ lọc.</p></div>`}`;
@@ -2038,10 +2040,116 @@
     } finally { rec = keep; }
     return out;
   }
+  /* ---------- Báo cáo: các mục con (NGOC 12/11/2026, ý 1–7) ---------- */
+  const born = r => { const t = parseInt(String(r.id).slice(1), 36); return t > 1e12 && t < 4e12 ? t : NaN; };
+  const dayDiff = (a, b) => Math.round((a - b) / 864e5);
+  const tms = s => (s ? new Date(s).getTime() : NaN);
+  const dfmt = d => `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+  const rtable = (head, data, numCols) => `<div class="tblwrap"><table class="rtbl"><thead><tr>${head.map((h, i) => `<th${numCols && numCols.includes(i) ? ' class="n"' : ""}>${h}</th>`).join("")}</tr></thead><tbody>${data.map(a => `<tr${a._cls ? ` class="${a._cls}"` : ""}>${a.map((v, i) => `<td${numCols && numCols.includes(i) ? ' class="n"' : ""}>${v}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  const pctS = (n, t) => (t ? (n / t * 100).toFixed(1) + "%" : "—");
+  // Thiết bị mới nhất của mỗi tag (bỏ các lần hiệu chuẩn cũ)
+  function latestDevices() {
+    const m = new Map();
+    records.filter(isFinal).forEach(r => { if (REP.site && repSite(r) !== REP.site) return; if (REP.type && r.type !== REP.type) return; const k = r.type + "|" + String(r.h.tag || "").trim().toLowerCase() + "|" + String(r.h.serial || "").trim().toLowerCase(); const o = m.get(k); if (!o || (r.h.calDate || "") > (o.h.calDate || "")) m.set(k, r); });
+    return [...m.values()].map(r => { const d = repDueDate(r.h.calDate); return { r, x: repRow(r), due: d, days: d ? dayDiff(d, new Date()) : NaN }; }).filter(o => o.due).sort((a, z) => a.days - z.days);
+  }
+  function dueRows() { return latestDevices().filter(o => o.days <= REP.dueWin); }
+  function standRows() {
+    const fin = records.filter(isFinal), today = new Date();
+    return stands.map(s => { const used = fin.filter(r => usedStands(r).some(u => u.id === s.id)); const due = s.due ? new Date(s.due + "T00:00:00") : null; return { s, used, due, days: due ? dayDiff(due, today) : NaN }; }).sort((a, z) => (isNaN(a.days) ? 9e9 : a.days) - (isNaN(z.days) ? 9e9 : z.days));
+  }
+  const selOpt = (v, cur, t) => `<option value="${v}"${String(v) === String(cur) ? " selected" : ""}>${t}</option>`;
+  function repExtra(rows, done) {
+    const v = REP.view, card = (h, body) => `<div class="card"><h2>${h}</h2>${body}</div>`;
+    if (v === "month") {
+      const Y = REP.year, cnt = (y, m) => done.filter(x => x.r.h.calDate && x.r.h.calDate.startsWith(y + "-" + String(m).padStart(2, "0"))).length;
+      const cur = [], prev = []; for (let m = 1; m <= 12; m++) { cur.push(cnt(Y, m)); prev.push(cnt(Y - 1, m)); }
+      const mx = Math.max(1, ...cur, ...prev), tc = cur.reduce((s, x) => s + x, 0), tp = prev.reduce((s, x) => s + x, 0);
+      const bars = cur.map((c, i) => `<div class="mcol"><div class="mbars"><i class="bp" style="height:${prev[i] / mx * 100}%" title="${Y - 1}: ${prev[i]}"></i><i class="bc" style="height:${c / mx * 100}%" title="${Y}: ${c}"></i></div><span>${c || ""}</span><small>T${i + 1}</small></div>`).join("");
+      const yrs = []; for (let y = new Date().getFullYear(); y >= new Date().getFullYear() - 6; y--) yrs.push(y);
+      return card(`Số thiết bị đã duyệt theo tháng hiệu chuẩn <small>(theo bộ lọc phía trên)</small>`, `<label class="f" style="max-width:160px"><span>Năm</span><select data-ry="year">${yrs.map(y => selOpt(y, Y, y)).join("")}</select></label>
+        <div class="mchart">${bars}</div><p class="hint"><i class="lg bc"></i>${Y} <i class="lg bp"></i>${Y - 1}</p>
+        ${rtable(["Tháng", String(Y), String(Y - 1), "Chênh"], cur.map((c, i) => [`Tháng ${i + 1}`, c, prev[i], (c - prev[i] > 0 ? "+" : "") + (c - prev[i])]).concat([[`<b>Cả năm</b>`, `<b>${tc}</b>`, `<b>${tp}</b>`, `<b>${tc - tp > 0 ? "+" : ""}${tc - tp}</b>`]]), [1, 2, 3])}`);
+    }
+    if (v === "due") {
+      const all = latestDevices(), list = all.filter(o => o.days <= REP.dueWin), od = all.filter(o => o.days < 0).length;
+      return card(`Thiết bị sắp đến hạn hiệu chuẩn`, `<div class="rfil"><label class="f"><span>Trong vòng</span><select data-ry="dueWin">${[30, 60, 90, 180, 365].map(d => selOpt(d, REP.dueWin, d + " ngày tới")).join("")}</select></label></div>
+        <div class="kpis"><div class="kpi"><b>${list.length}</b><span>thiết bị đến hạn trong ${REP.dueWin} ngày</span></div><div class="kpi ${od ? "bad" : ""}"><b>${od}</b><span>đã quá hạn</span></div><div class="kpi"><b>${all.length}</b><span>thiết bị đang theo dõi</span></div></div>
+        <div class="btns"><button class="btn pri" data-rp="due">⬇ Xuất Excel danh sách đến hạn</button></div><div id="repout"></div>
+        ${list.length ? rtable(["Tag", "Loại", "Công trình", "Ngày HC", "Hạn tiếp theo", "Còn lại", "Số CN"], list.slice(0, 400).map(o => Object.assign([esc(o.x.tag), o.x.type, esc(o.x.site), o.x.cal, dfmt(o.due), o.days < 0 ? `<b class="bad">quá ${-o.days} ngày</b>` : o.days + " ngày", esc(o.x.certNo)], { _cls: o.days < 0 ? "bad" : "" })), [5]) : `<p class="hint">Không có thiết bị nào đến hạn trong ${REP.dueWin} ngày tới.</p>`}
+        <p class="hint">Hạn = cuối tháng hiệu chuẩn cộng ${Number(settings.dueMonths) || 12} tháng (Cài đặt › Chu kỳ HC). Mỗi thiết bị chỉ lấy lần hiệu chuẩn gần nhất. Lọc theo công trình và loại ở phía trên.</p>`);
+    }
+    if (v === "stand") {
+      const sr = standRows();
+      return card(`Chuẩn và hạn kiểm định`, `<div class="btns"><button class="btn pri" data-rp="stand">⬇ Xuất Excel chuẩn</button></div><div id="repout"></div>
+        ${rtable(["Chuẩn", "S/N", "Hạn kiểm định", "Còn lại", "Số thiết bị đã dùng"], sr.map(o => Object.assign([esc(o.s.key || o.s.name), esc(o.s.serial || ""), o.due ? dfmt(o.due) : "—", isNaN(o.days) ? "—" : o.days < 0 ? `<b class="bad">quá ${-o.days} ngày</b>` : o.days + " ngày", o.used.length], { _cls: !isNaN(o.days) && o.days < 0 ? "bad" : "" })), [3, 4])}
+        <p class="hint">Đếm trong các hồ sơ đã duyệt final. Cần truy vết một chuẩn (nếu phát hiện sai) thì file Excel xuất kèm sheet danh sách thiết bị đã dùng chuẩn đó.</p>`);
+    }
+    if (v === "people") {
+      const m = new Map(); rows.forEach(x => { const k = x.owner || "—"; const o = m.get(k) || { n: 0, fin: 0, ret: 0, fail: 0, days: [] }; o.n++; if (x.stat === "Đã duyệt final") { o.fin++; const f = tms(x.r.final ? x.r.final.at : x.r.approved && x.r.approved.at), b = born(x.r); if (f && b) o.days.push((f - b) / 864e5); } if (/^Không/.test(x.result)) o.fail++; o.ret += (x.r.log || []).filter(l => /^Trả lại/.test(l.act)).length; m.set(k, o); });
+      const data = [...m].sort((a, z) => z[1].n - a[1].n).map(([k, o]) => [esc(k), o.n, o.fin, o.ret, pctS(o.ret, o.n), o.fail, o.days.length ? (o.days.reduce((s, d) => s + d, 0) / o.days.length).toFixed(1) + " ngày" : "—"]);
+      return card(`Năng suất từng người <small>(theo bộ lọc phía trên)</small>`, `${rtable(["Người nhập", "Hồ sơ", "Final", "Lần bị trả lại", "Tỉ lệ trả lại", "Không đạt", "Từ tạo đến final (TB)"], data, [1, 2, 3, 4, 5, 6])}
+        <p class="hint">Để xem công việc mỗi người và cân đối nhân lực, không dùng để xếp hạng. Lần bị trả lại đếm theo nhật ký hồ sơ; thời gian tính từ lúc tạo hồ sơ.</p>`);
+    }
+    if (v === "fail") {
+      const grp = (title, f) => { const g = new Map(); rows.filter(x => x.result).forEach(x => { const k = f(x) || "—"; const o = g.get(k) || { n: 0, bad: 0 }; o.n++; if (/^Không/.test(x.result)) o.bad++; g.set(k, o); }); const d = [...g].sort((a, z) => z[1].bad / z[1].n - a[1].bad / a[1].n || z[1].n - a[1].n).slice(0, 15).map(([k, o]) => Object.assign([esc(k), o.n, o.bad, pctS(o.bad, o.n)], { _cls: o.bad ? "warnrow" : "" })); return `<div class="card"><h2>${title}</h2>${rtable(["", "Tổng", "Không đạt", "Tỉ lệ"], d, [1, 2, 3])}</div>`; };
+      return `<div class="card"><h2>Tỉ lệ không đạt <small>(theo bộ lọc phía trên; chọn trạng thái "Tất cả" để tính cả hồ sơ chưa duyệt)</small></h2><p class="hint">Sắp xếp tỉ lệ cao nhất trước. Mẫu số nhỏ thì tỉ lệ chưa có ý nghĩa thống kê.</p></div><div class="rgrid">${grp("Theo loại", x => x.type + " – " + x.typeName)}${grp("Theo hãng", x => x.maker)}${grp("Theo model", x => x.model)}</div>${grp("Theo công trình", x => x.site)}`;
+    }
+    if (v === "queue") {
+      const now = Date.now(), q = records.filter(r => !isFinal(r) && !isFail(r) || (isFail(r) && !isFinal(r))).map(r => { const st = stage(r); const t = st === "review" ? tms(r.submitted && r.submitted.at) : st === "final" ? tms(r.approved && r.approved.at) : tms(r.updated); const to = st === "review" ? (r.submitted && r.submitted.to ? r.submitted.to.name : "người kiểm soát") : st === "final" ? (r.finalTo ? r.finalTo.name : "cấp 3") : ownerName(r.owner); return { r, st, t, to, days: isNaN(t) ? NaN : (now - t) / 864e5 }; }).sort((a, z) => (z.days || 0) - (a.days || 0));
+      const late = q.filter(o => o.days > 3 && o.st !== "draft").length;
+      return card(`Hồ sơ chưa duyệt xong`, `<div class="kpis"><div class="kpi"><b>${q.filter(o => o.st === "review").length}</b><span>chờ kiểm soát</span></div><div class="kpi"><b>${q.filter(o => o.st === "final").length}</b><span>chờ duyệt final</span></div><div class="kpi"><b>${q.filter(o => o.st === "draft").length}</b><span>chưa chuyển duyệt</span></div><div class="kpi ${late ? "bad" : ""}"><b>${late}</b><span>chờ quá 3 ngày</span></div></div>
+        ${q.length ? rtable(["Tag", "Loại", "Công trình", "Bước", "Đang chờ", "Từ", "Đã chờ"], q.slice(0, 300).map(o => Object.assign([esc(o.r.h.tag || ""), o.r.type, esc(repSite(o.r)), STAGE[o.st][1], esc(fullName(o.to)), isNaN(o.t) ? "—" : dfmt(new Date(o.t)), isNaN(o.days) ? "—" : (o.days < 1 ? "< 1 ngày" : Math.floor(o.days) + " ngày")], { _cls: o.days > 3 && o.st !== "draft" ? "bad" : "" })), [6]) : `<p class="hint">Không có hồ sơ nào đang chờ.</p>`}`);
+    }
+    if (v === "pack") {
+      return card(`Gói gửi khách hàng`, `<p class="hint">Chọn <b>Công trình</b>, loại và khoảng ngày HC ở bộ lọc phía trên (trạng thái nên là "Đã duyệt final"). App tạo một file ZIP gồm 2 thư mục <b>QTG</b> và <b>GCN</b>, mỗi file đặt tên theo thứ tự "1. Tag.pdf", cùng file Excel danh sách. Thiết bị không đạt chỉ có QTG.</p>
+        <p><b>${done.length}</b> hồ sơ đã duyệt khớp bộ lọc${REP.site ? "" : ` <span class="bad">· chưa chọn công trình</span>`}.</p>
+        <div class="btns"><button class="btn pri" data-rp="pack"${done.length ? "" : " disabled"}>⬇ Tạo gói gửi khách hàng (ZIP)</button></div><div id="repout"></div>
+        <p class="hint">Tạo PDF mất khoảng vài giây mỗi thiết bị; gói lớn nên chia theo ngày HC. Không có hồ sơ chưa duyệt final trong gói.</p>`);
+    }
+    return "";
+  }
+  async function simpleXlsx(sheets) {
+    const wb = new ExcelJS.Workbook(); wb.creator = "LAB PVGAS Services";
+    sheets.forEach(([name, head, data, widths]) => { const ws = wb.addWorksheet(name, { views: [{ state: "frozen", ySplit: 1 }] }); ws.columns = head.map((_, i) => ({ width: (widths && widths[i]) || 18 })); ws.addRow(head).eachCell(hdrStyle); data.forEach(r => ws.addRow(r).eachCell((c, k) => bodyStyle(c, typeof c.value !== "number"))); ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: head.length } }; });
+    return xBlob(wb);
+  }
+  async function repPackZip(done, say) {
+    const keep = rec, files = [], skipped = [], noCert = [], list = done.slice().sort((a, z) => String(a.tag).localeCompare(String(z.tag), "vi", { numeric: true }));
+    try {
+      for (let i = 0; i < list.length; i++) {
+        const x = list[i], nm = `${i + 1}. ${safeTagName(x.tag || x.certNo)}`; say(`<p class="mut">Đang tạo PDF ${i + 1}/${list.length}: ${esc(x.tag)}…</p>`); await new Promise(r => setTimeout(r, 0));
+        rec = normalize(clone(x.r)); const c = compute(); if (!c.res) { skipped.push(x.tag); continue; }
+        const q = pagesHtml("qtg"); if (q) files.push({ name: `QTG/${nm}.pdf`, blob: await buildPdf(q) });
+        if (failed(c)) noCert.push(x.tag); else { const g = pagesHtml("cert"); if (g) files.push({ name: `GCN/${nm}.pdf`, blob: await buildPdf(g) }); }
+      }
+    } finally { rec = keep; }
+    return { files, skipped, noCert };
+  }
+  const safeTagName = t => String(t || "").trim().replace(/[\\/:*?"<>|]+/g, "-") || "KhongTag";
   async function onReportClick(e) {
+    const rv = e.target.closest("[data-rv]"); if (rv) { REP.view = rv.dataset.rv; renderReport(); return; }
     const b = e.target.closest("[data-rp]"); if (!b) return; const out = $("#repout"), say = h => { out.innerHTML = h; };
     const rows = repList().map(repRow), done = rows.filter(x => x.stat === "Đã duyệt final"), what = b.dataset.rp, stamp = `${REP.site ? REP.site.replace(/[^\w]+/g, "_").slice(0, 24) + "_" : ""}${todayISO()}`;
+    if (what === "due" || what === "stand") {
+      try {
+        say(`<p class="mut">Đang nạp thư viện Excel…</p>`); await needExcel();
+        if (what === "due") { const L = dueRows(); await saveFile(await simpleXlsx([["Đến hạn HC", ["TT", "Công trình", "Khách hàng", "Loại", "Tag", "Mô tả", "Hãng", "Model", "Serial", "Ngày HC", "Hạn tiếp theo", "Còn lại (ngày)", "Số CN"], L.map((o, i) => [i + 1, o.x.site, o.x.cust, o.x.type, o.x.tag, o.x.desc, o.x.maker, o.x.model, o.x.serial, o.x.cal, dfmt(o.due), o.days, o.x.certNo]), [6, 26, 26, 8, 16, 24, 14, 14, 14, 12, 12, 12, 18]]]), `DenHan_${REP.dueWin}ngay_${todayISO()}.xlsx`); say(`<p class="ok">Đã tạo file ${L.length} thiết bị đến hạn.</p>`); }
+        else { const S = standRows(); const used = [["Chuẩn", "S/N", "Tag", "Loại", "Công trình", "Ngày HC", "Số CN"]]; const det = []; S.forEach(o => o.used.forEach(r => det.push([o.s.key || o.s.name, o.s.serial || "", r.h.tag || "", r.type, repSite(r), repDate(r.h.calDate), r.certNo || ""]))); await saveFile(await simpleXlsx([["Chuẩn", ["Chuẩn", "S/N", "Hạn kiểm định", "Còn lại (ngày)", "Số thiết bị đã dùng"], S.map(o => [o.s.key || o.s.name, o.s.serial || "", o.due ? dfmt(o.due) : "", isNaN(o.days) ? "" : o.days, o.used.length]), [34, 14, 14, 14, 16]], ["Thiết bị đã dùng chuẩn", used[0], det, [34, 14, 16, 8, 26, 12, 18]]]), `Chuan_${todayISO()}.xlsx`); say(`<p class="ok">Đã tạo file ${S.length} chuẩn.</p>`); }
+      } catch (err) { say(`<p class="bad">Không tạo được: ${esc(err.message)}</p>`); }
+      return;
+    }
     if (!rows.length) { say(`<p class="bad">Không có hồ sơ khớp bộ lọc.</p>`); return; }
+    if (what === "pack") {
+      try {
+        say(`<p class="mut">Đang nạp thư viện…</p>`); await needExcel(); const r = await repPackZip(done, say); const files = r.files;
+        if (!files.length) { say(`<p class="bad">Không tạo được file nào${r.skipped.length ? " – thiếu số liệu: " + esc(r.skipped.join(", ")) : ""}.</p>`); return; }
+        files.push({ name: `DanhSach_${stamp}.xlsx`, blob: await repListXlsx(done) });
+        const blob = await LabZip.make(files), name = `GoiKhachHang_${stamp}.zip`; await saveFile(blob, name);
+        say(`<p class="ok"><b>${esc(name)}</b> · ${(blob.size / 1048576).toFixed(1)} MB · ${done.length} hồ sơ${r.noCert.length ? `<br>Không đạt, chỉ có QTG: ${esc(r.noCert.join(", "))}` : ""}${r.skipped.length ? `<br><span class="bad">Bỏ qua (thiếu số liệu): ${esc(r.skipped.join(", "))}</span>` : ""}</p>`);
+      } catch (err) { say(`<p class="bad">Không tạo được: ${esc(err.message)}</p>`); }
+      return;
+    }
     try {
       say(`<p class="mut">Đang nạp thư viện Excel…</p>`); await needExcel(); const files = [];
       if (what === "sum" || what === "zip") { say(`<p class="mut">Đang tạo Excel tổng hợp…</p>`); files.push({ name: `BaoCao_TongHop_${stamp}.xlsx`, blob: await repSummaryXlsx(rows) }); }
@@ -2052,7 +2160,7 @@
       say(`<p class="ok"><b>${esc(name)}</b> · ${(blob.size / 1048576).toFixed(1)} MB · ${files.length} file Excel (${done.length} hồ sơ đã duyệt final)</p>`);
     } catch (err) { say(`<p class="bad">Không tạo được: ${esc(err.message)}</p>`); }
   }
-  function onReportChange(e) { const k = e.target.dataset.rf; if (!k) return; REP[k] = e.target.value; if (k === "owner") REP.folder = ""; renderReport(); }
+  function onReportChange(e) { if (e.target.dataset.ry) { REP[e.target.dataset.ry] = Number(e.target.value); renderReport(); return; } const k = e.target.dataset.rf; if (!k) return; REP[k] = e.target.value; if (k === "owner") REP.folder = ""; renderReport(); }
   const VIEWS = { report: renderReport, entry: renderEntry, records: renderRecords, devices: renderDevices, stands: renderStands, formulas: renderFormulas, refs: renderRefs, settings: renderSettings };
   let curView = "entry";
   function go(v) {
