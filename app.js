@@ -794,7 +794,9 @@
     const o = rec.owner ? `<b>${esc(rec.owner.name)}</b>` : `<span class="mut">chưa ghi (hồ sơ tạo trước khi có đăng nhập)</span>`;
     return `<div class="hint wide">Người nhập liệu, chịu trách nhiệm hồ sơ: ${o}${canEdit() ? "" : ` · <span class="bad">bạn chỉ được xem, không sửa</span>`}</div>`;
   }
+  const PHOTOS_ON = false;   // NGOC 12/11/2026: tạm ẩn ô ảnh bằng chứng cho mọi người để không tràn bộ nhớ Supabase. Đổi true để bật lại.
   function photoCard() {
+    if (!PHOTOS_ON) return "";
     const ed = canEdit();
     const cells = rec.photos.map((ph, i) => `<div class="ph"><div class="phimg" id="phimg${i}">${ph.has ? "" : `<span>Ô ${i + 1}</span>`}</div>
       <input data-p="photos.${i}.cap" value="${esc(ph.cap)}" placeholder="Chú thích"${ed ? "" : " readonly"}>
@@ -1669,6 +1671,21 @@
   }
 
   /* ---------- settings tab ---------- */
+  // Dung lượng Supabase (cấp 3): gói Free 500 MB cơ sở dữ liệu + 1 GB kho ảnh. Cần chạy 07_v57_dung_luong.sql một lần.
+  const mb = b => (b / 1048576).toFixed(b < 1e7 ? 1 : 0) + " MB";
+  function usageCard() {
+    if (!A.cloud() || !A.can("settings")) return "";
+    return `<div class="card" id="usagecard"><h2>📊 Dung lượng máy chủ</h2><p class="hint" id="usageout">Đang đọc…</p></div>`;
+  }
+  function fillUsage() {
+    const el = $("#usageout"); if (!el || !window.LabCloud || !LabCloud.usage) return;
+    LabCloud.usage().then(u => {
+      if (!el.isConnected) return; if (!u) { el.textContent = "Không đọc được (chỉ cấp 3)."; return; }
+      const dbp = u.db_bytes / (500 * 1048576) * 100, php = u.photo_bytes / (1024 * 1048576) * 100;
+      const row = (t, used, lim, p) => `<div class="mut">${t}: <b>${used}</b> / ${lim} (${p.toFixed(1)}%)</div><div style="height:8px;border-radius:4px;background:var(--sunk);margin:3px 0 10px;overflow:hidden"><div style="height:100%;width:${Math.min(100, p)}%;background:${p > 80 ? "#c03939" : p > 60 ? "#d9a21b" : "#2f8f4e"}"></div></div>`;
+      el.innerHTML = row(`Cơ sở dữ liệu (${u.records} hồ sơ)`, mb(u.db_bytes), "500 MB", dbp) + row(`Kho ảnh (${u.photos} ảnh)`, mb(u.photo_bytes), "1 GB", php) + `<span class="hint">Giới hạn của gói Free. Cơ sở dữ liệu gồm cả phần hệ thống của Supabase. Quá 80% thì xuất lưu trữ rồi dọn.</span>`;
+    }).catch(e => { el.innerHTML = `<span class="bad">Chưa đọc được: ${esc(e.message || e)}</span><br><span class="hint">Chạy file 07_v57_dung_luong.sql trong Supabase SQL Editor một lần.</span>`; });
+  }
   function renderSettings() {
     const f = (lab, p, wide) => `<label class="f${wide ? " wide" : ""}"><span>${lab}</span><input data-sp="${p}" value="${esc(getPath(settings, p))}"></label>`;
     const sel = (lab, p, opts) => `<label class="f"><span>${lab}</span><select data-sp="${p}">${opts.map(([v, t]) => `<option value="${v}"${!!getPath(settings, p) === !!v ? " selected" : ""}>${t}</option>`).join("")}</select></label>`;
@@ -1676,7 +1693,7 @@
         <div class="btns"><button class="btn pri" data-t="selftest">Chạy kiểm tra</button></div><div id="stout"></div></div>
       <div class="card"><h2>Về ứng dụng</h2><p class="hint">LAB PVGAS Services · bản thử nghiệm PT, PS, PG, TS, TT, RTD, TG · ${A.cloud() ? "dữ liệu đồng bộ qua máy chủ Supabase; vẫn nhập liệu được khi mất mạng, có mạng lại tự đồng bộ." : "chạy offline, dữ liệu chỉ lưu trên máy này (dùng Sao lưu JSON ở tab Hồ sơ)."}</p></div>`;
     if (!A.can("settings")) { $("#v-settings").innerHTML = A.accountCard() + freeCard() + (canCheck() ? checkCard() : "") + `<div class="card"><p class="hint">Cài đặt chứng chỉ chỉ dành cho Trưởng phòng / Quản trị (cấp 3).</p></div>` + tail; return; }
-    $("#v-settings").innerHTML = A.accountCard() + backupCard() + freeCard() + rangesCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
+    $("#v-settings").innerHTML = A.accountCard() + backupCard() + usageCard() + freeCard() + rangesCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
         ${f("Chức danh trái", "sig1Title")}${f("Tên", "sig1Name")}${f("Chức danh trái (EN)", "sig1TitleEn", 1)}
         ${f("Chức danh phải", "sig2Title")}${f("Tên", "sig2Name")}${f("Chức danh phải (EN)", "sig2TitleEn", 1)}
         ${f("Nơi cấp (dòng ngày)", "place")}${f("Chu kỳ HC (tháng)", "dueMonths")}
@@ -1914,10 +1931,12 @@
     const folders = new Map(); all.forEach(r => { if (!REP.owner || (r.owner ? r.owner.id || r.owner.name : "") === REP.owner) folders.set(folderKey(r), folderName(r)); });
     const opt = (v, cur, t) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(t)}</option>`;
     const rows = repList().map(repRow), done = rows.filter(x => x.stat === "Đã duyệt final");
-    const tbl = (head, data) => `<div class="tblwrap"><table class="res" style="width:100%"><thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${data.map(a => `<tr>${a.map((v, i) => `<td${i ? ' style="text-align:right"' : ""}>${i ? v : esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    const tbl = (head, data) => `<div class="tblwrap"><table class="rtbl"><thead><tr>${head.map((h, i) => `<th${i && head.length === 5 ? ' class="n"' : ""}>${h}</th>`).join("")}</tr></thead><tbody>${data.map(a => `<tr>${a.map((v, i) => `<td${i && a.length === 5 ? ' class="n"' : ""}>${i && a.length === 5 ? v : esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
     const line = ([k, o]) => [k, o.n, o.fin, o.ok, o.fail];
+    const okN = rows.filter(x => /^Đạt/.test(x.result)).length, badN = rows.filter(x => /^Không/.test(x.result)).length;
+    const kpi = (n, l, c) => `<div class="kpi ${c || ""}"><b>${n}</b><span>${l}</span></div>`;
     el.innerHTML = `<div class="card"><h2>Báo cáo <small>(chỉ cấp 3)</small></h2>
-      <div class="grid">
+      <div class="rfil">
         <label class="f"><span>Công trình / Site</span><select data-rf="site">${opt("", REP.site, "Tất cả")}${sites.map(s => opt(s, REP.site, s)).join("")}</select></label>
         <label class="f"><span>Loại thiết bị</span><select data-rf="type">${opt("", REP.type, "Tất cả 9 loại")}${TYPES.map(t => opt(t[0], REP.type, t[1] + " – " + t[2])).join("")}</select></label>
         <label class="f"><span>Người nhập</span><select data-rf="owner">${opt("", REP.owner, "Tất cả")}${[...owners].sort((a, z) => a[1].localeCompare(z[1], "vi")).map(([k, n]) => opt(k, REP.owner, n)).join("")}</select></label>
@@ -1926,14 +1945,14 @@
         <label class="f"><span>Đến ngày HC</span><input type="date" data-rf="to" value="${esc(REP.to)}"></label>
         <label class="f"><span>Trạng thái</span><select data-rf="status">${opt("final", REP.status, "Đã duyệt final")}${opt("pending", REP.status, "Đang chờ duyệt")}${opt("draft", REP.status, "Chưa chuyển duyệt")}${opt("all", REP.status, "Tất cả")}</select></label>
       </div>
-      <p><b>${rows.length}</b> thiết bị khớp bộ lọc · <b class="ok">${done.length}</b> đã duyệt final · Đạt ${rows.filter(x => /^Đạt/.test(x.result)).length} · <span class="bad">Không đạt ${rows.filter(x => /^Không/.test(x.result)).length}</span></p>
+      <div class="kpis">${kpi(rows.length, "thiết bị khớp bộ lọc")}${kpi(done.length, "đã duyệt final", "ok")}${kpi(okN, "đạt")}${kpi(badN, "không đạt", badN ? "bad" : "")}</div>
       <div class="btns"><button class="btn pri" data-rp="zip">⬇ Tải gói báo cáo <small>ZIP: tổng hợp + danh sách + Uncer từng loại</small></button>
         <button class="btn" data-rp="sum">Excel tổng hợp + chi tiết</button><button class="btn" data-rp="list">Excel danh sách (mẫu DGCP)</button><button class="btn" data-rp="unc">Excel Uncer (từng loại)</button></div>
       <div id="repout"></div>
       <p class="hint">Gói báo cáo và Uncer chỉ lấy hồ sơ <b>đã duyệt final</b> khớp bộ lọc. Thiết bị không đạt có trong tổng hợp nhưng không có GCN. Uncer xuất từ số liệu app tính (giá trị, không phải công thức sống của file Excel gốc).</p></div>
-      ${rows.length ? `<div class="card"><h2>Theo công trình</h2>${tbl(["Công trình", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.site).map(line))}</div>
+      ${rows.length ? `<div class="rgrid"><div class="card"><h2>Theo công trình</h2>${tbl(["Công trình", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.site).map(line))}</div>
       <div class="card"><h2>Theo loại thiết bị</h2>${tbl(["Loại", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.type + " – " + x.typeName).map(line))}</div>
-      <div class="card"><h2>Theo người nhập</h2>${tbl(["Người nhập", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.owner || "—").map(line))}</div>
+      <div class="card"><h2>Theo người nhập</h2>${tbl(["Người nhập", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.owner || "—").map(line))}</div></div>
       <div class="card"><h2>Danh sách thiết bị <small>(${rows.length})</small></h2>${tbl(["Tag", "Loại", "Công trình", "Số CN", "Ngày HC", "Kết quả", "Người nhập", "Trạng thái"], rows.slice(0, 300).map(x => [x.tag, x.type, x.site, x.certNo, x.cal, x.result, x.owner, x.stat]))}${rows.length > 300 ? `<p class="hint">Hiện 300 dòng đầu; file Excel có đủ ${rows.length}.</p>` : ""}</div>` : `<div class="card"><p class="hint">Không có hồ sơ nào khớp bộ lọc.</p></div>`}`;
   }
   let exLoad = null;
@@ -2038,7 +2057,7 @@
     $$("main > section").forEach(s => s.hidden = s.id !== "v-" + v);
     $$("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
     const rb = $('nav.tabs button[data-v="report"]'); if (rb) rb.hidden = !(A.me() && A.me().role >= 3);
-    VIEWS[v](); window.scrollTo(0, 0);
+    VIEWS[v](); if (v === "settings") fillUsage(); window.scrollTo(0, 0);
     const wd = $("#wdock"); if (wd && v !== "entry") { wd.hidden = true; document.body.classList.remove("hasdock"); }
   }
   document.addEventListener("DOMContentLoaded", () => {
