@@ -773,7 +773,7 @@
     const row = p => `<div class="rec"><div><b>${esc(p.name)}</b><br><small class="mut">${p.nd} bản vẽ · ${p.nt} tag${p.made ? " · lập " + esc(p.made) : ""} · ${p.src === "cloud" ? "từ máy chủ" : "<span class=\"bad\">mới nạp trên máy này, chưa đưa lên</span>"}</small></div>
       ${lv3 ? `<div class="ra">${up && up.id === p.id ? `<button class="btn sm pri" disabled>Đang đưa lên ${up.i}/${up.n}…</button>` : p.src !== "cloud" && cloud ? `<button class="btn sm pri" data-pidup="${esc(p.id)}"${up ? " disabled" : ""}>Đưa lên máy chủ</button>` : ""}${p.src === "cloud" ? `<button class="btn sm" data-pidun="${esc(p.id)}">Gỡ khỏi máy chủ</button>` : `<button class="btn sm" data-pidrm="${esc(p.id)}">Bỏ</button>`}</div>` : ""}</div>`;
     return `<details class="fold pidpk"${pidOpen || up ? " open" : ""}><summary><b>P&amp;ID:</b> ${L.length ? `${L.length} gói · ${L.reduce((a, p) => a + p.nt, 0)} tag có vị trí trên bản vẽ` : `<span class="mut">chưa có gói nào</span>`}</summary>
-      <p class="hint">P&amp;ID là tài liệu nội bộ: chỉ nằm trong kho riêng tư của máy chủ, tài khoản đăng nhập mới xem được, không có trên web công khai. App tự tải về khi mở tab này; ảnh bản vẽ tải lần đầu khi bấm xem (cần mạng), sau đó xem được cả khi mất mạng. Chức năng / trip chỉ hiện khi gói có dữ liệu C&amp;E, app không tự suy đoán.</p>
+      <p class="hint">Bản vẽ tải lần đầu cần mạng, sau đó xem được khi mất mạng. Chỉ tài khoản đăng nhập mới xem được. Chức năng / trip chỉ hiện khi có dữ liệu C&amp;E.</p>
       ${L.map(row).join("")}
       ${lv3 ? `<div class="btns"><label class="btn">Nạp gói từ file…<input type="file" id="pidF" multiple accept=".json,image/*" hidden></label></div><p class="hint">Trưởng phòng: chọn cùng lúc <b>pid-index.json</b> và toàn bộ ảnh của gói, kiểm tra thử rồi bấm <b>Đưa lên máy chủ</b> để mọi người dùng.</p>` : ""}</details>`;
   }
@@ -788,14 +788,15 @@
     const cnt = s => DEVS.filter(d => d.s === s).length;
     const types = [...new Set(DEVS.map(d => d.T))];
     el.innerHTML = `<div class="card"><h2>Tra cứu thiết bị <small>(${DEVS.length} thiết bị · ${sites.length} công trình)</small></h2>
-      <label class="f wide dvbig"><span>Tag thiết bị</span><input id="dvQ" value="${esc(devQ.q)}" placeholder="Gõ tag, ví dụ PT-1506A (hoặc serial, model…)" autocomplete="off" enterkeyhint="search" autocapitalize="characters"></label>
+      <label class="f wide dvbig"><span>Tag thiết bị</span><input id="dvQ" value="${esc(devQ.q)}" placeholder="Gõ tag hoặc serial, VD PT-1506A" autocomplete="off" enterkeyhint="search" autocapitalize="characters"></label>
       <details class="fold"${devQ.site || devQ.type ? " open" : ""}><summary class="mut">Lọc theo công trình / loại${devQ.site || devQ.type ? ": " + esc([devQ.site && siteName(devQ.site), devQ.type].filter(Boolean).join(" · ")) : ""}</summary><div class="grid">
         <label class="f"><span>Công trình</span><select id="dvS"><option value="">Tất cả công trình</option>${sites.map(s => `<option value="${esc(s)}"${devQ.site === s ? " selected" : ""}>${esc(siteName(s))} (${cnt(s)})</option>`).join("")}</select></label>
         <label class="f"><span>Loại</span><select id="dvT"><option value="">Tất cả loại</option>${types.map(t => `<option${devQ.type === t ? " selected" : ""}>${t}</option>`).join("")}</select></label>
       </div></details>
       <div id="dvL"></div></div>
       <div class="card">${pidCard()}
-      <p class="hint">Nguồn danh mục: ${esc((window.LabDevices || {}).note || "—")}. Bấm <b>Nhập hồ sơ</b> để mở hồ sơ mới đã điền sẵn thông số; mọi ô vẫn sửa tay được. Khi duyệt final, thông tin thiết bị trong hồ sơ (hãng, model, S/N, dải, sai số) tự cập nhật vào danh mục.</p>
+      <p class="hint">Bấm <b>Nhập hồ sơ</b> để mở hồ sơ mới đã điền sẵn thông số; mọi ô vẫn sửa tay được.</p>
+      <details class="fold"><summary class="mut">Nguồn danh mục thiết bị</summary><p class="hint">${esc((window.LabDevices || {}).note || "—")}. Khi duyệt final, thông tin thiết bị trong hồ sơ (hãng, model, S/N, dải, sai số) tự cập nhật vào danh mục.</p></details>
       ${A.can("settings") && devBulk(true) ? `<div class="btns"><button class="btn pri" data-dvsync="1">Cập nhật danh mục từ ${devBulk(true)} hồ sơ đã duyệt</button></div>` : ""}</div>`;
     $("#dvS").onchange = e => { devQ.site = e.target.value; devQ.n = 20; devList(); };
     $("#dvT").onchange = e => { devQ.type = e.target.value; devQ.n = 20; devList(); };
@@ -857,14 +858,14 @@
   function fvFld() {
     const lab = "Phiên bản công thức Uncer";
     if (A.can("settings")) return fld(lab, "fv", { options: [["2", D.FV[2]], ["1", D.FV[1]]] });
-    return `<label class="f"><span>${lab}</span><input value="${esc(D.FV[rec.fv] || D.FV[1])}" readonly></label>`;
+    return "";   // v72: cấp 1/2 không cần thấy phiên bản công thức (chỉ đọc) – cho gọn màn hình
   }
   function fld(label, path, opt = {}) {
     const v = getPath(rec, path); const id = "f_" + path.replace(/\./g, "_");
     let ctl;
     if (opt.options) ctl = `<select id="${id}" data-p="${path}">${opt.options.map(o => { const [val, txt, dis] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(val)}"${String(val) === String(v) ? " selected" : ""}${dis ? ' disabled class="optx"' : ""}>${esc(txt)}</option>`; }).join("")}</select>`;
     else ctl = `<input id="${id}" data-p="${path}" value="${esc(v)}" ${opt.type ? `type="${opt.type}"` : ""} ${opt.num ? 'inputmode="decimal"' : ""} ${opt.list ? `list="${opt.list}"` : ""} placeholder="${esc(opt.ph || "")}" autocomplete="off"${opt.ro ? " readonly" : ""}>`;
-    if (opt.sign) ctl = `<div class="pm">${ctl}<button type="button" class="pmb" data-neg="${path}" aria-label="Đổi dấu">±</button></div>`;
+    if (opt.sign) ctl = `<div class="pm">${ctl}<button type="button" class="pmb" data-neg="${path}" aria-label="Đổi dấu" title="Đổi dấu âm / dương">±</button></div>`;
     return `<label class="f${opt.wide ? " wide" : ""}"><span>${label}</span>${ctl}</label>`;
   }
   // Chuẩn hết hạn (theo Ngày HC): hiện xám, không chọn được, ghi "hết hạn – chờ cập nhật" (NGOC 06/11/2026). Cấp 3 cập nhật hạn mới ở tab Chuẩn.
@@ -911,7 +912,7 @@
     let dev = `
       <div class="grid">
         ${locHtml}
-        ${fld("Tag (gõ để gợi ý từ danh sách thiết bị)", "h.tag", { ph: PT ? "PT-1430A" : "PDSH-1106", wide: 1 })}
+        ${fld("Tag (gõ vài ký tự để chọn từ danh sách)", "h.tag", { ph: PT ? "PT-1430A" : "PDSH-1106", wide: 1 })}
         ${fld("Mô tả (Description)", "h.description", { options: descOpts })}
         ${fld("Kiểu / Model", "h.model")}
         ${fld("Số serial", "h.serial")}
@@ -925,23 +926,23 @@
         ${PT ? "" : fld("Pset (giá trị đặt)", "h.pset", { num: 1 }) + fld("Đơn vị Pset", "h.unitPset", { options: PUNITS }) +
         fld("Chế độ làm việc", "h.micro", { options: [["NC", "Thường đóng (NC)"], ["NO", "Thường mở (NO)"]] }) +
         fld("Chiều tác động (QTG)", "h.dirQTG", { options: [["Rising", "Chiều tăng (Rising)"], ["Falling", "Chiều giảm (Falling)"]] }) + fld("Độ chia nhỏ nhất thước đặt mức", "h.resolution", { num: 1 })}
-        ${fld("Số liệu và kết quả", "h.psType", { options: [["As Found", "As Found"], ["As Left", "As Left"]] })}
+        ${fld("Trạng thái (As Found / As Left)", "h.psType", { options: [["As Found", "As Found"], ["As Left", "As Left"]] })}
         ${fld("Ngày hiệu chuẩn", "h.calDate", { type: "date" })}
         ${fld("Phương pháp", "h.procedure")}${fvFld()}
         ${fld("Điều kiện môi trường (in chứng chỉ)", "h.env", { wide: 1 })}
-        ${fld("Tick ô môi trường trên QTG", "h.envOk", { wide: 1, options: [["1", `Có – ${PT ? settings.PT.qtgTemp + ", " + settings.PT.qtgHum : settings.PS.qtgTemp + ", " + settings.PS.qtgHum}`], ["", "Không tick"]] })}
+        ${fld("Đánh dấu ô môi trường trên QTG", "h.envOk", { wide: 1, options: [["1", `Có – ${PT ? settings.PT.qtgTemp + ", " + settings.PT.qtgHum : settings.PS.qtgTemp + ", " + settings.PS.qtgHum}`], ["", "Không đánh dấu"]] })}
       </div>`;
     let std = `<div class="grid">
         ${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p", "h.stand1"), wide: 1 })}
         ${PT ? fld("Chuẩn điện (Stand2)", "h.stand2", { options: standOptions("e", "h.stand2"), wide: 1 }) : ""}
-        <div class="hint wide">Danh mục chuẩn 2026 (sheet Stand Ref). Hiệu chỉnh áp suất: <b>Yes</b> – số đọc chuẩn dùng trực tiếp như toàn bộ hồ sơ DGCP 10/2026.</div>
+        ${A.can("settings") ? `<div class="hint wide">Danh mục chuẩn 2026 (sheet Stand Ref). Hiệu chỉnh áp suất: <b>Yes</b> – số đọc chuẩn dùng trực tiếp như toàn bộ hồ sơ DGCP 10/2026.</div>` : ""}
         ${decHint([[standById(h.stand1), PT ? h.unit : h.unitPset], [PT ? standById(h.stand2) : null, "mA", 20]])}
       </div>`;
     let pts;
     if (PT) {
       const rows = rec.pt.points.map((x, i) => {
         const ideal = (num(h.max) > num(h.min) && isFinite(num(x))) ? (4 + 16 * (num(x) - num(h.min)) / (num(h.max) - num(h.min))).toFixed(3) : "";
-        return `<tr><td class="n">${i + 1}</td><td><div class="pm"><input data-p="pt.points.${i}" inputmode="decimal" value="${esc(x)}"><button type="button" class="pmb sm" data-neg="pt.points.${i}" aria-label="Đổi dấu">±</button></div></td><td class="mut">${ideal}</td>
+        return `<tr><td class="n">${i + 1}</td><td><div class="pm"><input data-p="pt.points.${i}" inputmode="decimal" value="${esc(x)}"><button type="button" class="pmb sm" data-neg="pt.points.${i}" aria-label="Đổi dấu" title="Đổi dấu âm / dương">±</button></div></td><td class="mut">${ideal}</td>
           <td><input data-p="pt.rise.${i}" inputmode="decimal" value="${esc(rec.pt.rise[i])}" placeholder="mA"></td>
           <td><input data-p="pt.fall.${i}" inputmode="decimal" value="${esc(rec.pt.fall[i])}" placeholder="mA"></td></tr>`;
       }).join("");
@@ -960,7 +961,7 @@
         ${ctlField()}
         ${fld("Ngày cấp chứng chỉ", "h.issueDate", { type: "date" })}
         ${fld("Ghi chú QTG", "h.note", { wide: 1 })}
-        <div class="hint wide">Trang 1 chứng chỉ ký: ${esc(settings.sig1Title)} <b>${esc(settings.sig1Name)}</b> và ${esc(settings.sig2Title)} <b>${esc(settings.sig2Name)}</b> (đổi trong Cài đặt).</div>
+        <div class="hint wide">Trang 1 chứng chỉ do ${esc(settings.sig1Title)} <b>${esc(settings.sig1Name)}</b> và ${esc(settings.sig2Title)} <b>${esc(settings.sig2Name)}</b> ký${A.can("settings") ? " (đổi trong Cài đặt)" : ""}.</div>
       </div><datalist id="names">${names.map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
     // Máy tính (≥ 1100 px): 2 cột – trái = thông tin (1, 2, 3, ảnh), phải = số đo + kết quả + ký (4, 5, 6).
     // Điện thoại: .ecl/.ecr là display:contents, thứ tự thẻ giữ như cũ nhờ class o1…o8 (index.html).
@@ -1029,7 +1030,7 @@
     const h = rec.h, T = rec.type, u = T === "PG" || T === "DPG" ? h.unit : "°C";
     const S0 = settings[T];
     const yn = [["1", "Đạt (Pass)"], ["", "Không đạt (Fail)"]];
-    const asf = fld("Số liệu và kết quả", "h.psType", { options: [["As Found", "As Found"], ["As Left", "As Left"]] });
+    const asf = fld("Trạng thái (As Found / As Left)", "h.psType", { options: [["As Found", "As Found"], ["As Left", "As Left"]] });
     let spec = "";
     if (T === "PG") spec = fld("Năm sản xuất", "h.mfgYear", { ph: "N/A" }) + fld("Kiểu (EN, in GCN)", "h.typeEN") + fld("Độ chính xác (±%FS)", "h.acc", { num: 1 })
       + fld("Phạm vi đo – Min", "h.min", { num: 1, sign: 1 }) + fld("Phạm vi đo – Max", "h.max", { num: 1, sign: 1 }) + fld("Đơn vị", "h.unit", { options: PUNITS })
@@ -1054,14 +1055,14 @@
       + fld("Phạm vi đo – Min", "h.min", { num: 1, sign: 1 }) + fld("Phạm vi đo – Max", "h.max", { num: 1, sign: 1 }) + fld("Đơn vị", "h.unit", { options: PUNITS })
       + fld("Vạch chia (Scale interval)", "h.scale", { num: 1 }) + fld("Độ chia nhỏ nhất (Definition)", "h.res", { num: 1 }) + asf;
     const dev = `<div class="grid">${locHtml}
-        ${fld("Tag (gõ để gợi ý từ danh sách thiết bị)", "h.tag", { wide: 1 })}${fld("Kiểu / Model", "h.model")}${fld("Số serial", "h.serial")}
+        ${fld("Tag (gõ vài ký tự để chọn từ danh sách)", "h.tag", { wide: 1 })}${fld("Kiểu / Model", "h.model")}${fld("Số serial", "h.serial")}
         ${fld("Hãng sản xuất", "h.makerSel", { options: [["", "— chọn hãng —"], [OTHER, "KHÁC (nhập tay)"]].concat(makersFor(rec.type)) })}
         ${makerSel(h) === OTHER ? fld("Hãng (nhập tay)", "h.maker") : ""}
         ${spec}
         ${fld(T === "PG" ? "Ngày kiểm định" : "Ngày hiệu chuẩn", "h.calDate", { type: "date" })}
         ${fld("Phương pháp", "h.procedure")}${fvFld()}
         ${T === "PG" ? "" : fld("Điều kiện môi trường (in chứng chỉ)", "h.env", { wide: 1 })}
-        ${fld("Tick ô môi trường trên QTG", "h.envOk", { wide: 1, options: [["1", `Có – ${S0.qtgTemp}, ${S0.qtgHum}`], ["", "Không tick"]] })}
+        ${fld("Đánh dấu ô môi trường trên QTG", "h.envOk", { wide: 1, options: [["1", `Có – ${S0.qtgTemp}, ${S0.qtgHum}`], ["", "Không đánh dấu"]] })}
       </div>`;
     let std;
     if (T === "PG") std = `<div class="grid">${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p", "h.stand1"), wide: 1 })}
@@ -1085,7 +1086,7 @@
     if (T === "DPG") std = `<div class="grid">${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p", "h.stand1"), wide: 1 })}
         <div class="hint wide">Số đọc chuẩn nhập theo đơn vị của đồng hồ (${esc(u)}). U chuẩn và %Rdg lấy theo GCN của chuẩn trong thư viện.</div>${decHint([[standById(h.stand1), u]])}</div>`;
     const inp = (p, v, ph) => `<input data-p="${p}" inputmode="decimal" value="${esc(v)}"${ph ? ` placeholder="${ph}"` : ""}${(rec.stdAuto || []).includes(p) ? ` class="auto" title="Tự điền = điểm hiệu chuẩn, gõ để sửa"` : ""}>`;
-    const sgn = (p, v) => `<div class="pm">${inp(p, v)}<button type="button" class="pmb sm" data-neg="${p}" aria-label="Đổi dấu">±</button></div>`;
+    const sgn = (p, v) => `<div class="pm">${inp(p, v)}<button type="button" class="pmb sm" data-neg="${p}" aria-label="Đổi dấu" title="Đổi dấu âm / dương">±</button></div>`;
     let pts, ptsTitle;
     if (T === "PG") {
       const rows = rec.pg.std.map((x, i) => `<tr><td class="n">${i + 1}</td><td>${sgn(`pg.std.${i}`, x)}</td><td>${inp(`pg.rise.${i}`, rec.pg.rise[i])}</td><td>${inp(`pg.fall.${i}`, rec.pg.fall[i])}</td></tr>`).join("");
@@ -1417,7 +1418,7 @@
       <div class="agrp"><div class="alab">Hồ sơ</div><div class="arow">
         <button class="btn pri" data-act="save">💾 Lưu hồ sơ</button><button class="btn" data-act="new">＋ Hồ sơ mới</button></div></div>
       <div class="agrp"><div class="alab">Duyệt</div><div class="astat">${stHtml}</div>${ret}${rv}</div>
-      ${fl ? `<div class="hint bad">⚠ KHÔNG ĐẠT${rec.summary.why ? ": " + esc(rec.summary.why) : ""}. Không cấp số, không xuất chứng chỉ; chỉ có Biên bản QTG ghi nhận kết quả.</div>` : ""}
+      ${fl ? `<div class="hint bad">⚠ KHÔNG ĐẠT${rec.summary.why ? ": " + esc(noRef(rec.summary.why)) : ""}. Không cấp số, không xuất chứng chỉ; chỉ có Biên bản QTG ghi nhận kết quả.</div>` : ""}
       <div class="agrp"><div class="alab">Xuất tài liệu${ok ? "" : " – chỉ in / tải sau khi duyệt final"}</div><div class="agrid">${exp}</div></div>
     </div>`;
   }
@@ -1663,7 +1664,8 @@
   const dmy = iso => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ""); return m ? `${m[3]}/${m[2]}/${m[1]}` : "chưa có ngày"; };
   const recDay = r => r.h.calDate || (r.updated || "").slice(0, 10);
   const stageTag = r => { const [c, t] = STAGE[stage(r)]; return `<span class="${c}">${t}${stage(r) === "review" && r.submitted.to ? " · " + esc(r.submitted.to.name) : stage(r) === "final" && r.finalTo ? " · " + esc(r.finalTo.name) : ""}</span>`; };
-  const whyOf = r => (r.summary && r.summary.why) || failWhy(compute(r));
+  const noRef = t => String(t || "").replace(/\s*\(Data\d+![A-Z]+\)/g, "");   // v72: bỏ ô Excel (Data76!HX…) khỏi chữ hiển thị
+  const whyOf = r => noRef((r.summary && r.summary.why) || failWhy(compute(r)));
   function renderRecords() {
     const q = ($("#rq") && $("#rq").value || "").toLowerCase();
     const m = A.me(), vis = records.filter(visible);
@@ -1686,18 +1688,18 @@
       ${needFinal ? `<label class="f"><span>Người duyệt final cho các hồ sơ duyệt cả gói</span>${personSel("apf_final", finals(), store.get("lastFinal", ""), "— Chọn người duyệt final —")}</label>` : ""}
       ${[...byF].map(([k, a]) => `<div class="qf"><b>📁 ${esc(folderName(a[0]))}</b><small class="mut">${a.length} hồ sơ</small>
         <button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${a.length})</button></div>`).join("")}
-      <details class="qd" open><summary>Xem từng hồ sơ</summary>${pend.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} ${stageTag(r)}<br>
+      <details class="qd" open><summary>Xem từng hồ sơ</summary>${pend.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Đạt" : "Không đạt"}</span>` : ""} ${stageTag(r)}<br>
         <small class="mut">${esc(r.certNo || "")} · ${esc(stage(r) === "final" ? fullName(r.approved.by) + " đã duyệt kiểm soát" : fullName(r.submitted.by) + " chuyển " + new Date(r.submitted.at).toLocaleString("vi-VN", { hour12: false }))}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở xem</button></div></div>`).join("")}</details></div>` : "";
     $("#v-records").innerHTML = failCard + queue + `<div class="card"><h2>Hồ sơ <small>(${vis.length})</small></h2>
       <p class="hint">${m && m.role >= 3 ? "Cấp 3: xem toàn bộ hồ sơ." : "Chỉ hiện hồ sơ bạn nhập và hồ sơ được chuyển tới bạn duyệt."} Mỗi thư mục = Người nhập – ngày hiệu chuẩn. Viền xanh: đã duyệt final hết; viền vàng: còn chờ duyệt.</p>
       <input id="rq" placeholder="Tìm tag, số chứng chỉ, model, người nhập…" value="${esc(q)}">
       <div class="btns"><button class="btn sm${mineOnly ? "" : " pri"}" data-r="all">Tất cả</button><button class="btn sm${mineOnly ? " pri" : ""}" data-r="mine">Hồ sơ tôi nhập</button></div>
-      <div class="btns"><button class="btn pri" data-r="qcPT">Bảng kiểm tra PT (QC)</button><button class="btn pri" data-r="qcPS">Bảng kiểm tra PS (QC)</button></div><div id="qcout"></div>
+      <div class="btns"><button class="btn sm" data-r="qcPT">Bảng kiểm tra PT (QC)</button><button class="btn sm" data-r="qcPS">Bảng kiểm tra PS (QC)</button></div><div id="qcout"></div>
       <div class="btns"><button class="btn" data-r="csv">Xuất danh mục CSV</button>${A.cloud() ? "" : `<button class="btn" data-r="backup">Sao lưu JSON</button><label class="btn">Nhập JSON<input type="file" id="imp" accept=".json,application/json" hidden></label>`}</div>
       ${waitN ? `<div class="btns"><button class="btn sm" data-r="togwait">${showWait ? "Ẩn" : "Hiện"} ${waitN} hồ sơ đang chờ duyệt</button></div>` : ""}
-      ${list.length ? folders(list, r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} ${stageTag(r)}<br>
-        <small class="mut">${esc(r.certNo)} · ${esc(r.h.calDate)} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)} · U=${esc(r.summary ? r.summary.U : "—")} · Người nhập: ${esc(r.owner ? ownerName(r.owner) : "—")}${(r.photos || []).some(x => x.has) ? ` · 📷 ${(r.photos || []).filter(x => x.has).length}` : ""}</small></div>
+      ${list.length ? folders(list, r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Đạt" : "Không đạt"}</span>` : ""} ${stageTag(r)}<br>
+        <small class="mut">${r.certNo ? esc(r.certNo) + " · " : ""}${esc(dmy(r.h.calDate))} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)}${r.summary && r.summary.U && r.summary.U !== "—" ? " · U=" + esc(r.summary.U) : ""} · Người nhập: ${esc(r.owner ? ownerName(r.owner) : "—")}${(r.photos || []).some(x => x.has) ? ` · 📷 ${(r.photos || []).filter(x => x.has).length}` : ""}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở</button><button class="btn sm" data-r="dup" data-id="${r.id}">Nhân bản</button>${A.can("deleteRecord") ? `<button class="btn sm" data-r="del" data-id="${r.id}">Xoá</button>` : ""}</div></div>`, hide) : `<p class="mut">Chưa có hồ sơ.</p>`}</div>`;
     const imp = $("#imp"); if (imp) imp.onchange = importJson;
     $$("details.fold").forEach(d => d.addEventListener("toggle", () => { if (d.open) openFolders.add(d.dataset.f); else openFolders.delete(d.dataset.f); }));
