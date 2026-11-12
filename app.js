@@ -136,9 +136,30 @@
     const vis = records.filter(visible), q = vis.filter(myTurn).length, f = vis.filter(isFail);
     let el = b.querySelector(".bdg"); if (!el) { el = document.createElement("span"); el.className = "bdg"; b.appendChild(el); }
     el.innerHTML = `${q ? `<i class="bq">${q}</i>` : ""}${f.length ? `<i class="bf">⚠${f.length}</i>` : ""}`; el.hidden = !q && !f.length;
+    pendBar(vis);
     const seen = store.get("failSeen", []), fresh = f.filter(r => !seen.includes(r.id));
     if (fresh.length) toast(`⚠ ${fresh.length} hồ sơ KHÔNG ĐẠT mới: ${fresh.slice(0, 3).map(r => r.h.tag).join(", ")}${fresh.length > 3 ? "…" : ""} – xem tab Hồ sơ`);
     if (fresh.length) store.set("failSeen", seen.concat(fresh.map(r => r.id)).slice(-500));
+  }
+  // Cảnh báo hồ sơ chờ duyệt (NGOC 12/11/2026): cấp 2 và 3 thấy thanh báo trên mọi tab; người nhập được báo khi hồ sơ của mình duyệt final
+  const AGE = r => { const t = r.submitted ? r.submitted.at : r.approved ? r.approved.at : ""; return t ? (Date.now() - new Date(t)) / 864e5 : 0; };
+  function pendBar(vis) {
+    const m = A.me(), pb = document.getElementById("pendbar"); if (!pb) return;
+    if (!m || m.role < 2) { pb.hidden = true; } else {
+      const mine = vis.filter(myTurn), old = mine.filter(r => AGE(r) > 3).length;
+      const others = m.role >= 3 ? vis.filter(r => ["review", "final"].includes(stage(r)) && !myTurn(r)) : [], oldO = others.filter(r => AGE(r) > 3).length;
+      if (!mine.length && !others.length) pb.hidden = true;
+      else {
+        pb.hidden = false; pb.classList.toggle("late", old > 0 || oldO > 0);
+        pb.innerHTML = `<b>📥 ${mine.length ? `${mine.length} hồ sơ đang chờ bạn duyệt` : "Không có hồ sơ chờ riêng bạn"}</b>${old ? ` · <u>${old} hồ sơ quá 3 ngày</u>` : ""}${others.length ? ` · ${others.length} hồ sơ khác đang chờ duyệt trong hệ thống${oldO ? ` (${oldO} quá 3 ngày)` : ""}` : ""} <span class="go">Xem ›</span>`;
+      }
+      const ps = store.get("pendSeen", null), ids = mine.map(r => r.id);
+      if (ps) { const fresh = mine.filter(r => !ps.includes(r.id)); if (fresh.length) toast(`📥 ${fresh.length} hồ sơ mới chờ bạn duyệt: ${fresh.slice(0, 3).map(r => r.h.tag).join(", ")}${fresh.length > 3 ? "…" : ""}`); }
+      store.set("pendSeen", Array.from(new Set((ps || []).concat(ids))).slice(-800));
+    }
+    const mid = m && m.id, fin = vis.filter(r => isFinal(r) && r.owner && r.owner.id === mid && r.final), fs = store.get("finSeen", null);
+    if (m && fs) { const fresh = fin.filter(r => !fs.includes(r.id)); if (fresh.length) toast(`✓ ${fresh.length} hồ sơ của bạn vừa được duyệt final: ${fresh.slice(0, 3).map(r => r.h.tag).join(", ")}${fresh.length > 3 ? "…" : ""} – tải ở tab Hồ sơ`); }
+    if (m) store.set("finSeen", Array.from(new Set((fs || []).concat(fin.map(r => r.id)))).slice(-1500));
   }
   let lastPdf = null;
 
@@ -1616,6 +1637,8 @@
       ${fails.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> <span class="bad">Fail</span> ${stageTag(r)}<br>
         <small class="bad">${esc(whyOf(r))}</small><br><small class="mut">${esc(r.owner ? ownerName(r.owner) : "—")} · ${esc(dmy(recDay(r)))} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở</button></div></div>`).join("")}</div>` : "";
+    // Hồ sơ đã chuyển duyệt / đang chờ duyệt tạm ẩn khỏi danh sách cho đỡ rối (hiện lại bằng nút, hoặc khi đang tìm kiếm); duyệt final xong thì hiện lại, nằm đầu thư mục
+    const inflight = r => ["review", "final"].includes(stage(r)), waitN = list.filter(inflight).length, hide = r => !showWait && !q && inflight(r);
     // Hàng chờ mình duyệt (bước kiểm soát hoặc bước final)
     const pend = vis.filter(myTurn);
     const byF = new Map(); pend.forEach(r => { const k = folderKey(r); if (!byF.has(k)) byF.set(k, []); byF.get(k).push(r); });
@@ -1633,9 +1656,10 @@
       <div class="btns"><button class="btn sm${mineOnly ? "" : " pri"}" data-r="all">Tất cả</button><button class="btn sm${mineOnly ? " pri" : ""}" data-r="mine">Hồ sơ tôi nhập</button></div>
       <div class="btns"><button class="btn pri" data-r="qcPT">Bảng kiểm tra PT (QC)</button><button class="btn pri" data-r="qcPS">Bảng kiểm tra PS (QC)</button></div><div id="qcout"></div>
       <div class="btns"><button class="btn" data-r="csv">Xuất danh mục CSV</button>${A.cloud() ? "" : `<button class="btn" data-r="backup">Sao lưu JSON</button><label class="btn">Nhập JSON<input type="file" id="imp" accept=".json,application/json" hidden></label>`}</div>
+      ${waitN ? `<div class="btns"><button class="btn sm" data-r="togwait">${showWait ? "Ẩn" : "Hiện"} ${waitN} hồ sơ đang chờ duyệt</button></div>` : ""}
       ${list.length ? folders(list, r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} ${stageTag(r)}<br>
         <small class="mut">${esc(r.certNo)} · ${esc(r.h.calDate)} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)} · U=${esc(r.summary ? r.summary.U : "—")} · Người nhập: ${esc(r.owner ? ownerName(r.owner) : "—")}${(r.photos || []).some(x => x.has) ? ` · 📷 ${(r.photos || []).filter(x => x.has).length}` : ""}</small></div>
-        <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở</button><button class="btn sm" data-r="dup" data-id="${r.id}">Nhân bản</button>${A.can("deleteRecord") ? `<button class="btn sm" data-r="del" data-id="${r.id}">Xoá</button>` : ""}</div></div>`) : `<p class="mut">Chưa có hồ sơ.</p>`}</div>`;
+        <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở</button><button class="btn sm" data-r="dup" data-id="${r.id}">Nhân bản</button>${A.can("deleteRecord") ? `<button class="btn sm" data-r="del" data-id="${r.id}">Xoá</button>` : ""}</div></div>`, hide) : `<p class="mut">Chưa có hồ sơ.</p>`}</div>`;
     const imp = $("#imp"); if (imp) imp.onchange = importJson;
     $$("details.fold").forEach(d => d.addEventListener("toggle", () => { if (d.open) openFolders.add(d.dataset.f); else openFolders.delete(d.dataset.f); }));
     const rq = $("#rq"); rq.oninput = () => { const pos = rq.selectionStart; renderRecords(); const n = $("#rq"); n.focus(); n.setSelectionRange(pos, pos); };
@@ -1645,16 +1669,22 @@
   let openFolders = null;
   const folderKey = r => (r.owner ? r.owner.id || r.owner.name : "_none") + "|" + recDay(r);
   const folderName = r => `${r.owner ? ownerName(r.owner) : "Chưa rõ người nhập"} - ${dmy(recDay(r))}`;
-  function folders(list, row) {
+  let showWait = false;
+  function folders(list, row, hide) {
     const m = A.me(), G = new Map();
     list.forEach(r => { const k = folderKey(r); if (!G.has(k)) G.set(k, { name: folderName(r), day: recDay(r), mine: !!(m && r.owner && r.owner.id === m.id), items: [] }); G.get(k).items.push(r); });
     const keys = [...G.keys()].sort((a, b) => { const A1 = G.get(a), B1 = G.get(b); return (B1.mine - A1.mine) || (B1.day || "").localeCompare(A1.day || "") || A1.name.localeCompare(B1.name, "vi"); });
     if (!openFolders) openFolders = new Set(keys.slice(0, 1));
-    return keys.map(k => { const f = G.get(k), n = f.items.length, ok = f.items.filter(isFinal).length, fl = f.items.filter(isFail).length, mq = f.items.filter(myTurn).length;
+    const me = A.me();
+    return keys.map((k, ki) => { const f = G.get(k), n = f.items.length, ok = f.items.filter(isFinal).length, fl = f.items.filter(isFail).length, mq = f.items.filter(myTurn).length;
+      const hid = f.items.filter(hide || (() => false)).length, drafts = me && me.role < 3 ? f.items.filter(r => stage(r) === "draft" && r.owner && r.owner.id === me.id).length : 0;
+      const shown = f.items.filter(r => !(hide && hide(r))).sort((a, b) => isFinal(b) - isFinal(a));
       const cls = ok === n ? "done" : f.items.some(r => stage(r) !== "draft") ? "wait" : "";
-      return `<details class="fold ${cls}" data-f="${esc(k)}"${openFolders.has(k) || keys.length === 1 ? " open" : ""}><summary>📁 <b>${esc(f.name)}</b>${f.mine ? " <span class=\"tag\">của tôi</span>" : ""} <small class="mut">${n} hồ sơ · ${ok}/${n} đã duyệt final</small>${ok === n ? ' <span class="ok">✓ Đã duyệt</span>' : ""}${fl ? ` <span class="bad">⚠ ${fl} không đạt</span>` : ""}</summary>
+      return `<details class="fold ${cls}" data-f="${esc(k)}"${openFolders.has(k) || keys.length === 1 ? " open" : ""}><summary>📁 <b>${esc(f.name)}</b>${f.mine ? " <span class=\"tag\">của tôi</span>" : ""} <small class="mut">${n} hồ sơ · ${ok}/${n} đã duyệt final${hid ? ` · ${hid} đang chờ duyệt (ẩn)` : ""}${drafts ? ` · <b class="bad">${drafts} chưa chuyển duyệt</b>` : ""}</small>${ok === n ? ' <span class="ok">✓ Đã duyệt</span>' : ""}${fl ? ` <span class="bad">⚠ ${fl} không đạt</span>` : ""}</summary>
+        ${drafts ? `<div class="subf"><select id="sc_${ki}">${["— Chọn người kiểm soát —"].map(t => `<option value="">${t}</option>`).join("")}${reviewers(me.id).map(p => `<option value="${esc(p.id)}"${store.get("lastCtl", "") === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
+          <button class="btn sm pri" data-r="subf" data-f="${esc(k)}" data-sel="sc_${ki}">➜ Chuyển duyệt cả thư mục (${drafts})</button></div>` : ""}
         <div class="btns">${mq ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${mq})</button>` : ""}${ok ? `<button class="btn sm pri" data-r="zipf" data-f="${esc(k)}">⬇ Tải thư mục QTG + GCN (${ok})</button>` : ""}<button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button>${A.cloud() ? "" : `<button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button>`}</div>
-        ${f.items.map(row).join("")}</details>`; }).join("");
+        ${shown.map(row).join("")}</details>`; }).join("");
   }
   function onRecordsClick(e) {
     const b = e.target.closest("button[data-r]"); if (!b) return;
@@ -1686,6 +1716,8 @@
       return;
     }
     if (b.dataset.r === "apf") { approveFolder(b); return; }
+    if (b.dataset.r === "subf") { submitFolder(b); return; }
+    if (b.dataset.r === "togwait") { showWait = !showWait; renderRecords(); return; }
     if (b.dataset.r === "zipf") { zipFolder(b); return; }
     if (b.dataset.r === "share") { sharePdf(); return; }
     if (b.dataset.r === "download") { downloadPdf(); return; }
@@ -1720,6 +1752,28 @@
   }
   // Duyệt cả gói (yêu cầu NGOC 01/11/2026): cấp 2/3 duyệt một lần mọi hồ sơ "Chờ duyệt" trong thư mục của một người.
   // Mỗi hồ sơ vẫn qua đủ kiểm tra như duyệt lẻ; hồ sơ thiếu số liệu bị bỏ qua và báo tên. Bấm 2 lần để xác nhận.
+  // Chuyển duyệt cả thư mục (NGOC 12/11/2026): cấp 1 / 2 chuyển mọi hồ sơ chưa chuyển của mình trong thư mục cho 1 người kiểm soát, một lần bấm
+  function submitFolder(b) {
+    const m = A.me(); if (!m) return;
+    const list = records.filter(r => folderKey(r) === b.dataset.f && stage(r) === "draft" && !r.deleted && r.owner && r.owner.id === m.id);
+    if (!list.length) { toast("Không có hồ sơ nào chưa chuyển duyệt trong thư mục này"); return; }
+    const p = people.find(x => x.id === (document.getElementById(b.dataset.sel) || {}).value && x.role >= 2);
+    if (!p) { toast("Chọn người kiểm soát bên cạnh nút trước khi chuyển"); return; }
+    if (p.id === m.id) { toast("Không tự chuyển duyệt cho chính mình – chọn người khác"); return; }
+    if (!b.dataset.armed) { b.dataset.armed = 1; const t = b.textContent; b.textContent = `Xác nhận chuyển ${list.length} hồ sơ cho ${p.name}?`; b.classList.add("danger"); setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = t; b.classList.remove("danger"); } }, 4000); return; }
+    store.set("lastCtl", p.id);
+    const now = new Date().toISOString(), skip = []; let n = 0;
+    list.forEach(r => {
+      const c = compute(r);
+      if (!r.h.tag || !c.res || !r.sig.inspector || expiredUsed(r).length || certIssues(r).some(t => !t.startsWith(NORANGE))) { skip.push(r.h.tag || r.certNo || "?"); return; }
+      clearFlow(r); delete r.returned; r.sig.controller = p.name; r.flow2 = true;
+      r.submitted = { by: m.name, byId: m.id, at: now, to: { id: p.id, name: p.name } }; addViewer(r, p.id); addViewer(r, m.id);
+      (r.log = r.log || []).push({ at: now, by: m.name, act: `Chuyển duyệt (cả thư mục) → ${p.name}` }); r.updated = now; n++;
+      if (rec && rec.id === r.id) rec = normalize(clone(r));
+    });
+    store.set("records", records); persistCurrent(); renderRecords();
+    toast(`Đã chuyển ${n} hồ sơ cho ${p.name}${skip.length ? ` · bỏ qua ${skip.length} hồ sơ (thiếu số liệu / chuẩn hết hạn / số tem ngoài dải hoặc trùng): ${skip.join(", ")}` : ""}${n && !A.cloud() ? " · chế độ trên máy: dùng 'Sao lưu JSON thư mục này' để gửi cho người duyệt" : ""}`);
+  }
   function approveFolder(b) {
     const m = A.me(); if (!m || m.role < 2) return;
     const list = records.filter(r => folderKey(r) === b.dataset.f && myTurn(r));
@@ -2378,6 +2432,7 @@
   }
   document.addEventListener("DOMContentLoaded", () => {
     $("nav.tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) go(b.dataset.v); });
+    $("#pendbar").addEventListener("click", () => go("records"));
     $("#v-entry").addEventListener("input", onInput);
     $("#v-entry").addEventListener("change", e => { if (e.target.tagName === "SELECT" || e.target.type === "date") onInput(e); });
     $("#v-entry").addEventListener("click", onClick);
