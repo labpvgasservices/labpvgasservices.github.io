@@ -769,15 +769,15 @@
   const PID = window.LabPID || null;
   function pidCard() {
     if (!PID) return "";
-    const L = PID.packs(), lv3 = A.can("settings"), cloud = window.LabCloud && window.LabCloud.enabled;
+    const L = PID.packs(), lv3 = A.can("settings"), cloud = window.LabCloud && window.LabCloud.enabled, up = PID.busy();
     const row = p => `<div class="rec"><div><b>${esc(p.name)}</b><br><small class="mut">${p.nd} bản vẽ · ${p.nt} tag${p.made ? " · lập " + esc(p.made) : ""} · ${p.src === "cloud" ? "từ máy chủ" : "<span class=\"bad\">mới nạp trên máy này, chưa đưa lên</span>"}</small></div>
-      ${lv3 ? `<div class="ra">${p.src !== "cloud" && cloud ? `<button class="btn sm pri" data-pidup="${esc(p.id)}">Đưa lên máy chủ</button>` : ""}${p.src === "cloud" ? `<button class="btn sm" data-pidun="${esc(p.id)}">Gỡ khỏi máy chủ</button>` : `<button class="btn sm" data-pidrm="${esc(p.id)}">Bỏ</button>`}</div>` : ""}</div>`;
-    return `<details class="fold pidpk"><summary><b>P&amp;ID:</b> ${L.length ? `${L.length} gói · ${L.reduce((a, p) => a + p.nt, 0)} tag có vị trí trên bản vẽ` : `<span class="mut">chưa có gói nào</span>`}</summary>
+      ${lv3 ? `<div class="ra">${up && up.id === p.id ? `<button class="btn sm pri" disabled>Đang đưa lên ${up.i}/${up.n}…</button>` : p.src !== "cloud" && cloud ? `<button class="btn sm pri" data-pidup="${esc(p.id)}"${up ? " disabled" : ""}>Đưa lên máy chủ</button>` : ""}${p.src === "cloud" ? `<button class="btn sm" data-pidun="${esc(p.id)}">Gỡ khỏi máy chủ</button>` : `<button class="btn sm" data-pidrm="${esc(p.id)}">Bỏ</button>`}</div>` : ""}</div>`;
+    return `<details class="fold pidpk"${pidOpen || up ? " open" : ""}><summary><b>P&amp;ID:</b> ${L.length ? `${L.length} gói · ${L.reduce((a, p) => a + p.nt, 0)} tag có vị trí trên bản vẽ` : `<span class="mut">chưa có gói nào</span>`}</summary>
       <p class="hint">P&amp;ID là tài liệu nội bộ: chỉ nằm trong kho riêng tư của máy chủ, tài khoản đăng nhập mới xem được, không có trên web công khai. App tự tải về khi mở tab này; ảnh bản vẽ tải lần đầu khi bấm xem (cần mạng), sau đó xem được cả khi mất mạng. Chức năng / trip chỉ hiện khi gói có dữ liệu C&amp;E, app không tự suy đoán.</p>
       ${L.map(row).join("")}
       ${lv3 ? `<div class="btns"><label class="btn">Nạp gói từ file…<input type="file" id="pidF" multiple accept=".json,image/*" hidden></label></div><p class="hint">Trưởng phòng: chọn cùng lúc <b>pid-index.json</b> và toàn bộ ảnh của gói, kiểm tra thử rồi bấm <b>Đưa lên máy chủ</b> để mọi người dùng.</p>` : ""}</details>`;
   }
-  let pidSyncing = false;
+  let pidSyncing = false, pidOpen = false;
   function pidSync(force) {
     if (!PID || pidSyncing) return; pidSyncing = true;
     PID.sync(force).then(r => { pidSyncing = false; if (r && r.ok && r.changed && curView === "devices") renderDevices(); });
@@ -804,6 +804,7 @@
       const one = ex.length === 1 ? ex[0] : L.length === 1 ? L[0] : null; if (one && PID && PID.has(one.t, one.s)) PID.open(one.t, `${one.t} · ${siteName(one.s)}`, one.s); };
     const pf = $("#pidF"); if (pf) pf.onchange = async e => { const f = e.target.files; if (!f || !f.length) return;
       toast("Đang nạp gói P&ID…"); try { toast((await PID.load(f)).msg); } catch (err) { alert(err.message || String(err)); } renderDevices(); };
+    const pd = $("#v-devices .pidpk"); if (pd) pd.ontoggle = () => { pidOpen = pd.open; };
     devList(); pidSync();
   }
   function devHits() {
@@ -841,7 +842,7 @@
     if (b.dataset.dvsync) { const n = devBulk(false); toast(n ? `Đã cập nhật ${n} thiết bị trong danh mục theo hồ sơ đã duyệt` : "Danh mục đã khớp các hồ sơ đã duyệt"); renderDevices(); return; }
     if (b.dataset.dvmore) { devQ.n += 20; devList(); return; }
     if (b.dataset.pidrm) { if (confirm("Bỏ gói P&ID này khỏi máy?")) PID.remove(b.dataset.pidrm).then(renderDevices); return; }
-    if (b.dataset.pidup) { b.disabled = true; PID.upload(b.dataset.pidup, (i, n) => { b.textContent = `Đang đưa lên ${i}/${n}…`; })
+    if (b.dataset.pidup) { b.disabled = true; PID.upload(b.dataset.pidup, () => { const x = $("#v-devices .pidpk button[disabled].pri"), u = PID.busy(); if (x && u) x.textContent = `Đang đưa lên ${u.i}/${u.n}…`; })
       .then(m => { toast(m); renderDevices(); }).catch(err => { alert("Chưa đưa lên được: " + (err.message || err) + "\nNếu báo lỗi quyền / bucket: Trưởng phòng cần chạy file SQL 08_v69_pid.sql trên Supabase."); renderDevices(); }); return; }
     if (b.dataset.pidun) { if (confirm("Gỡ gói này khỏi máy chủ? Mọi máy sẽ không còn thấy P&ID của gói.")) PID.unpublish(b.dataset.pidun).then(() => { toast("Đã gỡ gói khỏi máy chủ"); renderDevices(); }).catch(err => alert(err.message || err)); return; }
     if (b.dataset.dvpid != null) { const d = DEVS[Number(b.dataset.dvpid)]; if (d && PID) PID.open(d.t, `${d.t} · ${siteName(d.s)}`, d.s); return; }
@@ -2509,6 +2510,7 @@
       onCertConflict: list => toast(`⚠ Số ${list.map(r => r.certNo).join(", ")} đã có người dùng trên hệ thống – mở hồ sơ ${list.map(r => r.h.tag).join(", ")} để lấy số khác`),
       onRemote: () => {
         badge();
+        if (curView === "devices") { devList(); return; }   // không vẽ lại cả tab: giữ ô đang gõ, mục P&ID đang mở và tiến trình đưa lên
         if (curView !== "entry") { VIEWS[curView](); return; }
         const r = rec.saved && records.find(x => x.id === rec.id);
         if (r && (r.updated || "") > (rec.updated || "")) { rec = normalize(clone(r)); persistCurrent(); renderEntry(); toast("Hồ sơ vừa được cập nhật từ máy khác"); }
