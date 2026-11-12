@@ -169,7 +169,8 @@ section.a4>*{position:relative;z-index:1}
 .a4 table.csig.two tr.sp td{height:100px}
 .a4 table.csig.two.tcs tr.sp td{height:44px}
 .a4 .accr{width:136px;margin-left:28px}
-.a4 table.cftr{position:absolute;left:34px;right:34px;bottom:34px;border-collapse:collapse;font-size:11px;line-height:1.25;width:auto}
+/* v71: bảng chân trang trải hết bề ngang khung (34 px = mép trong khung đôi 30 px + 4 px) – width:auto làm bảng co theo chữ, vạch ngang không chạm vạch dọc */
+.a4 table.cftr{position:absolute;left:34px;right:34px;bottom:34px;border-collapse:collapse;font-size:11px;line-height:1.25;width:calc(100% - 68px)}
 .a4 table.cftr td{border-top:1px solid #000;padding:4px 6px;vertical-align:top}
 .a4 table.cftr td.pg{width:84px;white-space:nowrap;border-right:1px solid #000;text-align:left;padding-left:8px}
 .a4 .tagline{display:flex;gap:40px;margin:14px 0 6px 14px}
@@ -235,8 +236,8 @@ section.a4>*{position:relative;z-index:1}
 .a4.pg .pgwm{left:150px;top:250px;width:520px;opacity:1}
 .a4.pg .frame{border:3px double #1d4ea8}
 .a4 .pghdr{display:flex;align-items:flex-start;gap:6px;font-size:11.5px;line-height:14px;text-align:center;padding-top:6px}
-.a4 .pghdr img{width:66px;margin-top:12px}
-.a4 .pghdr .nologo{width:66px}
+.a4 .pghdr img{width:88px;margin-top:4px}
+.a4 .pghdr .nologo{width:88px}
 .a4 .pghdr .l{flex:1.15}.a4 .pghdr .r{flex:1;font-size:12px}
 .a4 .pghdr .b{font-weight:700}.a4 .pghdr .i{font-style:italic}
 .a4 .pghdr .rl{width:110px;margin:3px auto 0;border-top:1px solid #000}
@@ -354,8 +355,8 @@ details.phcard>summary h2{margin:0}details.phcard[open]>summary h2{margin-bottom
 label.f{position:relative}
 .colh{cursor:pointer;user-select:none}.colh::before{content:"▾ ";color:var(--brand)}.rcol>.colh::before{content:"▸ "}.rcol>*:not(.colh){display:none}.rcolb{margin-left:auto;display:inline-flex;gap:6px}.rcolb button{font-size:12px;padding:4px 8px}
 .pchart{display:flex;gap:8px;align-items:flex-end;height:250px;margin:14px 0 4px;overflow-x:auto;padding-bottom:2px}.pcol{flex:1 0 50px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer;border-radius:8px;padding:2px 2px 4px;min-width:50px}.pcol.on{background:var(--result,rgba(1,147,222,.1));outline:2px solid var(--brand)}.pcol b{font-size:12px;margin-top:4px;white-space:nowrap}.pcol small{font-size:11px;opacity:.75}
-.pbars{display:flex;gap:3px;align-items:flex-end;height:calc(100% - 38px);width:100%;justify-content:center}.pb{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;flex:1;max-width:26px;min-height:16px}.pb em{font-style:normal;font-size:11px;font-weight:700;line-height:14px}.pb i{display:block;width:100%;flex:1;border-radius:4px 4px 0 0;min-height:2px}.pr{background:#d64545}.pg{background:#2e9e5b}.pover .pr{background:#a02020}
-.lg.pr,.lg.pg{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:baseline}
+.pbars{display:flex;gap:3px;align-items:flex-end;height:calc(100% - 38px);width:100%;justify-content:center}.pb{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;flex:1;max-width:26px;min-height:16px}.pb em{font-style:normal;font-size:11px;font-weight:700;line-height:14px}.pb i{display:block;width:100%;flex:1;border-radius:4px 4px 0 0;min-height:2px}.pbr{background:#d64545}.pbg{background:#2e9e5b}.pover .pbr{background:#a02020}
+.lg.pbr,.lg.pbg{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:baseline}
 .pendbar{position:sticky;top:0;z-index:30;background:#fff4d6;color:#4a3500;border-bottom:2px solid #e0a800;padding:8px 14px;font-size:14px;cursor:pointer}.pendbar.late{background:#fde2e2;color:#6b1010;border-bottom-color:#c03939}.pendbar .go{font-weight:700;text-decoration:underline;margin-left:6px}.pendbar[hidden]{display:none}
 @media (prefers-color-scheme:dark){.pendbar{background:#3d3210;color:#ffe9a8}.pendbar.late{background:#4a1a1a;color:#ffc9c9}}
 .subf{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}.subf select{max-width:260px}
