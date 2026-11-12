@@ -769,10 +769,18 @@
   const PID = window.LabPID || null;
   function pidCard() {
     if (!PID) return "";
-    const st = PID.status();
-    return `<details class="fold pidpk"${st ? "" : " open"}><summary><b>Gói P&amp;ID trên máy này:</b> ${st ? `<span class="ok">${esc(st.name)}</span> <small class="mut">(${st.nd} bản vẽ · ${st.nt} tag${st.made ? " · lập " + esc(st.made) : ""})</small>` : `<span class="mut">chưa nạp</span>`}</summary>
-      <p class="hint">P&amp;ID và C&amp;E là tài liệu nội bộ nên <b>không có trên web</b>. Mỗi máy tự nạp gói từ file nội bộ (chọn cùng lúc file <b>pid-index.json</b> và toàn bộ ảnh bản vẽ); gói chỉ lưu trong trình duyệt của máy này, không đồng bộ lên máy chủ. Chức năng / trip chỉ hiện khi gói có dữ liệu C&amp;E, app không tự suy đoán.</p>
-      <div class="btns"><label class="btn${st ? "" : " pri"}">Nạp gói P&amp;ID…<input type="file" id="pidF" multiple accept=".json,image/*" hidden></label>${st ? `<button class="btn" data-pidclr="1">Xoá gói khỏi máy</button>` : ""}</div></details>`;
+    const L = PID.packs(), lv3 = A.can("settings"), cloud = window.LabCloud && window.LabCloud.enabled;
+    const row = p => `<div class="rec"><div><b>${esc(p.name)}</b><br><small class="mut">${p.nd} bản vẽ · ${p.nt} tag${p.made ? " · lập " + esc(p.made) : ""} · ${p.src === "cloud" ? "từ máy chủ" : "<span class=\"bad\">mới nạp trên máy này, chưa đưa lên</span>"}</small></div>
+      ${lv3 ? `<div class="ra">${p.src !== "cloud" && cloud ? `<button class="btn sm pri" data-pidup="${esc(p.id)}">Đưa lên máy chủ</button>` : ""}${p.src === "cloud" ? `<button class="btn sm" data-pidun="${esc(p.id)}">Gỡ khỏi máy chủ</button>` : `<button class="btn sm" data-pidrm="${esc(p.id)}">Bỏ</button>`}</div>` : ""}</div>`;
+    return `<details class="fold pidpk"><summary><b>P&amp;ID:</b> ${L.length ? `${L.length} gói · ${L.reduce((a, p) => a + p.nt, 0)} tag có vị trí trên bản vẽ` : `<span class="mut">chưa có gói nào</span>`}</summary>
+      <p class="hint">P&amp;ID là tài liệu nội bộ: chỉ nằm trong kho riêng tư của máy chủ, tài khoản đăng nhập mới xem được, không có trên web công khai. App tự tải về khi mở tab này; ảnh bản vẽ tải lần đầu khi bấm xem (cần mạng), sau đó xem được cả khi mất mạng. Chức năng / trip chỉ hiện khi gói có dữ liệu C&amp;E, app không tự suy đoán.</p>
+      ${L.map(row).join("")}
+      ${lv3 ? `<div class="btns"><label class="btn">Nạp gói từ file…<input type="file" id="pidF" multiple accept=".json,image/*" hidden></label></div><p class="hint">Trưởng phòng: chọn cùng lúc <b>pid-index.json</b> và toàn bộ ảnh của gói, kiểm tra thử rồi bấm <b>Đưa lên máy chủ</b> để mọi người dùng.</p>` : ""}</details>`;
+  }
+  let pidSyncing = false;
+  function pidSync(force) {
+    if (!PID || pidSyncing) return; pidSyncing = true;
+    PID.sync(force).then(r => { pidSyncing = false; if (r && r.ok && r.changed && curView === "devices") renderDevices(); });
   }
   function renderDevices() {
     const el = $("#v-devices");
@@ -793,10 +801,10 @@
     $("#dvT").onchange = e => { devQ.type = e.target.value; devQ.n = 20; devList(); };
     $("#dvQ").oninput = e => { devQ.q = e.target.value; devQ.n = 20; devList(); };
     $("#dvQ").onkeydown = e => { if (e.key !== "Enter") return; e.preventDefault(); const L = devHits(); const ex = L.filter(d => d.key === tagKey(devQ.q));
-      const one = ex.length === 1 ? ex[0] : L.length === 1 ? L[0] : null; if (one && PID && PID.has(one.t, one.s)) PID.open(one.t, `${one.t} · ${siteName(one.s)}`); };
+      const one = ex.length === 1 ? ex[0] : L.length === 1 ? L[0] : null; if (one && PID && PID.has(one.t, one.s)) PID.open(one.t, `${one.t} · ${siteName(one.s)}`, one.s); };
     const pf = $("#pidF"); if (pf) pf.onchange = async e => { const f = e.target.files; if (!f || !f.length) return;
-      toast("Đang nạp gói P&ID…"); try { toast(await PID.load(f)); } catch (err) { alert(err.message || String(err)); } renderDevices(); };
-    devList();
+      toast("Đang nạp gói P&ID…"); try { toast((await PID.load(f)).msg); } catch (err) { alert(err.message || String(err)); } renderDevices(); };
+    devList(); pidSync();
   }
   function devHits() {
     const q = devQ.q.toLowerCase().trim(), k = tagKey(devQ.q);
@@ -813,7 +821,7 @@
     const row = d => { const r = devRecs(d)[0];
       const prev = r ? `Hồ sơ app: <b>${esc(r.certNo || "—")}</b> ${esc(r.h.calDate || "")}${r.summary ? ` <span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Đạt" : "Không đạt"}</span>` : ""}`
         : d.c || d.cd ? `GCN trước: ${esc([d.c, d.cd && "ngày " + d.cd, d.du && "hạn " + d.du, d.r].filter(Boolean).join(" · "))}` : "";
-      const hp = PID && PID.has(d.t, d.s), ts = hp ? PID.tripState(d.t) : "";
+      const hp = PID && PID.has(d.t, d.s), ts = hp ? PID.tripState(d.t, d.s) : "";
       return `<div class="rec dv"><div><b>${esc(d.t)}</b> <span class="tag">${d.T}</span>${ts === "trip" ? ` <span class="tag trip">⚠ Trip</span>` : ""} <small class="mut">${esc(siteName(d.s))}</small><br>
         <small>${esc(d.d)}${d.d ? " · " : ""}${esc([d.mk, d.md, d.sn && "S/N " + d.sn, devRange(d), d.a && "±" + d.a + "%"].filter(Boolean).join(" · ") || "—")}</small>
         ${d.ar || d.n ? `<br><small class="mut">${esc([d.ar && "Khu vực: " + d.ar, d.n].filter(Boolean).join(" · "))}</small>` : ""}
@@ -832,8 +840,11 @@
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.dvsync) { const n = devBulk(false); toast(n ? `Đã cập nhật ${n} thiết bị trong danh mục theo hồ sơ đã duyệt` : "Danh mục đã khớp các hồ sơ đã duyệt"); renderDevices(); return; }
     if (b.dataset.dvmore) { devQ.n += 20; devList(); return; }
-    if (b.dataset.pidclr) { if (confirm("Xoá gói P&ID khỏi máy này?")) PID.clear().then(() => { toast("Đã xoá gói P&ID"); renderDevices(); }); return; }
-    if (b.dataset.dvpid != null) { const d = DEVS[Number(b.dataset.dvpid)]; if (d && PID) PID.open(d.t, `${d.t} · ${siteName(d.s)}`); return; }
+    if (b.dataset.pidrm) { if (confirm("Bỏ gói P&ID này khỏi máy?")) PID.remove(b.dataset.pidrm).then(renderDevices); return; }
+    if (b.dataset.pidup) { b.disabled = true; PID.upload(b.dataset.pidup, (i, n) => { b.textContent = `Đang đưa lên ${i}/${n}…`; })
+      .then(m => { toast(m); renderDevices(); }).catch(err => { alert("Chưa đưa lên được: " + (err.message || err) + "\nNếu báo lỗi quyền / bucket: Trưởng phòng cần chạy file SQL 08_v69_pid.sql trên Supabase."); renderDevices(); }); return; }
+    if (b.dataset.pidun) { if (confirm("Gỡ gói này khỏi máy chủ? Mọi máy sẽ không còn thấy P&ID của gói.")) PID.unpublish(b.dataset.pidun).then(() => { toast("Đã gỡ gói khỏi máy chủ"); renderDevices(); }).catch(err => alert(err.message || err)); return; }
+    if (b.dataset.dvpid != null) { const d = DEVS[Number(b.dataset.dvpid)]; if (d && PID) PID.open(d.t, `${d.t} · ${siteName(d.s)}`, d.s); return; }
     if (b.dataset.dv == null) return;
     const d = DEVS[Number(b.dataset.dv)]; if (!d) return;
     rec = newRecord(d.T); go("entry"); applyDevice(d);
