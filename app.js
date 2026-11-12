@@ -287,7 +287,8 @@
       return v.length && acc > 0 && isFinite(ts) ? ["°C", Math.min(...v), Math.max(...v), acc / 100 * Math.abs(ts)] : null; }
     if (!okR) return null;
     const s1 = standById(h.stand1), s2 = standById(h.stand2), split = mx > 150;
-    if (path === "h.stand1") return ["°C", mn, split && s2 && s2 !== s1 ? Math.min(mx, 150) : mx, mpe];
+    // v73 (NGOC 13/11/2026): dải > 150 °C – Stand1 lọc theo dải thấp ngay, không phải chọn Stand2 trước mới có Stand1
+    if (path === "h.stand1") return ["°C", mn, split ? Math.min(mx, 150) : mx, mpe];
     if (path === "h.stand2") return ["°C", split ? Math.max(mn, 150) : mn, mx, mpe];
     if (path === "h.stand3") {
       if (T === "TT") return ["mA", 4, 20, acc / 100 * 16];
@@ -310,6 +311,7 @@
   // Temperature work with a low (≤150 °C) and a high standard: each covers its own part of the range
   function suitT(s1, s2, mn, mx, mpe, W) {
     if (s2 && s2 !== s1 && mx > 150) { suit(s1, "°C", mn, Math.min(mx, 150), mpe, "Chuẩn dải thấp", W); suit(s2, "°C", Math.max(mn, 150), mx, mpe, "Chuẩn dải trung/cao", W); }
+    else if (s1 && mx > 150 && s1.max < mx - 1e-9) { suit(s1, "°C", mn, Math.min(mx, 150), mpe, "Chuẩn dải thấp", W); W.push(`Dải đo lên tới ${mx} °C, Stand1 ${s1.key} chỉ tới ${s1.max} °C – chọn thêm Chuẩn dải cao (Stand2)`); }
     else suit(s1, "°C", mn, mx, mpe, "Chuẩn nhiệt", W);
   }
   function psHL(r) { const rising = r.h.dirQTG !== "Falling"; const S = r.ps.set.map(num), R = r.ps.reset.map(num); return rising ? { H: S, L: R } : { H: R, L: S }; }
@@ -935,7 +937,7 @@
     let std = `<div class="grid">
         ${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p", "h.stand1"), wide: 1 })}
         ${PT ? fld("Chuẩn điện (Stand2)", "h.stand2", { options: standOptions("e", "h.stand2"), wide: 1 }) : ""}
-        ${A.can("settings") ? `<div class="hint wide">Danh mục chuẩn 2026 (sheet Stand Ref). Hiệu chỉnh áp suất: <b>Yes</b> – số đọc chuẩn dùng trực tiếp như toàn bộ hồ sơ DGCP 10/2026.</div>` : ""}
+        
         ${decHint([[standById(h.stand1), PT ? h.unit : h.unitPset], [PT ? standById(h.stand2) : null, "mA", 20]])}
       </div>`;
     let pts;
@@ -961,7 +963,6 @@
         ${ctlField()}
         ${fld("Ngày cấp chứng chỉ", "h.issueDate", { type: "date" })}
         ${fld("Ghi chú QTG", "h.note", { wide: 1 })}
-        <div class="hint wide">Trang 1 chứng chỉ do ${esc(settings.sig1Title)} <b>${esc(settings.sig1Name)}</b> và ${esc(settings.sig2Title)} <b>${esc(settings.sig2Name)}</b> ký${A.can("settings") ? " (đổi trong Cài đặt)" : ""}.</div>
       </div><datalist id="names">${names.map(n => `<option value="${esc(n)}">`).join("")}</datalist>`;
     // Máy tính (≥ 1100 px): 2 cột – trái = thông tin (1, 2, 3, ảnh), phải = số đo + kết quả + ký (4, 5, 6).
     // Điện thoại: .ecl/.ecr là display:contents, thứ tự thẻ giữ như cũ nhờ class o1…o8 (index.html).
@@ -989,7 +990,7 @@
   const canEdit = () => !rec.owner || !A.me() || rec.owner.id === A.me().id || (A.can("approve") && visible(rec));
   function ownerHtml() {
     const o = rec.owner ? `<b>${esc(ownerName(rec.owner))}</b>` : `<span class="mut">chưa ghi (hồ sơ tạo trước khi có đăng nhập)</span>`;
-    return `<div class="hint wide">Người nhập liệu, chịu trách nhiệm hồ sơ: ${o}${canEdit() ? "" : ` · <span class="bad">bạn chỉ được xem, không sửa</span>`}</div>`;
+    return `<div class="hint wide">Người nhập: ${o}${canEdit() ? "" : ` · <span class="bad">bạn chỉ được xem, không sửa</span>`}</div>`;
   }
   const PHOTOS_ON = false;   // NGOC 12/11/2026: tạm ẩn ô ảnh bằng chứng cho mọi người để không tràn bộ nhớ Supabase. Đổi true để bật lại.
   function photoCard() {
@@ -1002,7 +1003,7 @@
     const n = rec.photos.filter(x => x.has).length;
     // Mặc định thu gọn (yêu cầu NGOC 01/11/2026); đã bung thì giữ bung qua các lần vẽ lại cho tới khi người dùng thu lại
     return `<details class="card phcard" id="phcard"${photoOpen ? " open" : ""}><summary><h2><i>📷</i> Ảnh bằng chứng <small>(${n}/${P.SLOTS})</small><span class="phx">${photoOpen ? "Thu gọn" : "Bấm để mở"}</span></h2></summary>
-      <p class="hint">Chụp màn hình chuẩn / thiết bị tại từng điểm đo làm bằng chứng. Ảnh lưu trên máy này, đi kèm khi Sao lưu JSON và khi Gửi duyệt. Thay hoặc xoá ảnh sau khi duyệt thì hồ sơ phải duyệt lại.</p>
+      <p class="hint">Ảnh bằng chứng tại từng điểm đo. Thay / xoá ảnh sau khi duyệt thì phải duyệt lại.</p>
       <div class="phgrid">${cells}</div></details>`;
   }
   let photoOpen = false;
@@ -1066,25 +1067,25 @@
       </div>`;
     let std;
     if (T === "PG") std = `<div class="grid">${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p", "h.stand1"), wide: 1 })}
-        <div class="hint wide">Số đọc chuẩn nhập theo đơn vị của áp kế (${esc(u)}). Kiểm định theo ĐLVN 08:2011 – không tính độ KĐBĐ.</div>${decHint([[standById(h.stand1), u]])}</div>`;
+        <div class="hint wide">Số đọc chuẩn nhập theo đơn vị của áp kế (${esc(u)})..</div>${decHint([[standById(h.stand1), u]])}</div>`;
     if (T === "TS") std = `<div class="grid">${fld("Nhiệt kế chuẩn / thiết bị tạo nhiệt (Stand1)", "h.stand1", { options: standOptions("t", "h.stand1"), wide: 1 })}
-        <div class="hint wide">U của chuẩn (uch1) và độ ổn định / radial / axial của thiết bị tạo nhiệt (uch3) lấy từ thư viện chuẩn.</div>${decHint([[standById(h.stand1), "°C"]])}</div>`;
+        ${decHint([[standById(h.stand1), "°C"]])}</div>`;
     if (T === "TT") std = `<div class="grid">${fld("Chuẩn nhiệt dải thấp ≤150 °C (Stand1)", "h.stand1", { options: standOptions("t", "h.stand1"), wide: 1 })}
         ${fld("Chuẩn nhiệt dải trung / cao (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t", "h.stand2"), wide: 1 })}
         ${fld("Ampe kế (Stand3)", "h.stand3", { options: standOptions("e", "h.stand3"), wide: 1 })}${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"], [standById(h.stand3), "mA", 20]])}</div>`;
     if (T === "TG") std = `<div class="grid">${fld("Chuẩn nhiệt dải thấp ≤150 °C (Stand1)", "h.stand1", { options: standOptions("t", "h.stand1"), wide: 1 })}
         ${fld("Chuẩn nhiệt dải trung / cao >150 °C (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t", "h.stand2"), wide: 1 })}
-        <div class="hint wide">Như DLVN138.2-1: điểm ≤150 °C dùng U và độ ổn định / radial / axial của Stand1, điểm >150 °C dùng Stand2.</div>${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"]])}</div>`;
+        ${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"]])}</div>`;
     if (T === "RTD") std = `<div class="grid">${fld("Chuẩn nhiệt dải thấp (Stand1)", "h.stand1", { options: standOptions("t", "h.stand1"), wide: 1 })}
         ${fld("Chuẩn nhiệt dải cao ≥150 °C (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t", "h.stand2"), wide: 1 })}
         ${fld("Thiết bị đo điện trở (Stand3)", "h.stand3", { options: standOptions("r", "h.stand3"), wide: 1 })}${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"], [standById(h.stand3), "Ω", 150]])}</div>`;
     if (T === "TC") std = `<div class="grid">${fld("Chuẩn nhiệt + lò dải thấp ≤155 °C (Stand1)", "h.stand1", { options: standOptions("t", "h.stand1"), wide: 1 })}
         ${fld("Chuẩn nhiệt + lò dải cao (Stand2, trống = Stand1)", "h.stand2", { options: standOptions("t", "h.stand2"), wide: 1 })}
         ${fld("Milivôn kế (Stand3)", "h.stand3", { options: standOptions("v", "h.stand3"), wide: 1 })}
-        <div class="hint wide">Như DLVN161: uch1 lấy U của Stand2 khi Max ≥ 155 °C, uch8 lấy ổn định / radial / axial của lò dải cao khi Max > 140 °C. uch7 (bù đầu tự do) = ${esc(settings.TC.uCJ)} °C / 2 theo file anh Khai (đổi trong Cài đặt).</div>
+        ${A.can("settings") ? `<div class="hint wide">uch7 (bù đầu tự do) = ${esc(settings.TC.uCJ)} °C / 2 (đổi trong Cài đặt).</div>` : ""}
         ${decHint([[standById(h.stand1), "°C"], [standById(h.stand2), "°C"], [standById(h.stand3), "mV", 50]])}</div>`;
     if (T === "DPG") std = `<div class="grid">${fld("Chuẩn áp suất (Stand1)", "h.stand1", { options: standOptions("p", "h.stand1"), wide: 1 })}
-        <div class="hint wide">Số đọc chuẩn nhập theo đơn vị của đồng hồ (${esc(u)}). U chuẩn và %Rdg lấy theo GCN của chuẩn trong thư viện.</div>${decHint([[standById(h.stand1), u]])}</div>`;
+        <div class="hint wide">Số đọc chuẩn nhập theo đơn vị của đồng hồ (${esc(u)}).</div>${decHint([[standById(h.stand1), u]])}</div>`;
     const inp = (p, v, ph) => `<input data-p="${p}" inputmode="decimal" value="${esc(v)}"${ph ? ` placeholder="${ph}"` : ""}${(rec.stdAuto || []).includes(p) ? ` class="auto" title="Tự điền = điểm hiệu chuẩn, gõ để sửa"` : ""}>`;
     const sgn = (p, v) => `<div class="pm">${inp(p, v)}<button type="button" class="pmb sm" data-neg="${p}" aria-label="Đổi dấu" title="Đổi dấu âm / dương">±</button></div>`;
     let pts, ptsTitle;
@@ -1121,7 +1122,7 @@
     if (T === "RTD") {
       const L = ["01", "02", "03 (tg)", "04", "05", "tg lần 2"];
       const rows = rec.rtd.std.map((v, i) => `<tr><td class="n">${L[i]}</td><td>${sgn(`rtd.std.${i}`, v)}</td>${rec.rtd.dut[i].map((d, k) => `<td>${inp(`rtd.dut.${i}.${k}`, d, "Ω")}</td>`).join("")}</tr>`).join("");
-      pts = `<p class="hint">Như QTG: 5 điểm tăng dần, dòng cuối đo lại điểm 03 khi giảm (tính hồi trễ).</p>
+      pts = `<p class="hint">5 điểm tăng dần; dòng cuối đo lại điểm 03 khi giảm (hồi trễ).</p>
         <div class="xs"><table class="entry rtd"><thead><tr><th>TT</th><th>Chuẩn<br>°C</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr></thead><tbody>${rows}</tbody></table></div>
         <div class="btns"><button class="btn" data-act="rtd6">tg lần 2 = điểm 03</button><button class="btn pri" data-act="rtdcopy">Lần 2–5 = Lần 1</button></div>`;
       ptsTitle = "6 dòng × 5 lần đọc";
@@ -1129,7 +1130,7 @@
     if (T === "TC") {
       const rows = rec.tc.nom.map((nm, p) => `<tr><td rowspan="2" class="n nm">${sgn(`tc.nom.${p}`, nm)}</td><td class="n">Chuẩn °C</td>${rec.tc.std[p].map((v, k) => `<td>${inp(`tc.std.${p}.${k}`, v, "°C")}</td>`).join("")}</tr>
           <tr class="sep"><td class="n">TC mV</td>${rec.tc.dut[p].map((v, k) => `<td>${inp(`tc.dut.${p}.${k}`, v, "mV")}</td>`).join("")}</tr>`).join("");
-      pts = `<p class="hint">Như QTG ĐLVN 161:2005.PL2: 8 điểm, mỗi điểm đọc 5 lần (mV). Hàng "Chuẩn °C" là số đọc của nhiệt kế chuẩn từng lần.</p>
+      pts = `<p class="hint">8 điểm × 5 lần đọc. Hàng "Chuẩn °C" = số đọc nhiệt kế chuẩn, hàng dưới = mV thiết bị.</p>
         <div class="xs"><table class="entry rtd tcx"><thead><tr><th>Điểm<br>°C</th><th></th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr></thead><tbody>${rows}</tbody></table></div>
         <div class="btns"><button class="btn" data-act="pts">8 điểm đều Min÷Max</button><button class="btn" data-act="tcstd">Chuẩn = điểm danh định</button><button class="btn pri" data-act="tccopy">Lần 2–5 = Lần 1</button></div>`;
       ptsTitle = "8 điểm × 5 lần đọc";
@@ -1212,7 +1213,7 @@
     if (r && rec.type !== "PG") {
       try {
         const alt = compute0(Object.assign(clone(rec), { fv: rec.fv === 2 ? 1 : 2 })).res;
-        if (alt) cmpHtml = `<p class="hint fvcmp">Phiên bản công thức: <b>${D.FV[rec.fv === 2 ? 2 : 1]}</b>. Nếu tính theo bản ${D.FV[rec.fv === 2 ? 1 : 2]}: U = ${summaryU(rec.type, alt)}, ${alt.pass ? "Đạt" : "Không đạt"}.</p>`;
+        if (alt && A.can("settings")) cmpHtml = `<p class="hint fvcmp">Phiên bản công thức: <b>${D.FV[rec.fv === 2 ? 2 : 1]}</b>. Nếu tính theo bản ${D.FV[rec.fv === 2 ? 1 : 2]}: U = ${summaryU(rec.type, alt)}, ${alt.pass ? "Đạt" : "Không đạt"}.</p>`;
       } catch (e) { }
     }
     el.innerHTML = (msgs ? `<ul class="msgs">${msgs}</ul>` : "") + (body ? body + cmpHtml : `<p class="mut">Nhập đủ thông tin để xem kết quả.</p>`);
@@ -1674,7 +1675,7 @@
     const fails = vis.filter(isFail);
     store.set("failSeen", Array.from(new Set(store.get("failSeen", []).concat(fails.map(r => r.id)))).slice(-500));
     const failCard = fails.length ? `<div class="card failc"><h2>⚠ ${fails.length} hồ sơ KHÔNG ĐẠT</h2>
-      <p class="hint">Thiết bị không đạt: không cấp số, không xuất chứng chỉ; chỉ có Biên bản QTG ghi nhận kết quả (vẫn qua duyệt kiểm soát + final).</p>
+      <p class="hint">Thiết bị không đạt vẫn qua duyệt kiểm soát + final như thường.</p>
       ${fails.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> <span class="bad">Fail</span> ${stageTag(r)}<br>
         <small class="bad">${esc(whyOf(r))}</small><br><small class="mut">${esc(r.owner ? ownerName(r.owner) : "—")} · ${esc(dmy(recDay(r)))} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở</button></div></div>`).join("")}</div>` : "";
@@ -1692,7 +1693,7 @@
         <small class="mut">${esc(r.certNo || "")} · ${esc(stage(r) === "final" ? fullName(r.approved.by) + " đã duyệt kiểm soát" : fullName(r.submitted.by) + " chuyển " + new Date(r.submitted.at).toLocaleString("vi-VN", { hour12: false }))}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở xem</button></div></div>`).join("")}</details></div>` : "";
     $("#v-records").innerHTML = failCard + queue + `<div class="card"><h2>Hồ sơ <small>(${vis.length})</small></h2>
-      <p class="hint">${m && m.role >= 3 ? "Cấp 3: xem toàn bộ hồ sơ." : "Chỉ hiện hồ sơ bạn nhập và hồ sơ được chuyển tới bạn duyệt."} Mỗi thư mục = Người nhập – ngày hiệu chuẩn. Viền xanh: đã duyệt final hết; viền vàng: còn chờ duyệt.</p>
+      <p class="hint">Thư mục = Người nhập – ngày HC. Viền xanh: đã duyệt final hết; vàng: còn chờ duyệt.</p>
       <input id="rq" placeholder="Tìm tag, số chứng chỉ, model, người nhập…" value="${esc(q)}">
       <div class="btns"><button class="btn sm${mineOnly ? "" : " pri"}" data-r="all">Tất cả</button><button class="btn sm${mineOnly ? " pri" : ""}" data-r="mine">Hồ sơ tôi nhập</button></div>
       <div class="btns"><button class="btn sm" data-r="qcPT">Bảng kiểm tra PT (QC)</button><button class="btn sm" data-r="qcPS">Bảng kiểm tra PS (QC)</button></div><div id="qcout"></div>
@@ -1878,7 +1879,7 @@
       ${A.can("editStands") ? `<div class="ra"><button class="btn sm" data-s="edit" data-id="${s.id}">Sửa</button></div>` : ""}</div>`;
     const form = editStand ? standForm(editStand) : "";
     $("#v-stands").innerHTML = `${form}<div class="card"><h2>Thư viện chuẩn</h2>
-      <p class="hint">Cập nhật 30/10/2026 theo các giấy chứng nhận hiệu chuẩn mới (VMI, Unitek): U là giá trị lớn nhất trên GCN, kèm số GCN và ghi chú chỗ thay đổi. Nhãn "Cà Mau" = chuẩn có trong file Excel của Cà Mau (1.TT_LFS_CM_26, RTD_DK_CM_2026); sửa ô "Nơi đặt" nếu chuẩn đã chuyển chỗ. Khi có GCN mới, sửa U và hạn hiệu chuẩn tại đây.</p>
+      <p class="hint">U = giá trị lớn nhất trên GCN của chuẩn. Có GCN mới thì sửa U và hạn hiệu chuẩn tại đây; chuẩn chuyển chỗ thì sửa ô "Nơi đặt".</p>
       <div class="btns">${["", "p", "e", "t", "r", "v"].map(k => `<button class="btn sm${standKind === k ? " pri" : ""}" data-s="kind" data-k="${k}">${k ? KINDS[k] : "Tất cả"}</button>`).join("")}</div>
       ${A.can("editStands") ? `<div class="btns"><button class="btn pri" data-s="add">Thêm chuẩn</button><button class="btn" data-s="reset">Khôi phục danh sách gốc</button></div>` : `<p class="hint">Chỉ Trưởng phòng / Quản trị (cấp 3) được sửa thư viện chuẩn.</p>`}
       ${stands.filter(s => !standKind || s.kind === standKind).map(row).join("")}</div>`;
@@ -1939,7 +1940,7 @@
     const sel = (lab, p, opts) => `<label class="f"><span>${lab}</span><select data-sp="${p}">${opts.map(([v, t]) => `<option value="${v}"${!!getPath(settings, p) === !!v ? " selected" : ""}>${t}</option>`).join("")}</select></label>`;
     const tail = `<div class="card"><h2>Tự kiểm tra công thức</h2><p class="hint">Chạy lại 2 ca thật từ file DGCP 10/2026 (PT-1506A, PSHH-0522) và so sánh từng số.</p>
         <div class="btns"><button class="btn pri" data-t="selftest">Chạy kiểm tra</button></div><div id="stout"></div></div>
-      <div class="card"><h2>Về ứng dụng</h2><p class="hint">LAB PVGAS Services · bản thử nghiệm PT, PS, PG, TS, TT, RTD, TG · ${A.cloud() ? "dữ liệu đồng bộ qua máy chủ Supabase; vẫn nhập liệu được khi mất mạng, có mạng lại tự đồng bộ." : "chạy offline, dữ liệu chỉ lưu trên máy này (dùng Sao lưu JSON ở tab Hồ sơ)."}</p></div>`;
+      <div class="card"><h2>Về ứng dụng</h2><p class="hint">LAB PVGAS Services · 9 loại: PT, PS, PG, DPG, TT, TG, RTD, TC, TS · ${A.cloud() ? "dữ liệu đồng bộ qua máy chủ Supabase; vẫn nhập liệu được khi mất mạng, có mạng lại tự đồng bộ." : "chạy offline, dữ liệu chỉ lưu trên máy này (dùng Sao lưu JSON ở tab Hồ sơ)."}</p></div>`;
     if (!A.can("settings")) { $("#v-settings").innerHTML = A.accountCard() + freeCard() + (canCheck() ? checkCard() : "") + `<div class="card"><p class="hint">Cài đặt chứng chỉ chỉ dành cho Trưởng phòng / Quản trị (cấp 3).</p></div>` + tail; return; }
     $("#v-settings").innerHTML = A.accountCard() + backupCard() + usageCard() + freeCard() + rangesCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
         ${f("Chức danh trái", "sig1Title")}${f("Tên", "sig1Name")}${f("Chức danh trái (EN)", "sig1TitleEn", 1)}
@@ -2086,7 +2087,7 @@
     const ov = []; const R2 = RANGES().slice().sort((a, b) => a.lo - b.lo);
     for (let i = 1; i < R2.length; i++) if (R2[i].lo <= R2[i - 1].hi) ov.push(`${R2[i - 1].name} ↔ ${R2[i].name}`);
     return `<details class="card" id="rgcard"${rgOpen ? " open" : ""}><summary><h2>🔢 Dải số chứng chỉ / tem theo công trình <small>(${RANGES().length})</small></h2></summary>
-      <p class="hint">Theo bảng phân dải của anh Khai (2025_Rev1). Số GCN và QTG cùng đuôi trong dải của công trình; năm (26, 27…) tự lấy theo ngày hiệu chuẩn. Cột "Công trình" là mã trong danh mục, cách nhau dấu phẩy.</p>
+      <p class="hint">Số GCN và QTG cùng đuôi trong dải của công trình; năm (26, 27…) lấy theo ngày HC. Cột "Công trình": mã trong danh mục, cách nhau dấu phẩy.</p>
       ${ov.length ? `<p class="bad">⚠ Dải chồng nhau: ${esc(ov.join("; "))}</p>` : ""}
       ${free.length ? `<p class="bad">Công trình chưa có dải: ${esc(free.join(", "))}</p>` : ""}
       <div class="tblwrap"><table class="entry rgt"><thead><tr><th>Khối</th><th>Công trình / site</th><th>Từ</th><th>Đến</th><th>Công trình (mã)</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
