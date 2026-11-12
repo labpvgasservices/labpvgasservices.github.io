@@ -356,6 +356,9 @@ label.f{position:relative}
 .pchart{display:flex;gap:8px;align-items:flex-end;height:250px;margin:14px 0 4px;overflow-x:auto;padding-bottom:2px}.pcol{flex:1 0 50px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;cursor:pointer;border-radius:8px;padding:2px 2px 4px;min-width:50px}.pcol.on{background:var(--result,rgba(1,147,222,.1));outline:2px solid var(--brand)}.pcol b{font-size:12px;margin-top:4px;white-space:nowrap}.pcol small{font-size:11px;opacity:.75}
 .pbars{display:flex;gap:3px;align-items:flex-end;height:calc(100% - 38px);width:100%;justify-content:center}.pb{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;flex:1;max-width:26px;min-height:16px}.pb em{font-style:normal;font-size:11px;font-weight:700;line-height:14px}.pb i{display:block;width:100%;flex:1;border-radius:4px 4px 0 0;min-height:2px}.pr{background:#d64545}.pg{background:#2e9e5b}.pover .pr{background:#a02020}
 .lg.pr,.lg.pg{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 10px;vertical-align:baseline}
+.pendbar{position:sticky;top:0;z-index:30;background:#fff4d6;color:#4a3500;border-bottom:2px solid #e0a800;padding:8px 14px;font-size:14px;cursor:pointer}.pendbar.late{background:#fde2e2;color:#6b1010;border-bottom-color:#c03939}.pendbar .go{font-weight:700;text-decoration:underline;margin-left:6px}.pendbar[hidden]{display:none}
+@media (prefers-color-scheme:dark){.pendbar{background:#3d3210;color:#ffe9a8}.pendbar.late{background:#4a1a1a;color:#ffc9c9}}
+.subf{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}.subf select{max-width:260px}
 .pk select{width:100%}.pkbar{margin:8px 0 4px;font-size:14px}.pkprog{display:block;height:8px;border-radius:4px;background:var(--sunk);overflow:hidden;margin-top:4px}.pkprog i{display:block;height:100%;background:#2e9e5b}
 .pkcols{display:flex;gap:10px;overflow-x:auto;max-height:340px;overflow-y:auto;margin:6px 0;align-items:flex-start;padding-bottom:4px}.pkcol{display:flex;flex-direction:column;gap:5px;min-width:118px;flex:0 0 auto}.pkh{position:sticky;top:0;background:var(--surface);font-weight:700;font-size:13px;padding:2px 0 4px;border-bottom:2px solid var(--brand);z-index:1}.pkh small{font-weight:400;opacity:.75}.pkcol .pkc{text-align:left}.pkc{border:1px solid var(--line,#d9d9d9);background:var(--surface);color:inherit;border-radius:16px;padding:5px 10px;font-size:13px;cursor:pointer}.pkc.ok{background:#e3f5ea;border-color:#2e9e5b;color:#17703b;font-weight:600}.pkc.cur{outline:2px solid var(--brand)}
 @media (prefers-color-scheme:dark){.pkc.ok{background:#16382a;color:#7fdca4}}
@@ -417,6 +420,7 @@ nav.tabs .lbl{display:none}
 </head>
 <body>
 <header class="top"><h1>LAB PVGAS Services</h1><small>PT · PS · PG · DPG · TS · TT · RTD · TG · TC — nhập QTG, tính ĐKĐBĐ, xuất chứng chỉ</small></header>
+<div id="pendbar" class="pendbar" hidden></div>
 <main class="wrap">
   <section id="v-entry"></section>
   <section id="v-records" hidden></section>
