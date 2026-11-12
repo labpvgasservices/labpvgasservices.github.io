@@ -100,6 +100,9 @@
   /* ---------- người dùng, quyền xem hồ sơ, trạng thái duyệt (v49) ---------- */
   let people = store.get("people", []);
   function loadPeople() { return A.people().then(l => { if (Array.isArray(l) && l.length) { people = l; store.set("people", l); } return people; }).catch(() => people); }
+  // Hiển thị Họ và tên (NGOC 12/11/2026): hồ sơ cũ có thể lưu ID đăng nhập (vd hiep.nv) – đổi sang họ tên theo danh sách người dùng. Chỉ để hiển thị, KHÔNG đổi dữ liệu / nội dung in trên GCN.
+  const fullName = s => { const k = String(s == null ? "" : s).trim().toLowerCase(); if (!k) return ""; const p = people.find(x => String(x.id) === String(s) || (x.login && String(x.login).toLowerCase() === k)); return p && p.name ? p.name : String(s); };
+  const ownerName = o => o ? ((people.find(p => p.id === o.id) || {}).name || fullName(o.name)) : "";
   const isFinal = r => !!(r && (r.final || (r.approved && !r.flow2)));
   const stage = r => isFinal(r) ? "done" : r.approved ? "final" : r.submitted ? "review" : "draft";
   const STAGE = { done: ["ok", "Đã duyệt final"], final: ["warn", "Chờ duyệt final"], review: ["warn", "Chờ kiểm soát"], draft: ["mut", "Chưa chuyển duyệt"] };
@@ -791,7 +794,7 @@
   // Người tạo hồ sơ (tài khoản đăng nhập lúc tạo) chịu trách nhiệm số liệu; cấp 2 trở lên được sửa hồ sơ của người khác
   const canEdit = () => !rec.owner || !A.me() || rec.owner.id === A.me().id || (A.can("approve") && visible(rec));
   function ownerHtml() {
-    const o = rec.owner ? `<b>${esc(rec.owner.name)}</b>` : `<span class="mut">chưa ghi (hồ sơ tạo trước khi có đăng nhập)</span>`;
+    const o = rec.owner ? `<b>${esc(ownerName(rec.owner))}</b>` : `<span class="mut">chưa ghi (hồ sơ tạo trước khi có đăng nhập)</span>`;
     return `<div class="hint wide">Người nhập liệu, chịu trách nhiệm hồ sơ: ${o}${canEdit() ? "" : ` · <span class="bad">bạn chỉ được xem, không sửa</span>`}</div>`;
   }
   const PHOTOS_ON = false;   // NGOC 12/11/2026: tạm ẩn ô ảnh bằng chứng cho mọi người để không tràn bộ nhớ Supabase. Đổi true để bật lại.
@@ -1191,11 +1194,11 @@
   const when = t => esc(new Date(t).toLocaleString("vi-VN", { hour12: false }));
   function actionsHtml() {
     const m = A.me(), st = stage(rec), sb = rec.submitted, a = rec.approved, f = rec.final;
-    const stHtml = st === "done" ? `<span class="stp ok">✓ Đã duyệt final</span><span>${f ? `bởi <b>${esc(f.by)}</b> · ${when(f.at)}` : `bởi <b>${esc(a.by)}</b> · ${when(a.at)}`} · được in / tải</span>`
-      : st === "final" ? `<span class="stp wait">⏳ Chờ duyệt final</span><span>Kiểm soát <b>${esc(a.by)}</b> đã duyệt ${when(a.at)} → chờ <b>${esc(rec.finalTo ? rec.finalTo.name : "người duyệt final")}</b> duyệt final</span>`
-      : st === "review" ? `<span class="stp wait">⏳ Chờ kiểm soát</span><span>${esc(sb.by)} chuyển ${when(sb.at)} → <b>${esc(sb.to ? sb.to.name : "người kiểm soát")}</b></span>`
+    const stHtml = st === "done" ? `<span class="stp ok">✓ Đã duyệt final</span><span>${f ? `bởi <b>${esc(fullName(f.by))}</b> · ${when(f.at)}` : `bởi <b>${esc(a.by)}</b> · ${when(a.at)}`} · được in / tải</span>`
+      : st === "final" ? `<span class="stp wait">⏳ Chờ duyệt final</span><span>Kiểm soát <b>${esc(fullName(a.by))}</b> đã duyệt ${when(a.at)} → chờ <b>${esc(rec.finalTo ? rec.finalTo.name : "người duyệt final")}</b> duyệt final</span>`
+      : st === "review" ? `<span class="stp wait">⏳ Chờ kiểm soát</span><span>${esc(fullName(sb.by))} chuyển ${when(sb.at)} → <b>${esc(sb.to ? sb.to.name : "người kiểm soát")}</b></span>`
       : `<span class="stp no">Chưa chuyển duyệt</span><span>Chọn Người kiểm soát ở trên rồi bấm Chuyển duyệt. Chỉ in / tải PDF sau khi duyệt final.</span>`;
-    const ret = rec.returned && st === "draft" ? `<div class="hint bad">↩ ${esc(rec.returned.by)} trả lại ${when(rec.returned.at)}${rec.returned.note ? ": " + esc(rec.returned.note) : ""}</div>` : "";
+    const ret = rec.returned && st === "draft" ? `<div class="hint bad">↩ ${esc(fullName(rec.returned.by))} trả lại ${when(rec.returned.at)}${rec.returned.note ? ": " + esc(rec.returned.note) : ""}</div>` : "";
     const mine = m && rec.owner && rec.owner.id === m.id;
     let rv = "";
     if (st === "draft" && m && (mine || !rec.owner || m.role >= 3)) rv = `<div class="arow"><button class="btn pri" data-act="submit">➜ Chuyển duyệt${rec.sig.controller ? " cho " + esc(rec.sig.controller) : ""}</button></div>`;
@@ -1476,7 +1479,7 @@
     const failCard = fails.length ? `<div class="card failc"><h2>⚠ ${fails.length} hồ sơ KHÔNG ĐẠT</h2>
       <p class="hint">Thiết bị không đạt: không cấp số, không xuất chứng chỉ; chỉ có Biên bản QTG ghi nhận kết quả (vẫn qua duyệt kiểm soát + final).</p>
       ${fails.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> <span class="bad">Fail</span> ${stageTag(r)}<br>
-        <small class="bad">${esc(whyOf(r))}</small><br><small class="mut">${esc(r.owner ? r.owner.name : "—")} · ${esc(dmy(recDay(r)))} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)}</small></div>
+        <small class="bad">${esc(whyOf(r))}</small><br><small class="mut">${esc(r.owner ? ownerName(r.owner) : "—")} · ${esc(dmy(recDay(r)))} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở</button></div></div>`).join("")}</div>` : "";
     // Hàng chờ mình duyệt (bước kiểm soát hoặc bước final)
     const pend = vis.filter(myTurn);
@@ -1487,7 +1490,7 @@
       ${[...byF].map(([k, a]) => `<div class="qf"><b>📁 ${esc(folderName(a[0]))}</b><small class="mut">${a.length} hồ sơ</small>
         <button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${a.length})</button></div>`).join("")}
       <details class="qd" open><summary>Xem từng hồ sơ</summary>${pend.map(r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} ${stageTag(r)}<br>
-        <small class="mut">${esc(r.certNo || "")} · ${esc(stage(r) === "final" ? r.approved.by + " đã duyệt kiểm soát" : r.submitted.by + " chuyển " + new Date(r.submitted.at).toLocaleString("vi-VN", { hour12: false }))}</small></div>
+        <small class="mut">${esc(r.certNo || "")} · ${esc(stage(r) === "final" ? fullName(r.approved.by) + " đã duyệt kiểm soát" : fullName(r.submitted.by) + " chuyển " + new Date(r.submitted.at).toLocaleString("vi-VN", { hour12: false }))}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở xem</button></div></div>`).join("")}</details></div>` : "";
     $("#v-records").innerHTML = failCard + queue + `<div class="card"><h2>Hồ sơ <small>(${vis.length})</small></h2>
       <p class="hint">${m && m.role >= 3 ? "Cấp 3: xem toàn bộ hồ sơ." : "Chỉ hiện hồ sơ bạn nhập và hồ sơ được chuyển tới bạn duyệt."} Mỗi thư mục = Người nhập – ngày hiệu chuẩn. Viền xanh: đã duyệt final hết; viền vàng: còn chờ duyệt.</p>
@@ -1496,7 +1499,7 @@
       <div class="btns"><button class="btn pri" data-r="qcPT">Bảng kiểm tra PT (QC)</button><button class="btn pri" data-r="qcPS">Bảng kiểm tra PS (QC)</button></div><div id="qcout"></div>
       <div class="btns"><button class="btn" data-r="csv">Xuất danh mục CSV</button>${A.cloud() ? "" : `<button class="btn" data-r="backup">Sao lưu JSON</button><label class="btn">Nhập JSON<input type="file" id="imp" accept=".json,application/json" hidden></label>`}</div>
       ${list.length ? folders(list, r => `<div class="rec"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${r.summary ? `<span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Pass" : "Fail"}</span>` : ""} ${stageTag(r)}<br>
-        <small class="mut">${esc(r.certNo)} · ${esc(r.h.calDate)} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)} · U=${esc(r.summary ? r.summary.U : "—")} · Người nhập: ${esc(r.owner ? r.owner.name : "—")}${(r.photos || []).some(x => x.has) ? ` · 📷 ${(r.photos || []).filter(x => x.has).length}` : ""}</small></div>
+        <small class="mut">${esc(r.certNo)} · ${esc(r.h.calDate)} · ${esc(r.h.locMode === "free" ? r.h.locFree : r.h.location)} · U=${esc(r.summary ? r.summary.U : "—")} · Người nhập: ${esc(r.owner ? ownerName(r.owner) : "—")}${(r.photos || []).some(x => x.has) ? ` · 📷 ${(r.photos || []).filter(x => x.has).length}` : ""}</small></div>
         <div class="ra"><button class="btn sm" data-r="open" data-id="${r.id}">Mở</button><button class="btn sm" data-r="dup" data-id="${r.id}">Nhân bản</button>${A.can("deleteRecord") ? `<button class="btn sm" data-r="del" data-id="${r.id}">Xoá</button>` : ""}</div></div>`) : `<p class="mut">Chưa có hồ sơ.</p>`}</div>`;
     const imp = $("#imp"); if (imp) imp.onchange = importJson;
     $$("details.fold").forEach(d => d.addEventListener("toggle", () => { if (d.open) openFolders.add(d.dataset.f); else openFolders.delete(d.dataset.f); }));
@@ -1506,7 +1509,7 @@
   // Thư mục "Họ và Tên - dd/mm/yyyy" (NGOC 10/11/2026): người nhập + ngày hiệu chuẩn. Thư mục mới nhất đứng đầu, của mình trước.
   let openFolders = null;
   const folderKey = r => (r.owner ? r.owner.id || r.owner.name : "_none") + "|" + recDay(r);
-  const folderName = r => `${r.owner ? r.owner.name : "Chưa rõ người nhập"} - ${dmy(recDay(r))}`;
+  const folderName = r => `${r.owner ? ownerName(r.owner) : "Chưa rõ người nhập"} - ${dmy(recDay(r))}`;
   function folders(list, row) {
     const m = A.me(), G = new Map();
     list.forEach(r => { const k = folderKey(r); if (!G.has(k)) G.set(k, { name: folderName(r), day: recDay(r), mine: !!(m && r.owner && r.owner.id === m.id), items: [] }); G.get(k).items.push(r); });
@@ -1561,7 +1564,7 @@
     }
     if (b.dataset.r === "csv" || b.dataset.r === "csvf") {
       const head = ["Số chứng chỉ", "Loại", "Location", "Tag", "Mô tả", "Hãng", "Model", "Serial", "Min", "Max", "Đơn vị", "Pset", "Đơn vị Pset", "Độ chính xác", "Ngày HC", "U", "Kết quả", "Kiểm định viên", "Người kiểm soát", "Người nhập liệu", "Duyệt", "Số ảnh"];
-      const rows = sel.map(r => [r.certNo, r.type, r.h.locMode === "free" ? r.h.locFree : r.h.location, r.h.tag, r.h.description, r.h.maker, r.h.model, r.h.serial, r.h.min, r.h.max, r.h.unit, r.type === "PS" ? r.h.pset : r.type === "TS" ? r.h.tset : "", r.type === "PS" ? r.h.unitPset : r.type === "TS" ? "°C" : "", r.h.acc, r.h.calDate, r.summary ? r.summary.U : "", r.summary ? (r.summary.pass ? "Đạt (Pass)" : "Không đạt (Fail)") : "", r.sig.inspector, r.sig.controller, r.owner ? r.owner.name : "", r.approved ? r.approved.by : "", (r.photos || []).filter(x => x.has).length]);
+      const rows = sel.map(r => [r.certNo, r.type, r.h.locMode === "free" ? r.h.locFree : r.h.location, r.h.tag, r.h.description, r.h.maker, r.h.model, r.h.serial, r.h.min, r.h.max, r.h.unit, r.type === "PS" ? r.h.pset : r.type === "TS" ? r.h.tset : "", r.type === "PS" ? r.h.unitPset : r.type === "TS" ? "°C" : "", r.h.acc, r.h.calDate, r.summary ? r.summary.U : "", r.summary ? (r.summary.pass ? "Đạt (Pass)" : "Không đạt (Fail)") : "", fullName(r.sig.inspector), fullName(r.sig.controller), ownerName(r.owner), fullName(r.approved ? r.approved.by : ""), (r.photos || []).filter(x => x.has).length]);
       const csv = "﻿" + [head].concat(rows).map(a => a.map(v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`).join(",")).join("\r\n");
       saveFile(new Blob([csv], { type: "text/csv" }), `DanhMuc${fname}_${todayISO()}.csv`);
     }
@@ -1918,8 +1921,8 @@
     const h = r.h, set = r.type === "PS" ? [h.pset, h.unitPset] : r.type === "TS" ? [h.tset, "°C"] : ["", ""];
     return { r, site: repSite(r), cust: (recLoc(r).custVN || ""), type: r.type, typeName: typeName(r.type), tag: h.tag || "", desc: h.description || "", maker: h.maker || "", model: h.model || "", serial: h.serial || "",
       min: h.min, max: h.max, unit: h.unit || "", set: set[0], setUnit: set[1], acc: h.acc, cal: repDate(h.calDate), next: repNext(h.calDate), certNo: r.certNo || "",
-      result: r.summary ? (r.summary.pass ? "Đạt (Pass)" : "Không đạt (Fail)") : "", U: r.summary ? r.summary.U : "", owner: r.owner ? r.owner.name : "", ctl: (r.sig && r.sig.controller) || "",
-      fin: r.final ? r.final.by : (r.approved ? r.approved.by : ""), finAt: r.final ? repDate(r.final.at) : (r.approved ? repDate(r.approved.at) : ""), stat: repStat(r) };
+      result: r.summary ? (r.summary.pass ? "Đạt (Pass)" : "Không đạt (Fail)") : "", U: r.summary ? r.summary.U : "", owner: ownerName(r.owner), ctl: fullName((r.sig && r.sig.controller) || ""),
+      fin: fullName(r.final ? r.final.by : (r.approved ? r.approved.by : "")), finAt: r.final ? repDate(r.final.at) : (r.approved ? repDate(r.approved.at) : ""), stat: repStat(r) };
   };
   const tally = (rows, keyf) => { const m = new Map(); rows.forEach(x => { const k = keyf(x); const o = m.get(k) || { n: 0, ok: 0, fail: 0, fin: 0 }; o.n++; if (x.stat === "Đã duyệt final") o.fin++; if (/^Đạt/.test(x.result)) o.ok++; if (/^Không/.test(x.result)) o.fail++; m.set(k, o); }); return [...m].sort((a, z) => String(a[0]).localeCompare(String(z[0]), "vi", { numeric: true })); };
   function renderReport() {
@@ -1927,7 +1930,7 @@
     if (!m || m.role < 3) { el.innerHTML = `<div class="card"><h2>Báo cáo</h2><p class="hint">Chỉ Trưởng phòng / Quản trị (cấp 3) xem được mục này.</p></div>`; return; }
     const all = records;
     const uniq = f => [...new Set(all.map(f).filter(Boolean))];
-    const sites = uniq(repSite).sort((a, z) => a.localeCompare(z, "vi")), owners = new Map(); all.forEach(r => { if (r.owner) owners.set(r.owner.id || r.owner.name, r.owner.name); });
+    const sites = uniq(repSite).sort((a, z) => a.localeCompare(z, "vi")), owners = new Map(); all.forEach(r => { if (r.owner) owners.set(r.owner.id || r.owner.name, ownerName(r.owner)); });
     const folders = new Map(); all.forEach(r => { if (!REP.owner || (r.owner ? r.owner.id || r.owner.name : "") === REP.owner) folders.set(folderKey(r), folderName(r)); });
     const opt = (v, cur, t) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(t)}</option>`;
     const rows = repList().map(repRow), done = rows.filter(x => x.stat === "Đã duyệt final");
