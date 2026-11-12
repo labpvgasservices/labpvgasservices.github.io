@@ -763,40 +763,65 @@
     touched(); hideSuggest(); renderEntry(); persistCurrent();
     toast(`Đã điền ${d.t} ${msg.join(", ")}. Sửa tay nếu thiết bị đã thay.`);
   }
-  let devQ = { site: "", type: "", q: "", n: 150 };
+  /* Tab Thiết bị = tra cứu (NGOC 12/11/2026): không hiện cả danh mục nữa. Gõ tag (hoặc chọn công trình) mới ra kết quả, tối đa 20 dòng/lần;
+     tag có trong gói P&ID của máy này thì có nút P&ID → bản vẽ khoanh đỏ + chức năng/trip theo C&E (pid.js). */
+  let devQ = { site: "", type: "", q: "", n: 20 };
+  const PID = window.LabPID || null;
+  function pidCard() {
+    if (!PID) return "";
+    const st = PID.status();
+    return `<details class="fold pidpk"${st ? "" : " open"}><summary><b>Gói P&amp;ID trên máy này:</b> ${st ? `<span class="ok">${esc(st.name)}</span> <small class="mut">(${st.nd} bản vẽ · ${st.nt} tag${st.made ? " · lập " + esc(st.made) : ""})</small>` : `<span class="mut">chưa nạp</span>`}</summary>
+      <p class="hint">P&amp;ID và C&amp;E là tài liệu nội bộ nên <b>không có trên web</b>. Mỗi máy tự nạp gói từ file nội bộ (chọn cùng lúc file <b>pid-index.json</b> và toàn bộ ảnh bản vẽ); gói chỉ lưu trong trình duyệt của máy này, không đồng bộ lên máy chủ. Chức năng / trip chỉ hiện khi gói có dữ liệu C&amp;E, app không tự suy đoán.</p>
+      <div class="btns"><label class="btn${st ? "" : " pri"}">Nạp gói P&amp;ID…<input type="file" id="pidF" multiple accept=".json,image/*" hidden></label>${st ? `<button class="btn" data-pidclr="1">Xoá gói khỏi máy</button>` : ""}</div></details>`;
+  }
   function renderDevices() {
     const el = $("#v-devices");
     const sites = [...new Set(DEVS.map(d => d.s))];
     const cnt = s => DEVS.filter(d => d.s === s).length;
     const types = [...new Set(DEVS.map(d => d.T))];
-    el.innerHTML = `<div class="card"><h2>Danh sách thiết bị theo công trình <small>(${DEVS.length} thiết bị · ${sites.length} công trình)</small></h2>
-      <p class="hint">Nguồn: ${esc((window.LabDevices || {}).note || "—")}. Bấm <b>Nhập hồ sơ</b> để mở hồ sơ mới đã điền sẵn thông số; mọi ô vẫn sửa tay được. Khi cấp 3 duyệt final, thông tin thiết bị trong hồ sơ (hãng, model, S/N, dải, sai số) tự cập nhật vào danh mục này.</p>
-      ${A.can("settings") && devBulk(true) ? `<div class="btns"><button class="btn pri" data-dvsync="1">Cập nhật danh mục từ ${devBulk(true)} hồ sơ đã duyệt</button></div>` : ""}
-      <div class="grid">
+    el.innerHTML = `<div class="card"><h2>Tra cứu thiết bị <small>(${DEVS.length} thiết bị · ${sites.length} công trình)</small></h2>
+      <label class="f wide dvbig"><span>Tag thiết bị</span><input id="dvQ" value="${esc(devQ.q)}" placeholder="Gõ tag, ví dụ PT-1506A (hoặc serial, model…)" autocomplete="off" enterkeyhint="search" autocapitalize="characters"></label>
+      <details class="fold"${devQ.site || devQ.type ? " open" : ""}><summary class="mut">Lọc theo công trình / loại${devQ.site || devQ.type ? ": " + esc([devQ.site && siteName(devQ.site), devQ.type].filter(Boolean).join(" · ")) : ""}</summary><div class="grid">
         <label class="f"><span>Công trình</span><select id="dvS"><option value="">Tất cả công trình</option>${sites.map(s => `<option value="${esc(s)}"${devQ.site === s ? " selected" : ""}>${esc(siteName(s))} (${cnt(s)})</option>`).join("")}</select></label>
         <label class="f"><span>Loại</span><select id="dvT"><option value="">Tất cả loại</option>${types.map(t => `<option${devQ.type === t ? " selected" : ""}>${t}</option>`).join("")}</select></label>
-        <label class="f wide"><span>Tìm</span><input id="dvQ" value="${esc(devQ.q)}" placeholder="Tag, serial, model, hãng, khu vực…" autocomplete="off"></label>
-      </div><div id="dvL"></div></div>`;
-    $("#dvS").onchange = e => { devQ.site = e.target.value; devQ.n = 150; devList(); };
-    $("#dvT").onchange = e => { devQ.type = e.target.value; devQ.n = 150; devList(); };
-    $("#dvQ").oninput = e => { devQ.q = e.target.value; devQ.n = 150; devList(); };
+      </div></details>
+      <div id="dvL"></div></div>
+      <div class="card">${pidCard()}
+      <p class="hint">Nguồn danh mục: ${esc((window.LabDevices || {}).note || "—")}. Bấm <b>Nhập hồ sơ</b> để mở hồ sơ mới đã điền sẵn thông số; mọi ô vẫn sửa tay được. Khi duyệt final, thông tin thiết bị trong hồ sơ (hãng, model, S/N, dải, sai số) tự cập nhật vào danh mục.</p>
+      ${A.can("settings") && devBulk(true) ? `<div class="btns"><button class="btn pri" data-dvsync="1">Cập nhật danh mục từ ${devBulk(true)} hồ sơ đã duyệt</button></div>` : ""}</div>`;
+    $("#dvS").onchange = e => { devQ.site = e.target.value; devQ.n = 20; devList(); };
+    $("#dvT").onchange = e => { devQ.type = e.target.value; devQ.n = 20; devList(); };
+    $("#dvQ").oninput = e => { devQ.q = e.target.value; devQ.n = 20; devList(); };
+    $("#dvQ").onkeydown = e => { if (e.key !== "Enter") return; e.preventDefault(); const L = devHits(); const ex = L.filter(d => d.key === tagKey(devQ.q));
+      const one = ex.length === 1 ? ex[0] : L.length === 1 ? L[0] : null; if (one && PID && PID.has(one.t, one.s)) PID.open(one.t, `${one.t} · ${siteName(one.s)}`); };
+    const pf = $("#pidF"); if (pf) pf.onchange = async e => { const f = e.target.files; if (!f || !f.length) return;
+      toast("Đang nạp gói P&ID…"); try { toast(await PID.load(f)); } catch (err) { alert(err.message || String(err)); } renderDevices(); };
     devList();
   }
-  function devList() {
+  function devHits() {
     const q = devQ.q.toLowerCase().trim(), k = tagKey(devQ.q);
+    if (!devQ.site && !devQ.type && k.length < 2) return [];
     const L = DEVS.filter(d => (!devQ.site || d.s === devQ.site) && (!devQ.type || d.T === devQ.type) && (!q || d.key.includes(k) || [d.sn, d.md, d.mk, d.ar, d.d].join(" ").toLowerCase().includes(q)));
-    const G = new Map(); L.slice(0, devQ.n).forEach(d => { if (!G.has(d.s)) G.set(d.s, []); G.get(d.s).push(d); });
+    // tag trùng khớp đứng đầu, rồi tag bắt đầu bằng chuỗi gõ
+    return k ? L.map(d => [d.key === k ? 0 : d.key.startsWith(k) ? 1 : 2, d]).sort((a, b) => a[0] - b[0]).map(x => x[1]) : L;
+  }
+  function devList() {
+    const L = devHits();
+    if (!L.length && !devQ.site && !devQ.type && tagKey(devQ.q).length < 2) {
+      $("#dvL").innerHTML = `<p class="mut dvempty">Gõ ít nhất 2 ký tự của tag để tra cứu${PID && PID.status() ? ". Tag có trên P&amp;ID sẽ có nút <b>P&amp;ID</b>; Enter mở ngay bản vẽ khi chỉ có 1 tag khớp." : "."}</p>`; return;
+    }
     const row = d => { const r = devRecs(d)[0];
       const prev = r ? `Hồ sơ app: <b>${esc(r.certNo || "—")}</b> ${esc(r.h.calDate || "")}${r.summary ? ` <span class="${r.summary.pass ? "ok" : "bad"}">${r.summary.pass ? "Đạt" : "Không đạt"}</span>` : ""}`
         : d.c || d.cd ? `GCN trước: ${esc([d.c, d.cd && "ngày " + d.cd, d.du && "hạn " + d.du, d.r].filter(Boolean).join(" · "))}` : "";
-      return `<div class="rec dv"><div><b>${esc(d.t)}</b> <span class="tag">${d.T}</span> <small class="mut">${esc(d.d)}</small><br>
-        <small>${esc([d.mk, d.md, d.sn && "S/N " + d.sn, devRange(d), d.a && "±" + d.a + "%"].filter(Boolean).join(" · ") || "—")}</small>
+      const hp = PID && PID.has(d.t, d.s), ts = hp ? PID.tripState(d.t) : "";
+      return `<div class="rec dv"><div><b>${esc(d.t)}</b> <span class="tag">${d.T}</span>${ts === "trip" ? ` <span class="tag trip">⚠ Trip</span>` : ""} <small class="mut">${esc(siteName(d.s))}</small><br>
+        <small>${esc(d.d)}${d.d ? " · " : ""}${esc([d.mk, d.md, d.sn && "S/N " + d.sn, devRange(d), d.a && "±" + d.a + "%"].filter(Boolean).join(" · ") || "—")}</small>
         ${d.ar || d.n ? `<br><small class="mut">${esc([d.ar && "Khu vực: " + d.ar, d.n].filter(Boolean).join(" · "))}</small>` : ""}
         ${d.ov ? `<br><small class="ok">${d.isNew ? "Thiết bị thêm từ" : "Đã cập nhật theo"} hồ sơ ${esc(d.ov.certNo || "")} (${esc(d.ov.cd || "")})${d.isNew ? "" : ": " + esc(Object.entries(d.ov.ch || {}).map(([k, a]) => `${DFLAB[k] || k} ${a[0] || "—"} → ${a[1]}`).join("; "))}</small>` : ""}
         ${prev ? `<br><small class="mut">${prev}</small>` : ""}</div>
-        <div class="ra"><button class="btn sm" data-dv="${d.i}">Nhập hồ sơ</button></div></div>`; };
-    $("#dvL").innerHTML = (L.length ? [...G].map(([s, a]) => `<h3 class="dvh">${esc(siteName(s))} <small class="mut">(${L.filter(d => d.s === s).length})</small></h3>${a.map(row).join("")}`).join("") : `<p class="mut">Không có thiết bị khớp.</p>`)
-      + (L.length > devQ.n ? `<div class="btns"><button class="btn" data-dvmore="1">Hiện thêm (${L.length - devQ.n} thiết bị còn lại)</button></div>` : "");
+        <div class="ra">${hp ? `<button class="btn sm${ts === "trip" ? " danger" : ""}" data-dvpid="${d.i}">P&amp;ID</button>` : ""}<button class="btn sm" data-dv="${d.i}">Nhập hồ sơ</button></div></div>`; };
+    $("#dvL").innerHTML = (L.length ? `<p class="mut"><small>${L.length} thiết bị khớp${L.length > devQ.n ? `, hiện ${devQ.n} đầu tiên` : ""}</small></p>` + L.slice(0, devQ.n).map(row).join("") : `<p class="mut">Không có thiết bị khớp.</p>`)
+      + (L.length > devQ.n ? `<div class="btns"><button class="btn" data-dvmore="1">Hiện thêm 20 (còn ${L.length - devQ.n})</button></div>` : "");
   }
   // Cấp 3: các hồ sơ đã duyệt final từ trước (hoặc duyệt khi chưa có tính năng này) chưa được ghi vào danh mục
   function devBulk(dry) {
@@ -806,7 +831,9 @@
   function onDevicesClick(e) {
     const b = e.target.closest("button"); if (!b) return;
     if (b.dataset.dvsync) { const n = devBulk(false); toast(n ? `Đã cập nhật ${n} thiết bị trong danh mục theo hồ sơ đã duyệt` : "Danh mục đã khớp các hồ sơ đã duyệt"); renderDevices(); return; }
-    if (b.dataset.dvmore) { devQ.n += 300; devList(); return; }
+    if (b.dataset.dvmore) { devQ.n += 20; devList(); return; }
+    if (b.dataset.pidclr) { if (confirm("Xoá gói P&ID khỏi máy này?")) PID.clear().then(() => { toast("Đã xoá gói P&ID"); renderDevices(); }); return; }
+    if (b.dataset.dvpid != null) { const d = DEVS[Number(b.dataset.dvpid)]; if (d && PID) PID.open(d.t, `${d.t} · ${siteName(d.s)}`); return; }
     if (b.dataset.dv == null) return;
     const d = DEVS[Number(b.dataset.dv)]; if (!d) return;
     rec = newRecord(d.T); go("entry"); applyDevice(d);
@@ -2442,6 +2469,7 @@
     $("#v-records").addEventListener("click", onRecordsClick);
     $("#v-report").addEventListener("click", onReportClick); $("#v-report").addEventListener("change", onReportChange);
     $("#v-devices").addEventListener("click", onDevicesClick);
+    if (PID) PID.init().then(st => { if (st && curView === "devices") renderDevices(); });
     // Gợi ý Tag (như Excel): bàn phím ↑ ↓ Enter Esc, chuột / chạm chọn; rời ô thì ẩn
     $("#v-entry").addEventListener("keydown", e => { if (e.target.dataset.p !== "h.tag" || !$("#tagsug")) return;
       if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); moveSuggest(e.key === "ArrowDown" ? 1 : -1); }

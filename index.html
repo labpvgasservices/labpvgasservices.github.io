@@ -367,6 +367,15 @@ label.f{position:relative}
 .sugi:first-child{border-top:0}.sugi small{font-size:12px}.sugi .mut{flex-basis:100%}.sugs{flex-basis:100%;color:var(--brand)}
 .sugi.on,.sugi:hover{background:var(--clay-soft)}
 option.optx{color:#999}.rec.stx{opacity:.55;filter:grayscale(1)}
+.dvbig input{font-size:18px;padding:12px}.dvempty{padding:10px 0}.tag.trip{background:var(--bad);color:#fff}.pidpk>summary{line-height:1.5}
+#pidv{position:fixed;inset:0;z-index:200;background:var(--bg,#fff);display:flex;flex-direction:column}
+#pidv .pidbar{display:flex;gap:6px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}#pidv .pidsp{flex:1}
+#pidv .pidtabs{display:flex;gap:6px;padding:6px 12px;overflow-x:auto}#pidv .pidmeta{padding:4px 12px;font-size:13px;color:var(--muted)}
+#pidv .pidsc{flex:1;overflow:auto;background:#fff;min-height:40vh;-webkit-overflow-scrolling:touch}#pidv .pidcv{position:relative}
+#pidv .pidcv img,#pidv .pidcv svg{position:absolute;inset:0;width:100%;height:100%}
+#pidv .pidinfo{max-height:38vh;overflow:auto;padding:8px 12px;border-top:1px solid var(--line)}#pidv .pidinfo p{margin:4px 0}
+.pidwarn{background:#fde8e8;color:#7a1d10;border:2px solid var(--bad);border-radius:8px;padding:8px 10px}.pidwarn ul{margin:4px 0 0 18px;padding:0}
+.pidok{background:#e7f3ea;color:#24502f;border-radius:8px;padding:8px 10px}.pidna{background:#fff6e0;color:#6b4508;border-radius:8px;padding:8px 10px}
 .dvh{margin:14px 0 4px;font:600 15px var(--f-head)}.rec.dv small{line-height:1.45}
 
 /* ---------- v55: bố cục máy tính (NGOC 11/11/2026). Điện thoại giữ nguyên. ---------- */
@@ -457,6 +466,7 @@ nav.tabs .lbl{display:none}
 <script src="cloud.js"></script>
 <script src="auth.js"></script>
 <script src="photos.js"></script>
+<script src="pid.js"></script>
 <script src="vendor/temml.min.js"></script>
 <script src="formulas.js"></script>
 <script src="refs.js"></script>
