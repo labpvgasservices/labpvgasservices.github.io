@@ -6,7 +6,7 @@
  * pid-index.json:
  * { "format": "lab-pvgas-pid/1", "name": "…", "made": "2026-11-12", "sites": ["mã công trình trong danh mục, vd KLNG"],   // sites: không bắt buộc; có thì chỉ khớp tag của các công trình đó
  *   "drawings": [{ "id": "D1", "no": "số bản vẽ", "title": "…", "rev": "…", "file": "D1.jpg", "w": 4961, "h": 3508 }],
- *   "tags": { "PT1506A": [{ "d": "D1", "x": 1234, "y": 567, "r": 60 }] },          // khoá = tag bỏ dấu cách - _ . / , viết hoa; x,y,r theo pixel ảnh
+ *   "tags": { "PT1506A": [{ "d": "D1", "x": 1234, "y": 567, "r": 60, "lbl": "ghi chú cách tìm (không bắt buộc)" }] },          // khoá = tag bỏ dấu cách - _ . / , viết hoa; x,y,r theo pixel ảnh
  *   "info": { "PT1506A": { "fn": "chức năng (theo nguồn)", "sp": "setpoint/alarm (theo nguồn)",
  *                          "trip": [{ "act": "effect/action", "grp": "cụm bị shutdown", "src": "C&E số/rev" }], "src": "nguồn fn/sp" } } }
  * Quy tắc hiển thị: chỉ hiện chức năng/trip có trong gói. "trip" không có = CHƯA CÓ DỮ LIỆU (không phải "không trip");
@@ -96,7 +96,7 @@
     if (V.url) URL.revokeObjectURL(V.url);
     V.url = blob ? URL.createObjectURL(blob) : "";
     const img = V.el.querySelector(".pidcv img"), svg = V.el.querySelector(".pidcv svg");
-    V.el.querySelector(".pidmeta").textContent = d ? [d.no, d.title, d.rev && "Rev " + d.rev].filter(Boolean).join(" · ") : l.d;
+    V.el.querySelector(".pidmeta").textContent = (d ? [d.no, d.title, d.rev && "Rev " + d.rev].filter(Boolean).join(" · ") : l.d) + (l.lbl ? " — vị trí " + l.lbl + " (kiểm tra lại trên bản vẽ)" : "");
     if (!blob || !d) { V.el.querySelector(".pidsc").innerHTML = `<p class="pidna">Không đọc được ảnh bản vẽ ${esc(l.d)} – nạp lại gói P&amp;ID.</p>`; return; }
     V.w = d.w; V.h = d.h; V.l = l;
     const r = Math.max(l.r || 0, Math.round(Math.min(d.w, d.h) * 0.012));
