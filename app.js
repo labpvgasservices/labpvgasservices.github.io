@@ -1950,7 +1950,7 @@
       </div>
       <div class="kpis">${kpi(rows.length, "thiết bị khớp bộ lọc")}${kpi(done.length, "đã duyệt final", "ok")}${kpi(okN, "đạt")}${kpi(badN, "không đạt", badN ? "bad" : "")}</div>
       <div class="btns"><button class="btn pri" data-rp="zip">⬇ Tải gói báo cáo <small>ZIP: tổng hợp + danh sách + Uncer từng loại</small></button>
-        <button class="btn" data-rp="sum">Excel tổng hợp + chi tiết</button><button class="btn" data-rp="list">Excel danh sách (mẫu DGCP)</button><button class="btn" data-rp="unc">Excel Uncer (từng loại)</button></div>
+        <button class="btn" data-rp="sum">Excel tổng hợp + chi tiết</button><button class="btn" data-rp="list">Excel danh sách</button><button class="btn" data-rp="unc">Excel Uncer (từng loại)</button></div>
       <div id="repout"></div>
       <p class="hint">Gói báo cáo và Uncer chỉ lấy hồ sơ <b>đã duyệt final</b> khớp bộ lọc. Thiết bị không đạt có trong tổng hợp nhưng không có GCN. Uncer xuất từ số liệu app tính (giá trị, không phải công thức sống của file Excel gốc).</p></div>
       ${rows.length ? `<div class="rgrid"><div class="card"><h2>Theo công trình</h2>${tbl(["Công trình", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.site).map(line))}</div>
