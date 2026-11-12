@@ -558,35 +558,48 @@
   const devRange = d => d.mn !== "" || d.mx !== "" ? `${d.mn}÷${d.mx} ${d.u}` : (d.ps ? `Set ${d.ps} ${d.pu || d.u}` : "");
   // Hồ sơ đã lưu gần nhất của 1 thiết bị (cùng công trình + tag)
   const devRecs = d => records.filter(r => r.h.location === d.s && tagKey(r.h.tag) === d.key).sort((a, b) => (b.h.calDate || "").localeCompare(a.h.calDate || "") || (b.updated || "").localeCompare(a.updated || ""));
-  /* ---------- Gói thiết bị (NGOC 12/11/2026): cấp 3 lập danh sách tag theo công trình / đợt (VD Giàn DGCP tháng 10);
-     người nhập chọn gói → Tag chỉ gợi ý trong gói, làm xong lưu hồ sơ thì tag có ✓ xanh, bấm "Thiết bị tiếp theo" để đi tiếp. ---------- */
-  const packs = () => Array.isArray(settings.packs) ? settings.packs : [];
+  /* ---------- Gói thiết bị theo tháng đến hạn (NGOC 12/11/2026): app tự chia thiết bị của công trình theo "Ngày KĐHC tiếp theo"
+     trong danh sách thiết bị (không có thì lấy ngày KĐHC + 12 tháng). Chọn gói → Tag chỉ gợi ý trong gói, hồ sơ đã lưu có ngày
+     hiệu chuẩn sau lần KĐHC trong danh sách thì có ✓ xanh, bấm "Thiết bị tiếp theo" để đi tiếp. ---------- */
+  const dueMon = d => d.du ? d.du.slice(0, 7) : /^\d{4}-\d{2}/.test(d.cd || "") ? (Number(d.cd.slice(0, 4)) + 1) + d.cd.slice(4, 7) : "";
+  const packCache = {};
+  function sitePacks(site) {
+    if (packCache[site]) return packCache[site];
+    const m = new Map();
+    DEVS.forEach(d => { if (d.s !== site) return; const k = dueMon(d); if (!k) return; if (!m.has(k)) m.set(k, []); m.get(k).push(d); });
+    return (packCache[site] = [...m.keys()].sort().map(k => ({ id: site + "|" + k, site, name: `Tháng ${Number(k.slice(5))}/${k.slice(0, 4)}`, devs: m.get(k) })));
+  }
   let curPackId = store.get("curPack", "");
-  const packDevs = p => { const ks = new Set((p.tags || []).map(tagKey)); return DEVS.filter(d => d.s === p.site && ks.has(d.key)); };
-  const curPack = () => { const p = packs().find(x => x.id === curPackId); return p && rec.h.locMode !== "free" && p.site === rec.h.location ? p : null; };
-  const packDoneSet = p => new Set(records.filter(r => r.packId === p.id && r.h.location === p.site).map(r => tagKey(r.h.tag)));
+  const packDevs = p => p.devs;
+  const curPack = () => rec.h.locMode === "free" ? null : sitePacks(rec.h.location).find(p => p.id === curPackId) || null;
+  // Đã làm = có hồ sơ (chưa xoá) cùng công trình + tag với ngày hiệu chuẩn sau ngày KĐHC gần nhất trong danh sách
+  function packDoneSet(p) {
+    const last = {};
+    records.forEach(r => { if (r.deleted || r.h.location !== p.site || !r.h.calDate) return; const k = tagKey(r.h.tag); if (!(k in last) || r.h.calDate > last[k]) last[k] = r.h.calDate; });
+    return new Set(p.devs.filter(d => d.key in last && last[d.key] > (d.cd || "")).map(d => d.key));
+  }
   // Hồ sơ đang mở có tag mà chưa lưu (hoặc đã sửa sau lần lưu cuối)?
   function unsavedRec() { if (!rec.h.tag) return false; const s = records.find(r => r.id === rec.id); return !s || JSON.stringify(s) !== JSON.stringify(rec); }
   function packPanel() {
     const h = rec.h; if (h.locMode === "free") return "";
-    const list = packs().filter(p => p.site === h.location); if (!list.length) return "";
+    const list = sitePacks(h.location); if (!list.length) return "";
     const p = curPack();
-    const opts = `<option value="">— không dùng gói (gõ tag tự do) —</option>` + list.map(x => `<option value="${esc(x.id)}"${p && p.id === x.id ? " selected" : ""}>${esc(x.name)} (${packDevs(x).length} thiết bị)</option>`).join("");
+    const opts = `<option value="">— chọn gói đến hạn (hoặc gõ tag tự do) —</option>` + list.map(x => `<option value="${esc(x.id)}"${p && p.id === x.id ? " selected" : ""}>${esc(x.name)} – ${x.devs.length} thiết bị</option>`).join("");
     let body = "";
     if (p) {
-      const ds = packDevs(p), dn = packDoneSet(p), done = ds.filter(d => dn.has(d.key)).length, miss = (p.tags || []).length - ds.length, ck = tagKey(h.tag);
+      const ds = p.devs, dn = packDoneSet(p), done = ds.filter(d => dn.has(d.key)).length, ck = tagKey(h.tag);
       body = `<div class="pkbar"><b>${done}/${ds.length}</b> đã lưu hồ sơ<span class="pkprog"><i style="width:${ds.length ? done / ds.length * 100 : 0}%"></i></span></div>
         <div class="pkchips">${ds.map(d => `<button type="button" class="pkc${dn.has(d.key) ? " ok" : ""}${d.key === ck ? " cur" : ""}" data-pkt="${d.i}">${dn.has(d.key) ? "✓ " : ""}${esc(d.t)}</button>`).join("")}</div>
-        <div class="btns"><button type="button" class="btn pri" data-pknext="1">▶ Thiết bị tiếp theo</button></div>${miss > 0 ? `<div class="hint">${miss} tag trong gói không có trong danh sách thiết bị của công trình này.</div>` : ""}`;
+        <div class="btns"><button type="button" class="btn pri" data-pknext="1">▶ Thiết bị tiếp theo</button></div>`;
     }
-    return `<div class="f wide pk" id="pkpanel"><span>Gói thiết bị</span><select data-pk="sel">${opts}</select>${body}</div>`;
+    return `<div class="f wide pk" id="pkpanel"><span>Gói thiết bị đến hạn (theo danh sách thiết bị)</span><select data-pk="sel">${opts}</select>${body}</div>`;
   }
   function openPackDevice(d) {
     if (unsavedRec() && !confirm(`Hồ sơ ${rec.h.tag} CHƯA LƯU.\nBấm OK để bỏ hồ sơ này và sang ${d.t}; bấm Hủy để quay lại lưu.`)) return;
-    const o = rec, p = curPack();
+    const o = rec;
     rec = newRecord(d.T);
     Object.assign(rec.h, { location: o.h.location, cust: o.h.cust, locMode: o.h.locMode, calDate: o.h.calDate, issueDate: o.h.issueDate });
-    rec.sig.controller = (o.sig || {}).controller || ""; rec.certNo = autoCertNo(); if (p) rec.packId = p.id;
+    rec.sig.controller = (o.sig || {}).controller || ""; rec.certNo = autoCertNo();
     applyDevice(d, { force: true }); window.scrollTo(0, 0);
   }
   function packNext() {
@@ -1379,7 +1392,6 @@
       if (rec.certAuto) { rec.certNo = autoCertNo(); const f = $("#f_certNo"); if (f) f.value = rec.certNo; }
       else { toast(`Không lưu: số ${rec.certNo} đã dùng cho ${dupNo.h.tag || "hồ sơ khác"} – nhập số khác`); return; }
     }
-    { const cp = curPack(); if (cp && packDevs(cp).some(d => d.key === tagKey(rec.h.tag))) rec.packId = cp.id; }
     rec.saved = true; rec.updated = new Date().toISOString();
     rec.summary = c.res ? { pass: c.res.pass, U: summaryU(rec.type, c.res), why: c.res.pass ? "" : failWhy(c) } : null;
     if (rec.owner) addViewer(rec, rec.owner.id);
@@ -1736,18 +1748,6 @@
   /* ---------- settings tab ---------- */
   // Dung lượng Supabase (cấp 3): gói Free 500 MB cơ sở dữ liệu + 1 GB kho ảnh. Cần chạy 07_v57_dung_luong.sql một lần.
   const mb = b => (b / 1048576).toFixed(b < 1e7 ? 1 : 0) + " MB";
-  function packCard() {
-    const sites = [...new Set(DEVS.map(d => d.s))], dm = {};
-    const rows = packs().map((p, i) => { const ds = packDevs(p), dn = packDoneSet(p), n = ds.filter(d => dn.has(d.key)).length;
-      return `<tr><td><b>${esc(p.name)}</b></td><td>${esc(siteName(p.site))}</td><td>${n}/${ds.length}${(p.tags || []).length > ds.length ? ` <small class="bad">(${(p.tags || []).length - ds.length} tag không có trong danh sách)</small>` : ""}</td><td><button class="btn sm" data-t="pkdel" data-i="${i}">Xoá</button></td></tr>`; }).join("");
-    return `<div class="card" id="pkcard"><h2>Gói thiết bị theo đợt</h2><p class="hint">Lập danh sách tag cho 1 công trình / 1 đợt (VD: Giàn DGCP – Tháng 10). Người nhập liệu chọn công trình → chọn gói → Tag chỉ hiện trong gói, làm xong thiết bị nào lưu hồ sơ thì có ✓ xanh.</p>
-      ${rows ? `<div class="tblwrap"><table class="rtbl"><thead><tr><th>Gói</th><th>Công trình</th><th>Đã lưu</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
-      <div class="grid"><label class="f"><span>Công trình</span><select id="pkSite"><option value="">— chọn —</option>${sites.map(s => `<option value="${esc(s)}">${esc(siteName(s))}</option>`).join("")}</select></label>
-        <label class="f"><span>Tên gói</span><input id="pkName" placeholder="VD: Tháng 10"></label>
-        <label class="f"><span>Tháng đến hạn (nếu danh sách có ngày đến hạn)</span><input id="pkMon" type="month"></label>
-        <label class="f wide"><span>Danh sách tag (mỗi dòng 1 tag, hoặc dán cột từ Excel)</span><textarea id="pkTags" rows="6" placeholder="PT-1430A&#10;PT-1431B&#10;…"></textarea></label></div>
-      <div class="btns"><button class="btn" data-t="pkfill">Điền sẵn tag từ công trình (+ tháng đến hạn)</button><button class="btn pri" data-t="pkadd">Tạo gói</button></div><div class="hint" id="pkmsg"></div></div>`;
-  }
   function usageCard() {
     if (!A.cloud() || !A.can("settings")) return "";
     return `<div class="card" id="usagecard"><h2>📊 Dung lượng máy chủ</h2><p class="hint" id="usageout">Đang đọc…</p></div>`;
@@ -1768,7 +1768,7 @@
         <div class="btns"><button class="btn pri" data-t="selftest">Chạy kiểm tra</button></div><div id="stout"></div></div>
       <div class="card"><h2>Về ứng dụng</h2><p class="hint">LAB PVGAS Services · bản thử nghiệm PT, PS, PG, TS, TT, RTD, TG · ${A.cloud() ? "dữ liệu đồng bộ qua máy chủ Supabase; vẫn nhập liệu được khi mất mạng, có mạng lại tự đồng bộ." : "chạy offline, dữ liệu chỉ lưu trên máy này (dùng Sao lưu JSON ở tab Hồ sơ)."}</p></div>`;
     if (!A.can("settings")) { $("#v-settings").innerHTML = A.accountCard() + freeCard() + (canCheck() ? checkCard() : "") + `<div class="card"><p class="hint">Cài đặt chứng chỉ chỉ dành cho Trưởng phòng / Quản trị (cấp 3).</p></div>` + tail; return; }
-    $("#v-settings").innerHTML = A.accountCard() + backupCard() + usageCard() + freeCard() + packCard() + rangesCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
+    $("#v-settings").innerHTML = A.accountCard() + backupCard() + usageCard() + freeCard() + rangesCard() + checkCard() + `<div class="card"><h2>Người ký trang 1 chứng chỉ</h2><div class="grid">
         ${f("Chức danh trái", "sig1Title")}${f("Tên", "sig1Name")}${f("Chức danh trái (EN)", "sig1TitleEn", 1)}
         ${f("Chức danh phải", "sig2Title")}${f("Tên", "sig2Name")}${f("Chức danh phải (EN)", "sig2TitleEn", 1)}
         ${f("Nơi cấp (dòng ngày)", "place")}${f("Chu kỳ HC (tháng)", "dueMonths")}
@@ -1930,18 +1930,6 @@
     if (e.target.closest("button[data-u]")) { A.onAccountClick(e, renderSettings, toast); return; }
     const b = e.target.closest("button[data-t]"); if (!b) return;
     if (b.dataset.t === "resetset" && A.can("settings")) { settings = clone(SEED.settings); store.set("settings", settings); renderSettings(); toast("Đã về mặc định"); }
-    if (b.dataset.t === "pkfill" && A.can("settings")) {
-      const site = $("#pkSite").value, mon = $("#pkMon").value;
-      if (!site) { $("#pkmsg").textContent = "Chọn công trình trước."; return; }
-      const ds = DEVS.filter(d => d.s === site && (!mon || String(d.du || "").startsWith(mon)));
-      $("#pkTags").value = ds.map(d => d.t).join("\n"); $("#pkmsg").textContent = `Đã điền ${ds.length} tag${mon ? " đến hạn " + mon : ""}${ds.length && !mon && ds.every(d => !d.du) ? " (danh sách chưa có ngày đến hạn của công trình này – hãy xoá bớt hoặc dán danh sách tag đúng đợt)" : ""}.`;
-    }
-    if (b.dataset.t === "pkadd" && A.can("settings")) {
-      const site = $("#pkSite").value, name = $("#pkName").value.trim(), tags = [...new Set($("#pkTags").value.split(/[\n\r,;\t]+/).map(x => x.trim()).filter(Boolean))];
-      if (!site || !name || !tags.length) { $("#pkmsg").textContent = "Cần chọn công trình, đặt tên gói và có ít nhất 1 tag."; return; }
-      settings.packs = packs().concat([{ id: "pk" + Date.now().toString(36), site, name, tags }]); store.set("settings", settings); renderSettings(); toast("Đã tạo gói " + name);
-    }
-    if (b.dataset.t === "pkdel" && A.can("settings")) { if (!b.dataset.armed) { b.dataset.armed = 1; b.textContent = "Xoá thật?"; return; } settings.packs.splice(Number(b.dataset.i), 1); store.set("settings", settings); renderSettings(); }
     if (b.dataset.t === "selftest") $("#stout").innerHTML = selfTest();
     if (b.dataset.t === "bkall") backupNow(b);
     if (b.dataset.t === "frreload") { srvUsed = {}; frOpen = true; renderSettings(); }
