@@ -570,8 +570,9 @@
   function sitePacks(site) {
     if (packCache[site]) return packCache[site];
     const m = new Map();
-    DEVS.forEach(d => { if (d.s !== site) return; const k = dueMon(d); if (!k) return; if (!m.has(k)) m.set(k, []); m.get(k).push(d); });
-    return (packCache[site] = [...m.keys()].sort().map(k => ({ id: site + "|" + k, site, name: `Tháng ${Number(k.slice(5))}/${k.slice(0, 4)}`, devs: m.get(k).sort(tagCmp) })));
+    DEVS.forEach(d => { if (d.s !== site) return; const k = dueMon(d) || "none"; if (!m.has(k)) m.set(k, []); m.get(k).push(d); });
+    const dated = m.size > 1 || !m.has("none");   // công trình chưa có ngày đến hạn: 1 gói "Tất cả thiết bị"
+    return (packCache[site] = [...m.keys()].sort().map(k => ({ id: site + "|" + k, site, name: k === "none" ? (dated ? "Chưa có ngày đến hạn" : "Tất cả thiết bị (danh sách chưa có ngày đến hạn)") : `Tháng ${Number(k.slice(5))}/${k.slice(0, 4)}`, devs: m.get(k).sort(tagCmp) })));
   }
   let curPackId = store.get("curPack", "");
   const packDevs = p => p.devs;
@@ -580,7 +581,8 @@
   function packDoneSet(p) {
     const last = {};
     records.forEach(r => { if (r.deleted || r.h.location !== p.site || !r.h.calDate) return; const k = tagKey(r.h.tag); if (!(k in last) || r.h.calDate > last[k]) last[k] = r.h.calDate; });
-    return new Set(p.devs.filter(d => d.key in last && last[d.key] > (d.cd || "")).map(d => d.key));
+    const y0 = (new Date().getFullYear() - 1) + "-12-31";   // chưa có ngày KĐHC trong danh sách: tính hồ sơ làm trong năm nay
+    return new Set(p.devs.filter(d => d.key in last && last[d.key] > (d.cd || y0)).map(d => d.key));
   }
   // Hồ sơ đang mở có tag mà chưa lưu (hoặc đã sửa sau lần lưu cuối)?
   function unsavedRec() { if (!rec.h.tag) return false; const s = records.find(r => r.id === rec.id); return !s || JSON.stringify(s) !== JSON.stringify(rec); }
@@ -1289,10 +1291,9 @@
     if (st === "done" && m && m.role >= 3) rv = `<div class="arow"><button class="btn" data-act="unapprove">Huỷ duyệt</button></div>`;
     const L = lv1(), ok = isFinal(rec), fl = rec.summary && !rec.summary.pass;
     const exp = ok ? `<button class="btn pri" data-pdf="cert">Chứng chỉ <small>2 trang</small></button>
-        ${L ? `<button class="btn" data-act="viewqtg">Biên bản QTG <small>chỉ xem</small></button>`
-        : `<button class="btn" data-pdf="qtg">Biên bản QTG <small>PDF</small></button>
+        <button class="btn" data-pdf="qtg">Biên bản QTG <small>PDF</small></button>
         <button class="btn" data-pdf="all">Trọn bộ <small>QTG + GCN</small></button>
-        <button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`}
+        ${L ? "" : `<button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`}
         <button class="btn wide2" data-act="preview">Xem trước trọn bộ</button>`
       : `<button class="btn wide2" data-act="preview">Xem trước trọn bộ <small>(chưa được in / tải)</small></button>${L ? "" : `<button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`}`;
     return `<div class="acts">
@@ -1486,7 +1487,7 @@
   const fileTag = () => `${(rec.certNo || "").replace(/[^\w.-]+/g, "_")}_${(rec.h.tag || "").replace(/[^\w.-]+/g, "_")}`;
   async function makePdf(which, htmlIn, nameIn, outSel) {
     if (!htmlIn && which !== "unc" && !isFinal(rec)) { toast("Chỉ in / tải sau khi hồ sơ được duyệt final"); return; }
-    if (!htmlIn && lv1()) { if (which === "qtg") { renderPreview("qtg"); return; } if (which === "all") which = "certunc"; if (which === "unc") { toast("Bảng Uncer chỉ dành cho Người kiểm soát / Trưởng phòng"); return; } }
+    if (!htmlIn && lv1()) { if (which === "unc") { toast("Bảng Uncer chỉ dành cho Người kiểm soát / Trưởng phòng"); return; } }
     const html = htmlIn || pagesHtml(which); if (!html) return;
     const out = $(outSel || "#pdfout"); out.innerHTML = `<p class="mut">Đang tạo PDF…</p>`;
     try {
@@ -1595,7 +1596,7 @@
     return keys.map(k => { const f = G.get(k), n = f.items.length, ok = f.items.filter(isFinal).length, fl = f.items.filter(isFail).length, mq = f.items.filter(myTurn).length;
       const cls = ok === n ? "done" : f.items.some(r => stage(r) !== "draft") ? "wait" : "";
       return `<details class="fold ${cls}" data-f="${esc(k)}"${openFolders.has(k) || keys.length === 1 ? " open" : ""}><summary>📁 <b>${esc(f.name)}</b>${f.mine ? " <span class=\"tag\">của tôi</span>" : ""} <small class="mut">${n} hồ sơ · ${ok}/${n} đã duyệt final</small>${ok === n ? ' <span class="ok">✓ Đã duyệt</span>' : ""}${fl ? ` <span class="bad">⚠ ${fl} không đạt</span>` : ""}</summary>
-        <div class="btns">${mq ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${mq})</button>` : ""}<button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button>${A.cloud() ? "" : `<button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button>`}</div>
+        <div class="btns">${mq ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${mq})</button>` : ""}${ok ? `<button class="btn sm pri" data-r="zipf" data-f="${esc(k)}">⬇ Tải thư mục QTG + GCN (${ok})</button>` : ""}<button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button>${A.cloud() ? "" : `<button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button>`}</div>
         ${f.items.map(row).join("")}</details>`; }).join("");
   }
   function onRecordsClick(e) {
@@ -1628,6 +1629,7 @@
       return;
     }
     if (b.dataset.r === "apf") { approveFolder(b); return; }
+    if (b.dataset.r === "zipf") { zipFolder(b); return; }
     if (b.dataset.r === "share") { sharePdf(); return; }
     if (b.dataset.r === "download") { downloadPdf(); return; }
     // backupf / csvf: chỉ hồ sơ trong thư mục của một người, tên file mang tên người đó
@@ -1645,6 +1647,19 @@
       const csv = "﻿" + [head].concat(rows).map(a => a.map(v => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`).join(",")).join("\r\n");
       saveFile(new Blob([csv], { type: "text/csv" }), `DanhMuc${fname}_${todayISO()}.csv`);
     }
+  }
+  // Tải cả thư mục đã duyệt final: QTG/ và GCN/, tên "1. Tag.pdf" (NGOC 12/11/2026; cấp 1, 2, 3 đều tải được sau khi cấp 3 duyệt)
+  async function zipFolder(b) {
+    const sel = records.filter(r => visible(r) && folderKey(r) === b.dataset.f && isFinal(r)); if (!sel.length) { toast("Chưa có hồ sơ duyệt final trong thư mục này"); return; }
+    const old = b.textContent; b.disabled = true;
+    try {
+      b.textContent = "Đang nạp thư viện…"; await needExcel();
+      const r = await repPackZip(sel.map(x => ({ r: x, tag: x.h.tag, certNo: x.certNo })), h => { b.textContent = h.replace(/<[^>]+>/g, "").replace(/^Đang tạo PDF /, "Đang tạo "); });
+      if (!r.files.length) { toast("Không tạo được file nào" + (r.skipped.length ? " – thiếu số liệu: " + r.skipped.join(", ") : "")); return; }
+      const nm = folderName(sel[0]).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").replace(/[^\w.-]+/g, "_");
+      await saveFile(await LabZip.make(r.files), `ThuMuc_${nm}.zip`);
+      toast(`Đã tải ${sel.length} hồ sơ${r.noCert.length ? " · không đạt chỉ có QTG: " + r.noCert.join(", ") : ""}`);
+    } catch (e) { toast("Không tạo được: " + (e.message || e)); } finally { b.disabled = false; b.textContent = old; }
   }
   // Duyệt cả gói (yêu cầu NGOC 01/11/2026): cấp 2/3 duyệt một lần mọi hồ sơ "Chờ duyệt" trong thư mục của một người.
   // Mỗi hồ sơ vẫn qua đủ kiểm tra như duyệt lẻ; hồ sơ thiếu số liệu bị bỏ qua và báo tên. Bấm 2 lần để xác nhận.
