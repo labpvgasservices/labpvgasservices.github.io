@@ -110,6 +110,8 @@ details{margin-top:10px} summary{cursor:pointer;color:var(--clay);font-weight:60
 .qc{font:12.5px var(--f-num);background:var(--result);border-radius:10px;padding:10px;margin-top:8px;display:grid;gap:6px;overflow-wrap:anywhere}
 .rec{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line);align-items:center}
 .rec .ra{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+/* v72: điện thoại – nút Mở / Nhân bản / Xoá xuống dòng dưới, chữ hồ sơ được rộng hết bề ngang */
+@media (max-width:560px){.rec{flex-wrap:wrap;align-items:flex-start}.rec>div:first-child{flex:1 1 100%;min-width:0}.rec .ra{flex:1 1 100%;justify-content:flex-start}}
 .fold{border-top:1px solid var(--line);padding:6px 0}.fold.done{border-left:4px solid var(--ok);padding-left:8px}.fold.wait{border-left:4px solid var(--warn);padding-left:8px}
 nav.tabs button{position:relative}.bdg{position:absolute;top:4px;left:50%;margin-left:6px;display:flex;gap:2px}.bdg i{font:700 10px/16px var(--f-ui);font-style:normal;min-width:16px;padding:0 4px;border-radius:8px;color:#fff;text-align:center}.bdg .bq{background:#0193DE}.bdg .bf{background:#c0392b}
 .failc{border:1px solid var(--bad);border-left:5px solid var(--bad)}.failc h2{color:var(--bad)}
@@ -120,7 +122,7 @@ nav.tabs button{position:relative}.bdg{position:absolute;top:4px;left:50%;margin
 .pv{overflow:hidden;position:relative;background:var(--sunk);border-radius:10px}
 .pv-in{transform-origin:0 0;width:794px}
 nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);display:grid;grid-auto-flow:column;grid-auto-columns:1fr;padding-bottom:env(safe-area-inset-bottom,0px)}
-nav.tabs button{height:var(--tabbar-h);border:0;background:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:500 11px var(--f-ui);cursor:pointer}
+nav.tabs button{height:var(--tabbar-h);border:0;background:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font:500 11px var(--f-ui);cursor:pointer;white-space:nowrap;min-width:0;padding:0 1px;letter-spacing:-.2px}
 nav.tabs button[hidden]{display:none}
 nav.tabs button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
 nav.tabs button.on{color:var(--clay)}
@@ -429,7 +431,7 @@ nav.tabs .lbl{display:none}
 <link rel="stylesheet" href="vendor/temml-local.css">
 </head>
 <body>
-<header class="top"><h1>LAB PVGAS Services</h1><small>PT · PS · PG · DPG · TS · TT · RTD · TG · TC — nhập QTG, tính ĐKĐBĐ, xuất chứng chỉ</small></header>
+<header class="top"><h1>LAB PVGAS Services</h1><small>Hiệu chuẩn · kiểm định thiết bị đo – 9 loại</small></header>
 <div id="pendbar" class="pendbar" hidden></div>
 <main class="wrap">
   <section id="v-entry"></section>
