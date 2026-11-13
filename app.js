@@ -1394,13 +1394,14 @@
         <button class="btn" data-pdf="all">Trọn bộ <small>QTG + GCN</small></button>
         ${L ? "" : `<button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`}
         <button class="btn wide2" data-act="preview">Xem trước trọn bộ</button>`
-      : `<button class="btn wide2" data-act="preview">Xem trước trọn bộ <small>(chưa được in / tải)</small></button>${L ? "" : `<button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`}`;
+      : `<button class="btn" data-pdf="qtg">Biên bản QTG <small>PDF</small></button>${L ? "" : `<button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`}
+        <button class="btn wide2" data-act="preview">Xem trước trọn bộ <small>(GCN chỉ tải sau khi duyệt final)</small></button>`;   // v76 (NGOC 13/11/2026): mọi cấp tải QTG ngay khi nhập xong
     return `<div class="acts">
       <div class="agrp"><div class="alab">Hồ sơ</div><div class="arow">
         <button class="btn pri" data-act="save">💾 Lưu hồ sơ</button><button class="btn" data-act="new">＋ Hồ sơ mới</button></div></div>
       <div class="agrp"><div class="alab">Duyệt</div><div class="astat">${stHtml}</div>${ret}${rv}</div>
       ${fl ? `<div class="hint bad">⚠ KHÔNG ĐẠT${rec.summary.why ? ": " + esc(noRef(rec.summary.why)) : ""}. Không cấp số, không xuất chứng chỉ; chỉ có Biên bản QTG ghi nhận kết quả.</div>` : ""}
-      <div class="agrp"><div class="alab">Xuất tài liệu${ok ? "" : " – chỉ in / tải sau khi duyệt final"}</div><div class="agrid">${exp}</div></div>
+      <div class="agrp"><div class="alab">Xuất tài liệu${ok ? "" : " – GCN chỉ in / tải sau khi duyệt final"}</div><div class="agrid">${exp}</div></div>
     </div>`;
   }
   /* ---------- luồng duyệt 2 bước (NGOC 10/11/2026, v49) ----------
@@ -1585,7 +1586,7 @@
   }
   const fileTag = () => `${(rec.certNo || "").replace(/[^\w.-]+/g, "_")}_${(rec.h.tag || "").replace(/[^\w.-]+/g, "_")}`;
   async function makePdf(which, htmlIn, nameIn, outSel) {
-    if (!htmlIn && which !== "unc" && !isFinal(rec)) { toast("Chỉ in / tải sau khi hồ sơ được duyệt final"); return; }
+    if (!htmlIn && which !== "unc" && which !== "qtg" && !isFinal(rec)) { toast("Chứng chỉ chỉ in / tải sau khi hồ sơ được duyệt final"); return; }
     if (!htmlIn && lv1()) { if (which === "unc") { toast("Bảng Uncer chỉ dành cho Người kiểm soát / Trưởng phòng"); return; } }
     const html = htmlIn || pagesHtml(which); if (!html) return;
     const out = $(outSel || "#pdfout"); out.innerHTML = `<p class="mut">Đang tạo PDF…</p>`;
