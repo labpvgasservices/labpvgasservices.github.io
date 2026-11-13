@@ -1,103 +1,246 @@
-/* LAB PVGAS Services – "Bảng tính Excel chạy thật" cho 1 hồ sơ (tab Báo cáo, cấp 3), v81 – yêu cầu NGOC 13/11/2026:
- * mỗi tag 1 file .xlsx gồm toàn bộ công thức ĐLVN của loại thiết bị (9 cụm), số liệu nhập + số lấy từ chuẩn ở ô màu cam,
- * mọi bước còn lại là CÔNG THỨC EXCEL thật (Excel tự tính lại khi mở) → chứng minh với VILAS từng bước tính ĐKĐBĐ.
- * Sheet "Số app" chép đúng số phần mềm đã dùng ở cùng vị trí ô; cột E "Lệch" = |Excel − app| / |app| để đối chiếu.
+/* LAB PVGAS Services – "Bảng tính Excel chạy thật" cho 1 hồ sơ (tab Báo cáo, cấp 3) – yêu cầu NGOC 13/11/2026:
+ * mỗi tag 1 file .xlsx, 3 sheet:
+ *  1. "Bảng tính"   – toàn bộ công thức ĐLVN của loại thiết bị (9 cụm); số nhập + số lấy từ GCN chuẩn ở ô cam,
+ *                     mọi bước còn lại là CÔNG THỨC EXCEL thật (Excel tự tính lại) → chứng minh với VILAS từng bước tính ĐKĐBĐ.
+ *  2. "Công thức"   – ảnh từng bước công thức + thay số, chụp đúng như mục 5 trên app (v83).
+ *  3. "Số app"      – số phần mềm đã dùng ở cùng vị trí ô; cột "Đối chiếu" = |Excel − app| / (|app| + 1E-6) → KHỚP / LỆCH.
  * Công thức bám đúng calc.js / calc2.js theo phiên bản công thức của hồ sơ (fv = 1 bản Excel 2026, fv = 2 bản đã sửa 06/11/2026).
  * Nhánh rẽ cố định của hồ sơ (chuẩn quả cân, đơn vị U chuẩn, dải nhiệt…) được chọn khi tạo file và ghi rõ ở cột "Diễn giải". */
 (function () {
   "use strict";
-  const ORANGE = "FFE8590C", SHEET = "Bảng tính", APP = "Số app", C0 = 6;   // cột F = giá trị đầu tiên
+  const SHEET = "Bảng tính", APP = "Số app", PIC = "Công thức";
+  const C0 = 5, NV = 12, DC = C0 + NV, LASTC = DC;          // E…P = giá trị điểm 1…12, Q = đối chiếu
+  const FONT = "Times New Roman";
+  const COL = { navy: "FF0B3D7A", blue: "FF1F5FAE", sec: "FFDCE6F2", line: "FFB7C3D0", grey: "FF6B7785", inF: "FFFFF1E6", inT: "FFC2410C", ok: "FF2B8A3E", okF: "FFE6F4EA", ko: "FFC92A2A", koF: "FFFDECEC", band: "FFF7F9FC" };
   const L = c => { let s = ""; while (c > 0) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = (c - m - 1) / 26; } return s; };
   const num = v => typeof v === "number" && isFinite(v);
+  const fill = c => ({ type: "pattern", pattern: "solid", fgColor: { argb: c } });
+  const thin = { style: "thin", color: { argb: COL.line } };
+  const box = { top: thin, left: thin, bottom: thin, right: thin };
+  const F_ = (o = {}) => Object.assign({ name: FONT, size: 11 }, o);
+  // định dạng số theo độ lớn: ~6 chữ số có nghĩa, số rất nhỏ dùng dạng mũ
+  function nfmt(a) {
+    const v = (Array.isArray(a) ? a : [a]).filter(num); if (!v.length) return null;
+    if (v.every(x => Number.isInteger(x) && Math.abs(x) < 1e7)) return "0";
+    const m = Math.max(...v.map(Math.abs)); if (m === 0) return "0";
+    if (m < 1e-4 || m >= 1e7) return "0.0000E+00";
+    const d = Math.min(9, Math.max(0, 5 - Math.floor(Math.log10(m))));
+    return d ? "0." + "0".repeat(d) : "0";
+  }
+  const METHOD = { PT: "ĐLVN 112:2002 – Transmitter áp suất", PS: "ĐLVN 133:2004 – Công tắc áp suất", PG: "ĐLVN 08:2011 – Áp kế (kiểm định)", DPG: "ĐLVN 76:2001 – Áp kế chênh áp",
+    TS: "DVK.LAB.TM.13 – Công tắc nhiệt độ", TT: "DVK.LAB.TM.12 (ĐLVN 188) – Transmitter nhiệt độ", TG: "ĐLVN 138:2004 – Nhiệt kế đồng hồ", RTD: "ĐLVN 125:2003 – Nhiệt kế điện trở", TC: "ĐLVN 161:2005 – Cặp nhiệt điện" };
 
   function Book(ExcelJS, meta) {
     const wb = new ExcelJS.Workbook();
     wb.creator = "LAB PVGAS Services"; wb.created = new Date();
     wb.calcProperties = Object.assign(wb.calcProperties || {}, { fullCalcOnLoad: true });
-    const ws = wb.addWorksheet(SHEET, { views: [{ state: "frozen", ySplit: 7 }], pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 } }), ap = wb.addWorksheet(APP);
-    ws.columns = [{ width: 13 }, { width: 46 }, { width: 62 }, { width: 9 }, { width: 11 }].concat(Array.from({ length: 12 }, () => ({ width: 16 })));
-    ap.columns = [{ width: 13 }, { width: 46 }, { width: 10 }, { width: 9 }, { width: 6 }].concat(Array.from({ length: 12 }, () => ({ width: 16 })));
+    const HDR = 15;                                          // dòng tiêu đề bảng
+    const ws = wb.addWorksheet(SHEET, { properties: { tabColor: { argb: COL.navy } }, views: [{ state: "frozen", ySplit: HDR, showGridLines: false }],
+      pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.25, footer: 0.25 } },
+      headerFooter: { oddFooter: `&L&"${FONT}"&8LAB PVGAS – Bảng tính ĐKĐBĐ ${String(meta.tag || "").replace(/&/g, "&&")}&R&"${FONT}"&8Trang &P/&N` } });
+    ws.pageSetup.printTitlesRow = `${HDR}:${HDR}`;
+    wb.addWorksheet(PIC, { properties: { tabColor: { argb: COL.blue } }, views: [{ showGridLines: false }],
+      pageSetup: { paperSize: 9, orientation: "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });   // điền ở addPics()
+    const ap = wb.addWorksheet(APP, { properties: { tabColor: { argb: "FF9AA5B1" } }, views: [{ state: "frozen", ySplit: HDR, showGridLines: false }] });
+    ws.columns = [{ width: 11 }, { width: 38 }, { width: 44 }, { width: 8 }].concat(Array.from({ length: NV }, () => ({ width: 13 })), [{ width: 10 }]);
+    ap.columns = ws.columns.map(c => ({ width: c.width }));
     const reg = {};
-    let row = 1, first = 0;
-    const title = `BẢNG TÍNH ĐỘ KHÔNG ĐẢM BẢO ĐO – ${meta.tag || ""} (${meta.type})`;
-    ws.getCell("A1").value = title; ws.getCell("A1").font = { bold: true, size: 14, color: { argb: "FF0B4F9C" } };
-    ws.getCell("A2").value = meta.info || ""; ws.getCell("A2").font = { size: 10 };
-    ws.getCell("A3").value = meta.ver || ""; ws.getCell("A3").font = { size: 10, italic: true };
-    ws.getCell("A4").value = "Ô chữ cam = số đã nhập / lấy từ GCN chuẩn. Mọi ô còn lại ở cột F trở đi là công thức Excel – sửa ô cam thì Excel tính lại toàn bộ.";
-    ws.getCell("A4").font = { size: 10, color: { argb: ORANGE } };
-    ws.getCell("A5").value = "Đối chiếu với phần mềm (sheet \"Số app\"): lệch tương đối lớn nhất ="; ws.getCell("A5").font = { size: 10, bold: true };
-    ap.getCell("A1").value = "Số phần mềm LAB PVGAS đã dùng cho hồ sơ này (cùng vị trí ô với sheet \"" + SHEET + "\")"; ap.getCell("A1").font = { bold: true };
-    row = 7;
-    ["Ký hiệu", "Diễn giải", "Công thức", "Đơn vị", "Lệch app", "Giá trị (cột F, G, H… = điểm 1, 2, 3…)"].forEach((t, i) => {
-      const c = ws.getCell(row, i + 1); c.value = t; c.font = { bold: true, color: { argb: "FFFFFFFF" } };
-      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B4F9C" } };
+    let row = HDR + 1, band = false;
+    const cell = (r, c) => ws.getCell(r, c);
+    const put1 = (r, c, v, o = {}) => { const x = cell(r, c); x.value = v; x.font = F_(o.font); if (o.fill) x.fill = fill(o.fill); if (o.al) x.alignment = o.al; if (o.border) x.border = o.border; if (o.fmt) x.numFmt = o.fmt; return x; };
+    // ---- khối đầu trang
+    ws.mergeCells(1, 1, 1, LASTC); put1(1, 1, "CÔNG TY DỊCH VỤ KHÍ – PHÒNG THỬ NGHIỆM HIỆU CHUẨN (LAB PVGAS)", { font: { size: 10, bold: true, color: { argb: COL.grey } } });
+    ws.mergeCells(2, 1, 2, LASTC); put1(2, 1, "BẢNG TÍNH ĐỘ KHÔNG ĐẢM BẢO ĐO", { font: { size: 18, bold: true, color: { argb: COL.navy } }, al: { horizontal: "center", vertical: "middle" } }); ws.getRow(2).height = 30;
+    ws.mergeCells(3, 1, 3, LASTC); put1(3, 1, `${meta.tag || ""}  ·  ${METHOD[meta.type] || meta.type}`, { font: { size: 12, bold: true, color: { argb: COL.blue } }, al: { horizontal: "center" } });
+    const info = [["Tag thiết bị", meta.tag], ["Loại thiết bị", METHOD[meta.type] || meta.type], ["Số GCN", meta.certNo], ["Ngày hiệu chuẩn", meta.date], ["Công trình", meta.site], ["Người lập", meta.owner],
+      ["Trạng thái hồ sơ", meta.status], ["Phiên bản công thức", meta.ver]];
+    info.forEach(([k, v], i) => {
+      const r = 5 + Math.floor(i / 2), c = i % 2 ? 9 : 1, cv = i % 2 ? 11 : 2, ce = i % 2 ? LASTC : 7;
+      if (i % 2) ws.mergeCells(r, 9, r, 10);
+      ws.mergeCells(r, cv, r, ce);
+      put1(r, c, k, { font: { bold: true, size: 10, color: { argb: COL.grey } }, fill: COL.band, border: box });
+      put1(r, cv, v || "—", { font: { size: 10.5 }, border: box, al: { vertical: "middle", wrapText: true } });
+      if (i % 2) cell(r, 10).border = box;
     });
-    row = 8; first = row;
+    ws.mergeCells(9, 2, 9, LASTC); put1(9, 1, "Chuẩn sử dụng", { font: { bold: true, size: 10, color: { argb: COL.grey } }, fill: COL.band, border: box });
+    put1(9, 2, (meta.stands || []).join(";   ") || "—", { font: { size: 10.5 }, border: box, al: { wrapText: true, vertical: "middle" } }); ws.getRow(9).height = 30;
+    // kết luận + đối chiếu (điền công thức ở done())
+    put1(11, 1, "Kết luận", { font: { bold: true, size: 10, color: { argb: COL.grey } }, fill: COL.band, border: box });
+    ws.mergeCells(11, 2, 11, 3);
+    put1(11, 9, "Đối chiếu Excel ↔ app", { font: { bold: true, size: 10, color: { argb: COL.grey } }, fill: COL.band, border: box }); ws.mergeCells(11, 9, 11, 10);
+    ws.mergeCells(11, 11, 11, 13); ws.mergeCells(11, 14, 11, LASTC);
+    ws.mergeCells(12, 1, 12, LASTC); ws.getRow(11).height = 24;
+    put1(12, 1, "Cách đọc: ô nền cam chữ cam = số đã nhập / lấy từ GCN chuẩn. Mọi ô còn lại từ cột E là công thức Excel – sửa ô cam thì toàn bảng tự tính lại. Cột Q so với số phần mềm (sheet \"Số app\"). Ảnh công thức như trên app ở sheet \"Công thức\".",
+      { font: { size: 9.5, italic: true, color: { argb: COL.grey } }, al: { wrapText: true, vertical: "top" } }); ws.getRow(12).height = 28;
+    ws.mergeCells(13, 1, 13, LASTC);
+    // ---- tiêu đề bảng
+    ["Ký hiệu", "Diễn giải", "Công thức", "Đơn vị"].concat(Array.from({ length: NV }, (_, i) => `[${i + 1}]`), ["Đối chiếu"]).forEach((t, i) => {
+      put1(HDR, i + 1, t, { font: { bold: true, size: 10, color: { argb: "FFFFFFFF" } }, fill: COL.navy, border: box, al: { horizontal: i > 2 ? "center" : "left", vertical: "middle" } });
+    });
+    ws.getRow(HDR).height = 22;
+    put1(14, C0, "Giá trị – [1], [2]… = điểm đo / lần đo / hệ số thứ 1, 2…", { font: { size: 9, italic: true, color: { argb: COL.grey } } });
+    ap.getCell("A1").value = "Số phần mềm LAB PVGAS đã dùng cho hồ sơ này – cùng vị trí ô với sheet \"" + SHEET + "\" (để đối chiếu, không cần sửa)"; ap.getCell("A1").font = F_({ bold: true, color: { argb: COL.navy } });
+    ["Ký hiệu", "Diễn giải", "", "Đơn vị"].concat(Array.from({ length: NV }, (_, i) => `[${i + 1}]`)).forEach((t, i) => { const c = ap.getCell(HDR, i + 1); c.value = t; c.font = F_({ bold: true, size: 10, color: { argb: "FFFFFFFF" } }); c.fill = fill("FF6B7785"); });
 
     const ent = id => { const e = reg[id]; if (!e) throw new Error("Chưa có ký hiệu " + id); return e; };
     const ref = (id, j) => { const e = ent(id); return `$${L(C0 + (e.n == null ? 0 : j))}$${e.r}`; };
     const rng = (id, a, b) => { const e = ent(id); const n = e.n == null ? 1 : e.n; a = a == null ? 0 : a; b = b == null ? n - 1 : b; return `$${L(C0 + a)}$${e.r}:$${L(C0 + b)}$${e.r}`; };
     // {id} ô đơn · {id[]} phần tử cùng cột · {id[3]} phần tử thứ 3 (từ 0) · {id:} cả dòng · {id:5} 5 ô đầu · {id:1-9} ô 1…9
-    const sub = (t, j) => t.replace(/\{(\w+)(?:\[(\d*)\]|:(\d*)(?:-(\d+))?)?\}/g, (m, id, idx, a, b, off, s) => {
+    const sub = (t, j) => t.replace(/\{(\w+)(?:\[(\d*)\]|:(\d*)(?:-(\d+))?)?\}/g, (m, id, idx, a, b) => {
       if (m.includes(":")) return b != null ? rng(id, +a, +b) : a ? rng(id, 0, +a - 1) : rng(id);
       if (idx === undefined) { const e = ent(id); if (e.n != null) throw new Error(id + " là dãy, cần chỉ số"); return ref(id); }
       return ref(id, idx === "" ? j : +idx);
     });
-    function put(id, desc, text, unit, vals, fml, app, isIn) {
+    function put(id, desc, text, unit, vals, fml, app, isIn, strong) {
       const vec = Array.isArray(vals) || Array.isArray(fml);
       const n = vec ? (fml ? fml.length : vals.length) : null;
+      if (n > NV) throw new Error("Quá " + NV + " cột: " + id);
       const r = row++;
       if (id) { if (reg[id]) throw new Error("Trùng ký hiệu " + id); reg[id] = { r, n }; }
-      ws.getCell(r, 1).value = id ? id.replace(/_/g, " ") : ""; ws.getCell(r, 1).font = { bold: true };
-      ws.getCell(r, 2).value = desc || ""; ws.getCell(r, 3).value = text || ""; ws.getCell(r, 4).value = unit || "";
-      [2, 3].forEach(c => { ws.getCell(r, c).alignment = { wrapText: true, vertical: "top" }; });
-      ws.getCell(r, 3).font = { color: { argb: "FF555555" }, size: 10 };
-      ap.getCell(r, 1).value = ws.getCell(r, 1).value; ap.getCell(r, 2).value = desc || ""; ap.getCell(r, 4).value = unit || "";
+      band = !band;
+      const bg = band ? null : COL.band;
+      const lab = id ? id.replace(/_/g, " ") : "";
+      put1(r, 1, lab, { font: { bold: true, size: 10.5, color: { argb: COL.navy } }, border: box, fill: bg, al: { vertical: "top" } });
+      put1(r, 2, desc || "", { font: { size: 10.5, bold: !!strong }, border: box, fill: bg, al: { wrapText: true, vertical: "top" } });
+      put1(r, 3, text || "", { font: { size: 10, color: { argb: "FF3D4752" } }, border: box, fill: bg, al: { wrapText: true, vertical: "top" } });
+      put1(r, 4, unit || "", { font: { size: 10 }, border: box, fill: bg, al: { horizontal: "center", vertical: "top" } });
+      ["A", "B", "D"].forEach((c, i) => { const s = ap.getCell(`${c}${r}`); s.value = [lab, desc || "", unit || ""][i]; s.font = F_({ size: 10 }); });
       const cnt = vec ? n : 1;
       const appA = app == null ? null : Array.isArray(app) ? app : [app];
-      for (let j = 0; j < cnt; j++) {
-        const c = ws.getCell(r, C0 + j);
+      const fmt = fml ? nfmt(appA || []) : null;
+      for (let j = 0; j < NV; j++) {
+        const c = cell(r, C0 + j); c.border = box; if (bg) c.fill = fill(bg);
+        if (j >= cnt) continue;
         if (fml) {
           const f = vec ? fml[j] : fml;
           const res = appA && appA[j] !== undefined ? appA[j] : undefined;
           c.value = res !== undefined && res !== null && (num(res) || typeof res === "string" || typeof res === "boolean") ? { formula: f, result: res } : { formula: f };
+          c.font = F_({ size: 10.5, bold: !!strong }); if (fmt) c.numFmt = fmt;
+          c.alignment = { horizontal: typeof (appA && appA[j]) === "string" ? "center" : "right" };
         } else {
           const v = vec ? vals[j] : vals;
           c.value = num(v) ? v : (v == null ? null : v);
-          if (isIn) c.font = { bold: true, color: { argb: ORANGE } };
+          c.font = isIn ? F_({ size: 10.5, bold: true, color: { argb: COL.inT } }) : F_({ size: 10.5 });
+          if (isIn) c.fill = fill(COL.inF);
+          c.alignment = { horizontal: "right" };
         }
         if (appA && appA[j] !== undefined && appA[j] !== null) {
-          const a = appA[j]; ap.getCell(r, C0 + j).value = num(a) || typeof a === "string" || typeof a === "boolean" ? a : null;
+          const a = appA[j], s = ap.getCell(r, C0 + j); s.value = num(a) || typeof a === "string" || typeof a === "boolean" ? a : null; s.font = F_({ size: 10 }); if (fmt) s.numFmt = fmt;
         }
       }
+      const dc = cell(r, DC); dc.border = box; if (bg) dc.fill = fill(bg);
       if (fml && appA) {
         const R1 = `${L(C0)}${r}:${L(C0 + cnt - 1)}${r}`, A1 = `'${APP}'!${R1}`;
         const isNum = appA.every(a => num(a));
         const f = isNum ? (cnt === 1 ? `ABS(${L(C0)}${r}-'${APP}'!${L(C0)}${r})/(ABS('${APP}'!${L(C0)}${r})+1E-6)` : `SUMPRODUCT(MAX(ABS(${R1}-${A1})/(ABS(${A1})+1E-6)))`)
           : (cnt === 1 ? `IF(${L(C0)}${r}='${APP}'!${L(C0)}${r},0,1)` : `SUMPRODUCT(--(${R1}<>${A1}))`);
-        ws.getCell(r, 5).value = { formula: f, result: 0 };
-        ws.getCell(r, 5).numFmt = "0.0E+00"; ws.getCell(r, 5).font = { color: { argb: "FF888888" }, size: 9 };
+        dc.value = { formula: f, result: 0 }; dc.numFmt = "0.0E+00"; dc.font = F_({ size: 8.5, color: { argb: "FF9AA5B1" } }); dc.alignment = { horizontal: "center" };
       }
+      ws.getRow(r).height = Math.max(16, 14 * Math.ceil(Math.max(String(desc || "").length / 40, String(text || "").length / 50, 1)));
       return id;
     }
     const x = {
-      hd(t) { const r = row++; const c = ws.getCell(r, 1); c.value = t; c.font = { bold: true, color: { argb: "FF0B4F9C" } };
-        for (let k = 1; k <= 5; k++) ws.getCell(r, k).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE7EEF8" } }; },
-      note(t) { const r = row++; ws.getCell(r, 2).value = t; ws.getCell(r, 2).font = { italic: true, size: 9, color: { argb: "FF666666" } }; ws.mergeCells(r, 2, r, 3); ws.getCell(r, 2).alignment = { wrapText: true }; },
-      // số nhập (ô cam)
-      inp: (id, desc, v, unit, text) => put(id, desc, text || "nhập", unit, v, null, null, true),
-      // hằng số / bảng tra (chữ đen, không phải số người dùng nhập)
+      hd(t) {
+        const r = row++; band = false; ws.mergeCells(r, 1, r, LASTC);
+        put1(r, 1, t, { font: { bold: true, size: 11.5, color: { argb: COL.navy } }, fill: COL.sec, border: { top: { style: "medium", color: { argb: COL.blue } }, bottom: thin, left: thin, right: thin }, al: { vertical: "middle" } });
+        ws.getRow(r).height = 21;
+        const a = ap.getCell(r, 1); a.value = t; a.font = F_({ bold: true, color: { argb: COL.navy } });
+      },
+      note(t) { const r = row++; ws.mergeCells(r, 2, r, LASTC); put1(r, 2, t, { font: { italic: true, size: 9.5, color: { argb: COL.grey } }, al: { wrapText: true } }); },
+      inp: (id, desc, v, unit, text) => put(id, desc, text || "số nhập", unit, v, null, null, true),
       cst: (id, desc, v, unit, text) => put(id, desc, text || "hằng số", unit, v, null, null, false),
-      f: (id, desc, text, tpl, app, unit) => put(id, desc, text, unit, null, sub(tpl), app),
-      v: (id, desc, text, tpl, n, app, unit) => put(id, desc, text, unit, null, Array.from({ length: n }, (_, j) => sub(typeof tpl === "function" ? tpl(j) : tpl, j)), app),
+      f: (id, desc, text, tpl, app, unit) => put(id, desc, text, unit, null, sub(tpl), app, false, /^(U|Umax|KQ|U_cb|U_in|k)$/.test(id)),
+      v: (id, desc, text, tpl, n, app, unit) => put(id, desc, text, unit, null, Array.from({ length: n }, (_, j) => sub(typeof tpl === "function" ? tpl(j) : tpl, j)), app, false, /^U$/.test(id)),
       has: id => !!reg[id],
-      done() {
-        const c = ws.getCell("C5"); c.value = { formula: `MAX($E$${first}:$E$${row})`, result: 0 }; c.numFmt = "0.0E+00"; c.font = { bold: true };
-        const d = ws.getCell("D5"); d.value = { formula: `IF(C5<1E-6,"KHỚP","LỆCH")`, result: "KHỚP" }; d.font = { bold: true, color: { argb: "FF2B8A3E" } };
+      done(pass) {
+        const end = row - 1;
+        const kq = reg.KQ ? `$${L(C0)}$${reg.KQ.r}` : null;
+        const b = cell(11, 2); b.value = kq ? { formula: kq, result: pass ? "ĐẠT" : "KHÔNG ĐẠT" } : "—";
+        b.font = F_({ bold: true, size: 13, color: { argb: pass ? COL.ok : COL.ko } }); b.fill = fill(pass ? COL.okF : COL.koF); b.border = box; b.alignment = { horizontal: "center", vertical: "middle" };
+        const d = cell(11, 11); d.value = { formula: `MAX($${L(DC)}$${HDR + 1}:$${L(DC)}$${end})`, result: 0 };
+        d.numFmt = '"lệch lớn nhất "0.0E+00'; d.font = F_({ size: 10, color: { argb: COL.grey } }); d.border = box; d.alignment = { horizontal: "center", vertical: "middle" };
+        const e = cell(11, 14); e.value = { formula: `IF(K11<1E-6,"✔ KHỚP","✘ LỆCH")`, result: "✔ KHỚP" };
+        e.font = F_({ bold: true, size: 12, color: { argb: COL.ok } }); e.fill = fill(COL.okF); e.border = box; e.alignment = { horizontal: "center", vertical: "middle" };
+        // tô đậm dòng kết luận
+        if (reg.KQ) { const c = cell(reg.KQ.r, C0); c.font = F_({ bold: true, size: 11, color: { argb: pass ? COL.ok : COL.ko } }); c.fill = fill(pass ? COL.okF : COL.koF); }
+        ws.getRow(end + 2).getCell(1).value = `Tạo bởi LAB PVGAS Services lúc ${new Date().toLocaleString("vi-VN")}. Excel tính lại toàn bộ khi mở file.`;
+        ws.getRow(end + 2).getCell(1).font = F_({ size: 9, italic: true, color: { argb: COL.grey } });
         return wb;
-      }
+      },
+      wb
     };
     return x;
+  }
+
+  /* ---------- Sheet "Công thức": ảnh từng bước như mục 5 trên app ---------- */
+  function addPics(wb, shots, meta) {
+    const ws = wb.getWorksheet(PIC);
+    if (!shots || !shots.length) { wb.removeWorksheet(ws.id); return; }
+    const W = Math.max(560, ...shots.filter(s => s.img).map(s => s.w));
+    ws.columns = [{ width: 2 }, { width: Math.ceil(W / 7) + 2 }];
+    ws.mergeCells(1, 2, 1, 2);
+    const t = ws.getCell("B1"); t.value = `CÔNG THỨC VÀ THAY SỐ – ${meta.tag || ""} (${meta.type})`; t.font = F_({ size: 14, bold: true, color: { argb: COL.navy } }); ws.getRow(1).height = 24;
+    const s = ws.getCell("B2"); s.value = "Chụp đúng bảng \"5. Kết quả đo & ĐKĐBĐ – Bảng tính chi tiết\" trên app. Số màu cam = số đã nhập / lấy từ chuẩn; số đậm = kết quả. Kiểm tra bằng công thức Excel ở sheet \"Bảng tính\".";
+    s.font = F_({ size: 9.5, italic: true, color: { argb: COL.grey } }); s.alignment = { wrapText: true }; ws.getRow(2).height = 26;
+    let r = 4; const RH = 8, RPX = RH * 96 / 72;
+    shots.forEach(sh => {
+      if (!sh.img) {
+        const c = ws.getCell(r, 2); c.value = sh.text; c.font = F_({ bold: true, size: 11.5, color: { argb: COL.navy } }); c.fill = fill(COL.sec);
+        c.border = { top: { style: "medium", color: { argb: COL.blue } } }; ws.getRow(r).height = 21; r += 1; return;
+      }
+      const id = wb.addImage({ base64: sh.img, extension: "png" });
+      const k = Math.ceil((sh.h + 6) / RPX);
+      for (let i = 0; i < k; i++) ws.getRow(r + i).height = RH;
+      ws.addImage(id, { tl: { col: 1, row: r - 1 + 0.1 }, ext: { width: sh.w, height: sh.h }, editAs: "oneCell" });
+      r += k;
+    });
+  }
+
+  /* chụp các bước của bảng QC (LabQC.html) thành PNG: SVG foreignObject + MathML, nền trắng, chữ tối (không phụ thuộc giao diện tối) */
+  let CSS = null;
+  async function cssText() {
+    if (CSS) return CSS;
+    let out = "";
+    for (const sh of Array.from(document.styleSheets)) {
+      let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+      for (const ru of Array.from(rules || [])) { if (ru.type === 5 || ru.type === 3) continue; out += ru.cssText + "\n"; }
+    }
+    try {
+      const b = await (await fetch("vendor/Temml.woff2")).arrayBuffer(); let s = ""; const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+      out = `@font-face{font-family:'Temml';src:url(data:font/woff2;base64,${btoa(s)}) format('woff2')}\n` + out;
+    } catch (e) { }
+    out += `.qcw{background:#fff!important;color:#1d2733!important;--brand:#0b4f9c;--result:#fff;margin:0!important;border-radius:0!important;font-family:Arial,Helvetica,sans-serif}
+      .qcw .fm{overflow:visible!important}.qcw .qs{margin:0!important}.qcw .ql{opacity:1!important;color:#5b6673}`;
+    return (CSS = out);
+  }
+  async function snapEl(el, css) {
+    const rc = el.getBoundingClientRect(), W = Math.ceil(Math.max(rc.width, el.scrollWidth)) + 12, H = Math.ceil(rc.height) + 8;
+    const wrap = document.createElement("div"); wrap.className = "qcw"; wrap.setAttribute("style", `width:${W}px;padding:4px 6px;box-sizing:border-box`);
+    const st = document.createElement("style"); st.textContent = css; wrap.appendChild(st); wrap.appendChild(el.cloneNode(true));
+    const xml = new XMLSerializer().serializeToString(wrap);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject x="0" y="0" width="${W}" height="${H}">${xml}</foreignObject></svg>`;
+    const img = new Image(); img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    await img.decode();
+    const cv = document.createElement("canvas"), S = 2; cv.width = W * S; cv.height = H * S;
+    const g = cv.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, cv.width, cv.height); g.scale(S, S); g.drawImage(img, 0, 0);
+    return { img: cv.toDataURL("image/png").split(",")[1], w: W, h: H };
+  }
+  async function snapPanel(type, r, unit) {
+    if (!window.LabQC) return [];
+    const host = document.createElement("div");
+    host.setAttribute("style", "position:fixed;left:-20000px;top:0;width:max-content;max-width:none;background:#fff;color:#1d2733");
+    host.innerHTML = window.LabQC.html(type, r, unit); document.body.appendChild(host);
+    const css = await cssText(), out = [];
+    try {
+      const w = host.querySelector(".qcw"); if (!w) return [];
+      w.querySelectorAll(".fm").forEach(f => { f.style.overflow = "visible"; });
+      for (const el of Array.from(w.children)) {
+        if (el.classList.contains("qleg")) continue;
+        if (el.classList.contains("qh")) { out.push({ text: el.textContent }); continue; }
+        try { out.push(await snapEl(el, css)); } catch (e) { out.push({ text: "(không chụp được bước này: " + (el.textContent || "").slice(0, 80) + ")" }); }
+      }
+    } finally { host.remove(); }
+    return out;
   }
 
   /* ---------- khối dùng chung ---------- */
@@ -618,14 +761,18 @@
 
   const F = { PT, PS, PG, TS, TT, TG, RTD, TC, DPG };
   /* meta: { tag, type, info, ver } – r: kết quả calc (có r.inp) */
-  function build(ExcelJS, type, r, unit, meta) {
+  /* meta: { tag, type, certNo, date, site, owner, status, ver, stands[] } – r: kết quả calc (có r.inp); shots: kết quả snapPanel() */
+  function build(ExcelJS, type, r, unit, meta, shots) {
     if (!F[type]) throw new Error("Chưa có mẫu Excel cho loại " + type);
     if (!r || !r.inp) throw new Error("Hồ sơ chưa tính được");
-    const x = Book(ExcelJS, Object.assign({ type }, meta || {}));
+    meta = Object.assign({ type }, meta || {});
+    const x = Book(ExcelJS, meta);
     F[type](x, r, unit || "");
-    return x.done();
+    const wb = x.done(!!r.pass);
+    addPics(wb, shots, meta);
+    return wb;
   }
-  const api = { build };
+  const api = { build, snapPanel };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof window !== "undefined") window.LabQX = api;
 })();

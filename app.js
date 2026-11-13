@@ -2233,9 +2233,13 @@
       await needExcel(); if (!window.LabQX) await loadScript("qcxlsx.js");
       const c = compute(r); if (!c.res) throw new Error((c.errors || [])[0] || "hồ sơ chưa tính được");
       const st = ["stand1", "stand2", "stand3"].map(k => standById(r.h[k])).filter(Boolean).map(s => `${s.key}${s.serial ? " S/N " + s.serial : ""}${s.due ? " (hạn " + dmy(s.due) + ")" : ""}`);
-      const meta = { tag: r.h.tag, info: [`Số GCN: ${r.certNo || "—"}`, `Ngày HC: ${dmy(r.h.calDate) || "—"}`, `Công trình: ${repSite(r) || "—"}`, `Người lập: ${ownerName(r.owner) || "—"}`, `Trạng thái: ${STAGE[stage(r)][1]}`, st.length ? `Chuẩn: ${st.join("; ")}` : ""].filter(Boolean).join(" · "),
-        ver: c.res.fv === 2 ? "Phiên bản công thức: bản đã sửa 06/11/2026 (fv = 2) – ν_eff Welch–Satterthwaite, quy tắc |sai số| + U ≤ MPE" : "Phiên bản công thức: bản Excel 2026 (fv = 1) – giữ đúng cách tính của file gốc" };
-      const wb = window.LabQX.build(window.ExcelJS, r.type, c.res, r.type === "PS" ? r.h.unitPset : r.h.unit, meta);
+      const unit = r.type === "PS" ? r.h.unitPset : r.h.unit;
+      const meta = { tag: r.h.tag, certNo: r.certNo || "—", date: dmy(r.h.calDate) || "—", site: repSite(r) || "—", owner: ownerName(r.owner) || "—", status: STAGE[stage(r)][1], stands: st,
+        ver: c.res.fv === 2 ? "Bản đã sửa 06/11/2026 (fv = 2): ν_eff Welch–Satterthwaite, quy tắc |sai số| + U ≤ MPE" : "Bản Excel 2026 (fv = 1): giữ đúng cách tính của file gốc" };
+      btn.textContent = "Đang chụp công thức…";
+      let shots = []; try { shots = await window.LabQX.snapPanel(r.type, c.res, unit); } catch (e) { shots = []; }
+      btn.textContent = "Đang tạo file…";
+      const wb = window.LabQX.build(window.ExcelJS, r.type, c.res, unit, meta, shots);
       await saveFile(await xBlob(wb), `BangTinh_${String(r.h.tag || r.type).replace(/[^\w.-]+/g, "_")}_${r.type}.xlsx`);
     } catch (e) { toast("Không tạo được Excel: " + e.message); }
     btn.disabled = false; btn.textContent = old;
