@@ -350,8 +350,16 @@ details.phcard>summary h2{margin:0}details.phcard[open]>summary h2{margin-bottom
 .fx{margin:6px 0;padding:8px 10px;border-left:3px solid var(--brand,#0193de);background:var(--card2,rgba(127,127,127,.08));border-radius:6px}
 .fm{overflow-x:auto;overflow-y:hidden;font-size:17px;padding:4px 0;white-space:nowrap}.fm math{margin:0}
 .fr{font-size:12px;opacity:.7;margin-top:2px}
+/* v74 bảng tính QC: công thức chuẩn + thay số (qcwork.js) */
+details.qcd{margin-top:10px}details.qcd>summary{cursor:pointer;font-weight:600;color:var(--brand,#0193de);padding:4px 0}
+.qcw{background:var(--result);border-radius:10px;padding:8px 10px;margin-top:6px}
+.qcw .qleg{font-size:12px;opacity:.85;margin-bottom:4px}.qcw .qin{color:#e8590c}
+.qcw .qh{font-weight:700;font-size:13.5px;margin:12px 0 2px;color:var(--brand,#0193de)}
+.qcw .qs{border-left:3px solid var(--brand,#0193de);padding:3px 0 3px 8px;margin:6px 0}
+.qcw .ql{font-size:12.5px;opacity:.8}.qcw .ql:empty{display:none}
+.qcw .fm{overflow-x:auto;overflow-y:hidden;font-size:16px;padding:2px 0;white-space:nowrap}.qcw .fm math{margin:0}
+.qcw .qd.ok{border-left-color:#2f9e44}.qcw .qd.ko{border-left-color:#e03131}.qcw .qv{font-weight:700}.qcw .qd.ok .qv{color:#2f9e44}.qcw .qd.ko .qv{color:#e03131}
 .fdiff{margin:10px 0 6px;padding:8px 10px;border:1px dashed #c9a227;border-radius:6px;font-size:13.5px}.fdiff ul{margin:4px 0 0 18px;padding:0}
-.locprint>div{background:var(--result);border:1px solid var(--line,#d9d9d9);border-radius:10px;padding:8px 10px;line-height:1.5;font-size:14px}
 .locold{flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap;background:#fff4e0;border-radius:10px;padding:6px 10px}
 .locold span,.locold b{color:#5a3600}
 label.f{position:relative}
@@ -472,6 +480,7 @@ nav.tabs .lbl{display:none}
 <script src="pid.js"></script>
 <script src="vendor/temml.min.js"></script>
 <script src="formulas.js"></script>
+<script src="qcwork.js"></script>
 <script src="refs.js"></script>
 <script src="app.js"></script>
 </body>

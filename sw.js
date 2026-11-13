@@ -1,5 +1,5 @@
-const CACHE = "lab-pvgas-v73";
-const FILES = ["./", "./index.html", "./app.js", "./auth.js", "./photos.js", "./pid.js", "./formulas.js", "./cloud.js", "./vendor/supabase.min.js", "./refs.js", "./calc.js", "./calc2.js", "./data.js", "./devices.js", "./docs.js", "./docs2.js", "./mocan.js", "./zip.js", "./vendor/exceljs.min.js", "./manifest.webmanifest",
+const CACHE = "lab-pvgas-v74";
+const FILES = ["./", "./index.html", "./app.js", "./auth.js", "./photos.js", "./pid.js", "./formulas.js", "./qcwork.js", "./cloud.js", "./vendor/supabase.min.js", "./refs.js", "./calc.js", "./calc2.js", "./data.js", "./devices.js", "./docs.js", "./docs2.js", "./mocan.js", "./zip.js", "./vendor/exceljs.min.js", "./manifest.webmanifest",
   "./vendor/html2canvas.min.js", "./vendor/jspdf.umd.min.js", "./vendor/temml.min.js", "./vendor/temml-local.css", "./vendor/Temml.woff2", "./assets/logo.jpg", "./assets/logo2026.jpg", "./assets/vilas.jpg", "./assets/wm.jpg", "./assets/wm_pg.jpg", "./icon-180.png", "./icon-192.png", "./icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))); self.clients.claim(); });
