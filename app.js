@@ -2196,7 +2196,50 @@
       <div class="card"><h2>Theo người nhập</h2>${tbl(["Người nhập", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.owner || "—").map(line))}</div></div>
       <div class="card"><h2>Danh sách thiết bị <small>(${rows.length})</small></h2>${tbl(["Tag", "Loại", "Công trình", "Số CN", "Ngày HC", "Kết quả", "Người nhập", "Trạng thái"], rows.slice(0, 300).map(x => [x.tag, x.type, x.site, x.certNo, x.cal, x.result, x.owner, x.stat]))}${rows.length > 300 ? `<p class="hint">Hiện 300 dòng đầu; file Excel có đủ ${rows.length}.</p>` : ""}</div>` : `<div class="card"><p class="hint">Không có hồ sơ nào khớp bộ lọc.</p></div>`}`;
 
+    if (el.firstElementChild) el.firstElementChild.insertAdjacentHTML("afterend", rqCard());
     repCollapse();  }
+  /* v81 (NGOC 13/11/2026): cấp 3 tra 1 tag bất kỳ (chưa chuyển / đang chờ / đã duyệt) và mở bảng tính chi tiết đủ công thức như mục 5,
+   * kèm Excel công thức chạy thật (qcxlsx.js) để chứng minh với VILAS. */
+  const RQ = { q: "", id: "" };
+  function rqCard() {
+    return `<div class="card" id="rqcard"><h2>🔎 Bảng tính chi tiết theo Tag <small>(mọi trạng thái)</small></h2>
+      <label class="f"><span>Tag hoặc số chứng chỉ</span><input id="rqtag" value="${esc(RQ.q)}" placeholder="Gõ tag, ví dụ PT-1506A" autocomplete="off"></label>
+      <div id="rqout">${rqBody()}</div></div>`;
+  }
+  function rqBody() {
+    const q = RQ.q.trim().toLowerCase(); if (!q) return `<p class="hint">Gõ vài ký tự của tag để tìm trong mọi hồ sơ.</p>`;
+    const L = records.filter(r => !r.deleted && (String(r.h.tag || "").toLowerCase().includes(q) || String(r.certNo || "").toLowerCase().includes(q)))
+      .sort((a, z) => String(z.updated || "").localeCompare(String(a.updated || ""))).slice(0, 30);
+    if (!L.length) return `<p class="hint">Không tìm thấy hồ sơ nào.</p>`;
+    let h = L.map(r => `<div class="rec${r.id === RQ.id ? " sel" : ""}"><div><b>${esc(r.h.tag)}</b> <span class="tag">${r.type}</span> ${stageTag(r)}<br>
+      <small class="mut">${esc(r.certNo || "—")} · ${esc(dmy(r.h.calDate))} · ${esc(ownerName(r.owner))} · ${esc(repSite(r))}</small></div>
+      <div class="ra"><button class="btn sm${r.id === RQ.id ? " pri" : ""}" data-rq="${r.id}">Xem công thức</button></div></div>`).join("");
+    const r = RQ.id && records.find(x => x.id === RQ.id);
+    if (r) {
+      let c = null; try { c = compute(r); } catch (e) { }
+      const res = c && c.res;
+      h += `<div class="rqd"><h3>${esc(r.h.tag)} – ${r.type} ${res ? `<span class="${res.pass ? "ok" : "bad"}">${res.pass ? "Đạt" : "Không đạt"}</span>` : ""}</h3>`
+        + (res ? (window.LabQC ? window.LabQC.html(r.type, res, r.type === "PS" ? r.h.unitPset : r.h.unit) : "")
+          + `<div class="btns"><button class="btn pri" data-rqx="${r.id}">⬇ Excel bảng tính (công thức chạy thật)</button></div>`
+          : `<p class="bad">Chưa tính được: ${esc((c && c.errors[0]) || "thiếu số liệu")}</p>`) + `</div>`;
+    }
+    return h;
+  }
+  // v82: Excel bảng tính chạy thật cho 1 hồ sơ (qcxlsx.js) – số nhập ô cam, mọi bước là công thức Excel, đối chiếu sheet "Số app"
+  async function rqExcel(btn) {
+    const r = records.find(x => x.id === btn.dataset.rqx); if (!r) return;
+    const old = btn.textContent; btn.disabled = true; btn.textContent = "Đang tạo file…";
+    try {
+      await needExcel(); if (!window.LabQX) await loadScript("qcxlsx.js");
+      const c = compute(r); if (!c.res) throw new Error((c.errors || [])[0] || "hồ sơ chưa tính được");
+      const st = ["stand1", "stand2", "stand3"].map(k => standById(r.h[k])).filter(Boolean).map(s => `${s.key}${s.serial ? " S/N " + s.serial : ""}${s.due ? " (hạn " + dmy(s.due) + ")" : ""}`);
+      const meta = { tag: r.h.tag, info: [`Số GCN: ${r.certNo || "—"}`, `Ngày HC: ${dmy(r.h.calDate) || "—"}`, `Công trình: ${repSite(r) || "—"}`, `Người lập: ${ownerName(r.owner) || "—"}`, `Trạng thái: ${STAGE[stage(r)][1]}`, st.length ? `Chuẩn: ${st.join("; ")}` : ""].filter(Boolean).join(" · "),
+        ver: c.res.fv === 2 ? "Phiên bản công thức: bản đã sửa 06/11/2026 (fv = 2) – ν_eff Welch–Satterthwaite, quy tắc |sai số| + U ≤ MPE" : "Phiên bản công thức: bản Excel 2026 (fv = 1) – giữ đúng cách tính của file gốc" };
+      const wb = window.LabQX.build(window.ExcelJS, r.type, c.res, r.type === "PS" ? r.h.unitPset : r.h.unit, meta);
+      await saveFile(await xBlob(wb), `BangTinh_${String(r.h.tag || r.type).replace(/[^\w.-]+/g, "_")}_${r.type}.xlsx`);
+    } catch (e) { toast("Không tạo được Excel: " + e.message); }
+    btn.disabled = false; btn.textContent = old;
+  }
   // Thu gọn / mở từng mục báo cáo (nhớ trạng thái trên máy)
   const colSet = new Set(store.get("repCol", []));
   const colKey = c => { const h = c.querySelector(":scope > h2"); return h ? h.textContent.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim().slice(0, 48) : ""; };
@@ -2408,6 +2451,8 @@
     const pcol = e.target.closest("[data-pcol]"); if (pcol) { REP.plan.col = pcol.dataset.pcol; renderReport(); return; }
     const cb = e.target.closest("[data-rcol]"); if (cb) { colSet.clear(); if (cb.dataset.rcol === "none") $$("#v-report .card").forEach(c => { if (!c.dataset.top && c.querySelector(":scope > h2")) colSet.add(colKey(c)); }); store.set("repCol", [...colSet]); renderReport(); return; }
     const colh = e.target.closest("#v-report .colh"); if (colh) { const c = colh.parentElement, k = colKey(c); if (colSet.has(k)) colSet.delete(k); else colSet.add(k); c.classList.toggle("rcol", colSet.has(k)); store.set("repCol", [...colSet]); return; }
+    const rq = e.target.closest("[data-rq]"); if (rq) { RQ.id = RQ.id === rq.dataset.rq ? "" : rq.dataset.rq; $("#rqout").innerHTML = rqBody(); return; }
+    const rqx = e.target.closest("[data-rqx]"); if (rqx) { rqExcel(rqx); return; }
     const b = e.target.closest("[data-rp]"); if (!b) return; const out = $("#repout"), say = h => { out.innerHTML = h; };
     const rows = repList().map(repRow), done = rows.filter(x => x.stat === "Đã duyệt final"), what = b.dataset.rp, stamp = `${REP.site ? REP.site.replace(/[^\w]+/g, "_").slice(0, 24) + "_" : ""}${todayISO()}`;
     if (what === "plan") {
@@ -2473,6 +2518,7 @@
     $("#v-entry").addEventListener("click", e => { const im = e.target.closest("img[data-phview]"); if (im) { const w = window.open(); if (w) w.document.write(`<title>Ảnh</title><img src="${im.src}" style="max-width:100%">`); } });
     $("#v-records").addEventListener("click", onRecordsClick);
     $("#v-report").addEventListener("click", onReportClick); $("#v-report").addEventListener("change", onReportChange);
+    $("#v-report").addEventListener("input", e => { if (e.target.id !== "rqtag") return; RQ.q = e.target.value; RQ.id = ""; clearTimeout(RQ.t); RQ.t = setTimeout(() => { const o = $("#rqout"); if (o) o.innerHTML = rqBody(); }, 200); });
     $("#v-devices").addEventListener("click", onDevicesClick);
     if (PID) PID.init().then(st => { if (st && curView === "devices") renderDevices(); });
     // Gợi ý Tag (như Excel): bàn phím ↑ ↓ Enter Esc, chuột / chạm chọn; rời ô thì ẩn
