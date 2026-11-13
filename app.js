@@ -1376,11 +1376,11 @@
     const stHtml = st === "done" ? `<span class="stp ok">✓ Đã duyệt final</span><span>${f ? `bởi <b>${esc(fullName(f.by))}</b> · ${when(f.at)}` : `bởi <b>${esc(a.by)}</b> · ${when(a.at)}`} · được in / tải</span>`
       : st === "final" ? `<span class="stp wait">⏳ Chờ duyệt final</span><span>Kiểm soát <b>${esc(fullName(a.by))}</b> đã duyệt ${when(a.at)} → chờ <b>${esc(rec.finalTo ? rec.finalTo.name : "người duyệt final")}</b> duyệt final</span>`
       : st === "review" ? `<span class="stp wait">⏳ Chờ kiểm soát</span><span>${esc(fullName(sb.by))} chuyển ${when(sb.at)} → <b>${esc(sb.to ? sb.to.name : "người kiểm soát")}</b></span>`
-      : `<span class="stp no">Chưa chuyển duyệt</span><span>Chọn Người kiểm soát ở trên rồi bấm Chuyển duyệt. Chỉ in / tải PDF sau khi duyệt final.</span>`;
+      : `<span class="stp no">Chưa chuyển duyệt</span><span>Chọn Người kiểm soát ở trên rồi bấm Chuyển duyệt. GCN chỉ in / tải sau khi duyệt final.</span>`;
     const ret = rec.returned && st === "draft" ? `<div class="hint bad">↩ ${esc(fullName(rec.returned.by))} trả lại ${when(rec.returned.at)}${rec.returned.note ? ": " + esc(rec.returned.note) : ""}</div>` : "";
     const mine = m && rec.owner && rec.owner.id === m.id;
     let rv = "";
-    if (st === "draft" && m && (mine || !rec.owner || m.role >= 3)) rv = `<div class="arow"><button class="btn pri" data-act="submit">➜ Chuyển duyệt${rec.sig.controller ? " cho " + esc(rec.sig.controller) : ""}</button></div>`;
+    if (st === "draft" && m && (mine || !rec.owner || m.role >= 3)) rv = `<div class="arow"><button class="btn pri" data-act="submit">➜ Chuyển duyệt</button></div>`;
     if (st === "review" && m && m.role >= 2 && (!sb.to || sb.to.id === m.id || m.role >= 3) && !(mine && m.role < 3)) {
       const fwd = reviewers(m.id).filter(p => !rec.owner || p.id !== rec.owner.id);
       rv = `<div class="wf">${m.role >= 3 ? "" : `<label class="f"><span>Người duyệt final</span>${personSel("wf_final", finals(), (rec.finalTo || {}).id || store.get("lastFinal", ""), "— Chọn người duyệt final —")}</label>`}
