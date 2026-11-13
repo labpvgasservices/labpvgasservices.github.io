@@ -188,6 +188,16 @@
     };
   }
 
+  /* v75 (NGOC 13/11/2026) "habit choice": nhớ Người kiểm soát mỗi người dùng chọn lần trước (theo tài khoản, trên máy này),
+   * tự điền cho hồ sơ mới người đó tạo; vẫn đổi được. Chỉ điền khi người đó còn trong danh sách cấp 2 / 3. */
+  function rememberCtl(v) { const m = A.me(); if (!m || !v) return; const o = store.get("lastCtl", {}) || {}; if (o[m.id] === v) return; o[m.id] = v; store.set("lastCtl", o); }
+  function freshRecord(type) {
+    const r = newRecord(type), m = A.me(); if (!m || r.sig.controller) return r;
+    const n = (store.get("lastCtl", {}) || {})[m.id];
+    if (n && (!people.length || reviewers(m.id).some(p => p.name === n))) r.sig.controller = n;
+    return r;
+  }
+
   /* ---------- helpers ---------- */
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("on"), 2200); }
   const num = v => (v === "" || v == null) ? NaN : Number(String(v).replace(",", "."));
@@ -678,9 +688,9 @@
   function openPackDevice(d) {
     if (unsavedRec() && !confirm(`Hồ sơ ${rec.h.tag} CHƯA LƯU.\nBấm OK để bỏ hồ sơ này và sang ${d.t}; bấm Hủy để quay lại lưu.`)) return;
     const o = rec;
-    rec = newRecord(d.T);
+    rec = freshRecord(d.T);
     Object.assign(rec.h, { location: o.h.location, cust: o.h.cust, locMode: o.h.locMode, calDate: o.h.calDate, issueDate: o.h.issueDate });
-    rec.sig.controller = (o.sig || {}).controller || ""; rec.certNo = autoCertNo();
+    rec.sig.controller = (o.sig || {}).controller || rec.sig.controller; rec.certNo = autoCertNo();
     applyDevice(d, { force: true }); window.scrollTo(0, 0);
   }
   function packNext() {
@@ -737,7 +747,7 @@
     if (d.T !== rec.type) {
       if (rec.saved && !opt.force) { toast(`${d.t} là ${d.T}, hồ sơ đang mở là ${rec.type} – tạo hồ sơ ${d.T} mới để dùng thiết bị này`); return; }
       const keep = { calDate: rec.h.calDate, issueDate: rec.h.issueDate };
-      rec = newRecord(d.T); Object.assign(rec.h, keep);
+      rec = freshRecord(d.T); Object.assign(rec.h, keep);
     }
     const h = rec.h, T = rec.type, last = devRecs(d)[0];
     const inCat = SEED.locations.some(x => x[0] === d.s);
@@ -853,7 +863,7 @@
     if (b.dataset.dvpid != null) { const d = DEVS[Number(b.dataset.dvpid)]; if (d && PID) PID.open(d.t, `${d.t} · ${siteName(d.s)}`, d.s); return; }
     if (b.dataset.dv == null) return;
     const d = DEVS[Number(b.dataset.dv)]; if (!d) return;
-    rec = newRecord(d.T); go("entry"); applyDevice(d);
+    rec = freshRecord(d.T); go("entry"); applyDevice(d);
   }
 
   /* ---------- render: entry ---------- */
@@ -1232,6 +1242,7 @@
     if (/^(tt|tg)\.(sr|sf)\.|^tc\.std\.|^rtd\.std\./.test(p) && rec.stdAuto) { rec.stdAuto = rec.stdAuto.filter(x => x !== p); e.target.classList.remove("auto"); }   // gõ tay → không tự điền đè nữa
     if (/^(tt|tg|tc)\.nom\./.test(p)) paintStd(fillStd());
     if (p.startsWith("h.stand")) { rememberStd(p, e.target.value); fillStd(); }
+    if (p === "sig.controller") rememberCtl(e.target.value);
     if (["PT", "PG", "TT", "TG", "DPG", "TC", "RTD"].includes(rec.type) && (p === "h.min" || p === "h.max") && rec.ptAuto) { genPoints(); renderEntry(); focusPath(p); }
     else if (p === "h.psType" && rec.type === "TS") { renderEntry(); focusPath(p); }
     else if (p === "h.unit" || p === "h.unitPset" || p === "h.description" || p === "h.calDate" || p === "h.dirQTG" || p === "h.location" || p === "h.cust" || p === "h.rangeId" || p === "h.locFree" || p.startsWith("h.stand") || ["h.min", "h.max", "h.acc", "h.pset", "h.tset", "h.tcType", "h.sens"].includes(p)) {
@@ -1306,7 +1317,7 @@
     if (b.dataset.type) {
       if (b.dataset.type === rec.type) return;
       const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.locMode === "free" ? rec.h.custFree : "", calDate: rec.h.calDate, issueDate: rec.h.issueDate };
-      rec = newRecord(b.dataset.type); Object.assign(rec.h, keep); rec.certNo = autoCertNo();
+      rec = freshRecord(b.dataset.type); Object.assign(rec.h, keep); rec.certNo = autoCertNo();
       renderEntry(); persistCurrent(); return;
     }
     const act = b.dataset.act;
@@ -1343,7 +1354,7 @@
     if (act === "rtdcopy") { rec.rtd.dut = rec.rtd.dut.map(a => a.map(() => a[0])); renderEntry(); toast("Đã chép lần 1 cho lần 2–5"); }
     if (act === "copy1") { rec.ps.set = rec.ps.set.map(() => rec.ps.set[0]); rec.ps.reset = rec.ps.reset.map(() => rec.ps.reset[0]); renderEntry(); toast("Đã chép lần 1 cho cả 5 lần"); }
     if (act === "save") saveRecord();
-    if (act === "new") { if (unsavedRec() && !confirm(`Hồ sơ ${rec.h.tag} CHƯA LƯU.\nBấm OK để bỏ và tạo hồ sơ mới; bấm Hủy để quay lại lưu.`)) return; const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.locMode === "free" ? rec.h.custFree : "" }; const t = rec.type; rec = newRecord(t); Object.assign(rec.h, keep); rec.certNo = autoCertNo(); renderEntry(); persistCurrent(); window.scrollTo(0, 0); }
+    if (act === "new") { if (unsavedRec() && !confirm(`Hồ sơ ${rec.h.tag} CHƯA LƯU.\nBấm OK để bỏ và tạo hồ sơ mới; bấm Hủy để quay lại lưu.`)) return; const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.locMode === "free" ? rec.h.custFree : "" }; const t = rec.type; rec = freshRecord(t); Object.assign(rec.h, keep); rec.certNo = autoCertNo(); renderEntry(); persistCurrent(); window.scrollTo(0, 0); }
     if (act === "preview") renderPreview("all");
     if (act === "viewqtg") renderPreview("qtg");
     if (act === "submit") submitReview();
@@ -1427,7 +1438,7 @@
     if (act === "forward") {
       const p = people.find(x => x.id === ($("#wf_fwd") || {}).value);
       if (!p) { toast("Chọn người kiểm soát để chuyển"); return; }
-      rec.submitted = { by: m.name, byId: m.id, at: now, to: { id: p.id, name: p.name } }; rec.sig.controller = p.name;
+      rec.submitted = { by: m.name, byId: m.id, at: now, to: { id: p.id, name: p.name } }; rec.sig.controller = p.name; rememberCtl(p.name);
       addViewer(rec, p.id); logAct(`Chuyển tiếp → ${p.name}`); wfSave(`Đã chuyển cho ${p.name}`); return;
     }
     if (act === "return") {
@@ -2489,7 +2500,7 @@
       }
     });
     A.start(m => {
-      if (rec.saved && !visible(rec)) rec = newRecord(rec.type || "PT");   // máy dùng chung: không mở tiếp hồ sơ của người khác
+      if (rec.saved && !visible(rec)) rec = freshRecord(rec.type || "PT");   // máy dùng chung: không mở tiếp hồ sơ của người khác
       if (!rec.saved) { rec.owner = { id: m.id, name: m.name }; rec.sig.inspector = m.name; }
       go("entry"); badge();
       if (A.cloud() && A.can("settings") && (bkAge() === null || bkAge() >= BK_DAYS)) setTimeout(() => toast("💾 Đến hạn sao lưu dữ liệu – vào Cài đặt › Sao lưu toàn bộ"), 2600);
