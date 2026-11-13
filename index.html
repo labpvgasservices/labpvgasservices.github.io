@@ -37,7 +37,9 @@ header.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1p
 header.top h1{margin:0;font:600 19px var(--f-head)}
 header.top small{color:var(--muted)}
 header.top .me{position:absolute;right:16px;top:calc(env(safe-area-inset-top,0px) + 10px);border:1px solid var(--line);background:var(--sunk);color:var(--ink);border-radius:999px;padding:5px 10px;font:500 12px var(--f-ui);cursor:pointer;max-width:45%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-header.top .me span{color:var(--muted);margin-left:4px}
+header.top .me span{color:var(--muted);margin-left:4px;flex:none}
+/* v81 (NGOC 13/11/2026): thẻ tên là hộp flex – phần tên tự cắt "…", chữ "Đăng xuất" luôn thấy, nội dung không bao giờ tràn ra phải màn hình */
+header.top .me{display:inline-flex;align-items:baseline;contain:paint}header.top .me .nm{font-weight:inherit;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #auth{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:flex-start;justify-content:center;padding:calc(env(safe-area-inset-top,0px) + 48px) 16px 16px;overflow:auto}
 #auth[hidden]{display:none}
 #auth .authbox{width:100%;max-width:380px;background:var(--card,var(--sunk));border:1px solid var(--line);border-radius:14px;padding:20px}
@@ -435,6 +437,19 @@ nav.tabs .lbl{display:none}
   .rgrid{grid-template-columns:repeat(3,minmax(0,1fr))}
   header.top small{display:inline-block;max-width:calc(100% - 420px);vertical-align:bottom}
 }
+
+/* ===== v81 – chống "lắc ngang" trên điện thoại (iPhone Safari/PWA, Android Chrome/Samsung Internet) =====
+   Nguyên nhân: chỉ cần 1 phần tử nhô ra ngoài mép phải (vd chữ "Đăng xuất" bị che trong thẻ tên) là Safari iOS coi trang rộng hơn
+   màn hình → thu nhỏ trang và cho kéo ngang. Chặn ở gốc + sửa từng nguồn tràn. */
+html{overflow-x:hidden}                                   /* trình duyệt cũ: chặn kéo ngang ở khung nhìn (không làm hỏng header sticky) */
+@supports (overflow:clip){html,body{overflow-x:clip}}      /* iOS 16+, Chrome/Samsung mới: cắt phần tràn mà không tạo khung cuộn */
+html,body{overscroll-behavior-x:none;max-width:100%}       /* tắt hiệu ứng nảy / vuốt ngang của cả trang */
+main,.wrap,.card,.grid>*,.seg>*,.chips>*{min-width:0}
+main img,main video,main canvas{max-width:100%;height:auto}
+math[display=block]{display:block;max-width:100%;overflow-x:auto;overflow-y:hidden}
+input[type=date],input[type=time],input[type=datetime-local],input[type=month]{display:block;max-width:100%}
+input::-webkit-date-and-time-value{text-align:left;min-width:0}
+@media (pointer:coarse){input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea{font-size:max(16px,1em)}}   /* <16px làm iPhone tự phóng to khi chạm ô nhập */
 </style>
 <link rel="stylesheet" href="vendor/temml-local.css">
 </head>
