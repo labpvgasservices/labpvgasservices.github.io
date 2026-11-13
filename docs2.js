@@ -286,7 +286,7 @@
       <tr><th>Tăng ${it("(Increasing)")}</th><th>Giảm ${it("(Decreasing)")}</th></tr></thead><tbody>
       ${res.rows.map((r, i) => `<tr><td>${p2(i + 1)}</td><td>${vn(r.x, sd)}</td><td>${vn(r.rise, rd)}</td><td>${vn(r.fall, rd)}</td><td></td></tr>`).join("")}</tbody></table>`;
     const kl = `<table class="pgkl"><tr><td><b>Kết luận ${it("(Conclusion)")}:</b></td><td>Đạt yêu cầu kỹ thuật đo lường ${it("(Pass)")}: ${cb(res.pass)}<br>Không đạt yêu cầu kỹ thuật đo lường ${it("(Fail)")}: ${cb(!res.pass)}</td></tr></table>`;
-    return `<section class="a4 qtg pgqtg">${wmImg}${draft(info)}${qHeader(st, "pg")}${qTitle(bbNo(rec, st), S0.qtgForm, true)}
+    return `<section class="a4 qtg pgqtg">${wmImg}${qHeader(st, "pg")}${qTitle(bbNo(rec, st), S0.qtgForm, true)}
       ${tbl}${redT}${data}${kl}
       <table class="qsig"><tr><td><b>Người soát lại</b><br>${it("(Checked by)")}</td><td><b>Người thực hiện</b><br>${it("(Verified by)")}</td></tr>
         <tr class="sp"><td></td><td></td></tr><tr><td><b>${esc(rec.sig.controller)}</b></td><td><b>${esc(rec.sig.inspector)}</b></td></tr></table></section>`;
@@ -321,7 +321,7 @@
     const data = `<table class="res qres tsq"><thead><tr><th rowspan="2">TT<br>${it("(N<sup>o</sup>)")}</th><th rowspan="2">Nhiệt độ đặt<br>${it("(Set point)")}<br>${deg}</th><th colspan="3">Giá trị trước hiệu chuẩn<br>${it("(As found data)")}<br>${deg}</th><th colspan="3">Giá trị sau hiệu chuẩn<br>${it("(As left data)")}<br>${deg}</th></tr>
       <tr><th>Nhiệt độ tác động<br>${it("(Set-temp)")}</th><th>Nhiệt độ trả lại<br>${it("(Reset-temp)")}</th><th>Sai số<br>${it("(Error)")}</th><th>Nhiệt độ tác động<br>${it("(Set-temp)")}</th><th>Nhiệt độ trả lại<br>${it("(Reset-temp)")}</th><th>Sai số<br>${it("(Error)")}</th></tr></thead><tbody>
       ${rec.ts.set.map((_, i) => `<tr><td>${p2(i + 1)}</td>${i === 0 ? `<td rowspan="5">${esc(h.tset)}</td>` : ""}${fill(asF, i)}${fill(!asF, i)}</tr>`).join("")}</tbody></table>`;
-    return `<section class="a4 qtg">${wmImg}${draft(info)}${qHeader(st, "")}${qTitle(bbNo(rec, st), S0.qtgForm)}${tbl}${data}${qtgSig(rec)}</section>`;
+    return `<section class="a4 qtg">${wmImg}${qHeader(st, "")}${qTitle(bbNo(rec, st), S0.qtgForm)}${tbl}${data}${qtgSig(rec)}</section>`;
   }
 
   /* ======================= QTG – TT ======================= */
@@ -355,7 +355,7 @@
     const body = rec.tt.sr.map((_, p) => [0, 1, 2].map(k => `<tr>${k === 0 ? `<td rowspan="3">${esc(rec.tt.nom[p])}</td>` : ""}<td>${ord[k]}</td><td>${vn(num(rec.tt.sr[p][k]), dS)}</td><td>${vn(num(rec.tt.sf[p][k]), dS)}</td><td>${vn(num(rec.tt.dr[p][k]), dD)}</td><td>${vn(num(rec.tt.df[p][k]), dD)}</td></tr>`).join("")).join("");
     const data = `<table class="res qres ttq"><thead><tr><th rowspan="2">Điểm HC<br>${it("(Calib Point)")}</th><th rowspan="2">Lần đọc<br>${it("(read)")}</th><th colspan="2">Nhiệt độ Chuẩn<br>${it("(Standard)")}/${deg}</th><th colspan="2">Thiết bị cần hiệu chuẩn ${it("(DUT)")}/ mA</th></tr>
       <tr><th>Chiều tăng<br>${it("(Increasing)")}</th><th>Chiều giảm<br>${it("(Decreasing)")}</th><th>Chiều tăng<br>${it("(Increasing)")}</th><th>Chiều giảm<br>${it("(Decreasing)")}</th></tr></thead><tbody>${body}</tbody></table>`;
-    return `<section class="a4 qtg ttqtg">${wmImg}${draft(info)}${qHeader(st, "")}${qTitle(bbNo(rec, st), S0.qtgForm)}${tbl}${data}${qtgSig(rec)}</section>`;
+    return `<section class="a4 qtg ttqtg">${wmImg}${qHeader(st, "")}${qTitle(bbNo(rec, st), S0.qtgForm)}${tbl}${data}${qtgSig(rec)}</section>`;
   }
 
   /* ======================= QTG – TG (ĐLVN 138:2004.PL3) ======================= */
@@ -388,7 +388,7 @@
     const body = rec.tg.sr.map((_, p) => [0, 1, 2].map(k => `<tr>${k === 0 ? `<td rowspan="3">${vn(num(rec.tg.nom[p]), 3)}</td>` : ""}<td>${ord[k]}</td><td>${vn(num(rec.tg.sr[p][k]), 3)}</td><td>${vn(num(rec.tg.sf[p][k]), 3)}</td><td>${vn(num(rec.tg.dr[p][k]), dd)}</td><td>${vn(num(rec.tg.df[p][k]), dd)}</td></tr>`).join("")).join("");
     const data = `<table class="res qres ttq"><thead><tr><th rowspan="2">Điểm HC<br>${it("(Calib Point)")}</th><th rowspan="2">Lần đọc<br>${it("(read)")}</th><th colspan="2">Nhiệt độ Chuẩn ${it("(Standard)")}/ ${deg}</th><th colspan="2">Phương tiện đo ${it("(Dut)")}/ ${deg}</th></tr>
       <tr><th>Chiều tăng<br>${it("(Increasing)")}</th><th>Chiều giảm<br>${it("(Decreasing)")}</th><th>Chiều tăng<br>${it("(Increasing)")}</th><th>Chiều giảm<br>${it("(Decreasing)")}</th></tr></thead><tbody>${body}</tbody></table>`;
-    return `<section class="a4 qtg ttqtg">${wmImg}${draft(info)}${qHeader(st, "")}${qTitle(bbNo(rec, st), S0.qtgForm)}${tbl}${data}${qtgSig(rec)}</section>`;
+    return `<section class="a4 qtg ttqtg">${wmImg}${qHeader(st, "")}${qTitle(bbNo(rec, st), S0.qtgForm)}${tbl}${data}${qtgSig(rec)}</section>`;
   }
 
   /* ======================= QTG – RTD ======================= */
@@ -421,7 +421,7 @@
     const rd = ["1<sup>st</sup>", "2<sup>nd</sup>", "3<sup>rd</sup>", "4<sup>th</sup>", "5<sup>th</sup>"];
     const data = `<table class="res qres rtq"><thead><tr><th rowspan="2">TT<br>${it("(N<sup>o</sup>)")}</th><th rowspan="2">Nhiệt độ Chuẩn<br>${it("(Standard Temp)")}<br>${deg}</th><th colspan="5">Kết quả đọc thiết bị hiệu chuẩn ${it("(Measured Value)")} (Ω)</th></tr>
       <tr>${rd.map(x => `<th>Lần đọc<br>${it(`(Read) ${x}`)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
-    return `<section class="a4 qtg">${wmImg}${draft(info)}${qHeader(st, "rtd")}${qTitle(bbNo(rec, st), S0.qtgForm)}${tbl}${data}${qtgSig(rec)}</section>`;
+    return `<section class="a4 qtg">${wmImg}${qHeader(st, "rtd")}${qTitle(bbNo(rec, st), S0.qtgForm)}${tbl}${data}${qtgSig(rec)}</section>`;
   }
 
   /* ======================= QTG – TC (ĐLVN 161:2005.PL2) ======================= */
@@ -456,7 +456,7 @@
     const rd = ["1<sup>st</sup>", "2<sup>nd</sup>", "3<sup>rd</sup>", "4<sup>th</sup>", "5<sup>th</sup>"];
     const data = `<table class="res qres rtq"><thead><tr><th rowspan="2">TT<br>${it("(N<sup>o</sup>)")}</th><th rowspan="2">Nhiệt độ Chuẩn<br>${it("(Standard Temp)")}<br>${deg}</th><th colspan="5">Kết quả đọc thiết bị hiệu chuẩn ${it("(Measured Voltage- mV)")}</th></tr>
       <tr>${rd.map(x => `<th>Lần đọc<br>${it(`(Read) ${x}`)}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`;
-    return `<section class="a4 qtg">${wmImg}${draft(info)}${qHeader(st, "rtd")}${qTitle(bbNo(rec, st), S0.qtgForm)}${tbl}${data}${qtgSig(rec)}</section>`;
+    return `<section class="a4 qtg">${wmImg}${qHeader(st, "rtd")}${qTitle(bbNo(rec, st), S0.qtgForm)}${tbl}${data}${qtgSig(rec)}</section>`;
   }
 
   /* ======================= QTG – DPG (DVK.LAB.TM22.PL03, chuyển từ bản scan BB.PG.26.0003) ======================= */
@@ -485,7 +485,7 @@
     const data = `<table class="res qres pgq"><thead><tr><th rowspan="2">TT<br>${it("(N<sup>o</sup>)")}</th><th rowspan="2">Áp suất chuẩn<br>${it("(Standard Pressure)")}<br>${u}</th><th colspan="2">Giá trị đọc trên thiết bị ${it("(Measured value)")}<br>${u}</th><th colspan="2">Sai số ${it("(Error)")}<br>${u}</th></tr>
       <tr><th>Tăng ${it("(Increasing)")}</th><th>Giảm ${it("(Decreasing)")}</th><th>Tăng ${it("(Increasing)")}</th><th>Giảm ${it("(Decreasing)")}</th></tr></thead><tbody>
       ${res.rows.map((r, i) => `<tr><td>${p2(i + 1)}</td><td>${vn(r.x, d.s)}</td><td>${vn(r.rise, d.r)}</td><td>${vn(r.fall, d.r)}</td><td>${vn(r.rise - r.x, d.r)}</td><td>${vn(r.fall - r.x, d.r)}</td></tr>`).join("")}</tbody></table>`;
-    return `<section class="a4 qtg pgqtg">${wmImg}${draft(info)}${qHeader(st, "rtd")}${qTitle(bbNo(rec, st), S0.qtgForm)}
+    return `<section class="a4 qtg pgqtg">${wmImg}${qHeader(st, "rtd")}${qTitle(bbNo(rec, st), S0.qtgForm)}
       ${tbl}${redT}${data}
       <table class="qsig"><tr><td><b>Người soát lại</b><br>${it("(Checked by)")}</td><td><b>Người thực hiện</b><br>${it("(Calibrated by)")}</td></tr>
         <tr class="sp"><td></td><td></td></tr><tr><td><b>${esc(rec.sig.controller)}</b></td><td><b>${esc(rec.sig.inspector)}</b></td></tr></table></section>`;
