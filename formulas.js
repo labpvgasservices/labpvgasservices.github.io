@@ -168,7 +168,7 @@
         ${f(R`u_c=\sqrt{\sum_i u_i^2},\qquad U=k\cdot u_c,\quad k=2\;(\approx95\%)`, "")}
         ${p("U của chuẩn: lấy U lớn nhất trên toàn dải của GCN chuẩn (quyết định NGOC 31/10/2026) – vì vậy U có thể lớn hơn file Excel cũ.")}
       </details>
-      <details class="fsec" id="f-v2"><summary><b>Bản công thức đã sửa 06/11/2026</b><br><small class="mut">Theo báo cáo rà soát Uncer 01/11/2026 (nhóm A + B). Hồ sơ tạo trước 06/11/2026 giữ bản Excel 2026; hồ sơ mới dùng bản này. Cấp 3 đổi được trong từng hồ sơ.</small></summary>
+      <details class="fsec" id="f-v2"><summary><b>Bản công thức đã sửa 06/11/2026</b></summary>
         ${h("Chung cho mọi bộ")}
         ${f(R`\nu_{\text{eff}}=\frac{u_c^4}{\sum_i u_i^4/\nu_i},\qquad k=t_{95,45}(\nu_{\text{eff}})`, "B2 – GUM G.4.1, bảng hệ số k của EA-4/02 M (ν = 8 → 2,37; 20 → 2,13; 50 → 2,05; ∞ → 2,00); thành phần loại B có ν = ∞")}
         ${f(R`U_{\text{in}}\ge U:\ \text{2 chữ số có nghĩa, làm tròn lên}`, "B3 – GUM 7.2.6, áp cho cả TS, TG, RTD, TC, DPG")}
@@ -184,7 +184,7 @@
         ${f(R`S=\min_i\left.\frac{dE}{dt}\right|_{t_i}`, "B7 – độ nhạy theo hàm chuẩn ITS-90 tại các điểm đo, lấy giá trị nhỏ nhất (an toàn)")}
         ${p("Chưa sửa vì cần nguồn: B7 nguồn của u<sub>ch7</sub> = 0,2 °C (Fluke 1620A) và u<sub>bk8</sub> = 0,1 % Max (BoA 2022) – giữ giá trị như file. A10 (PG) và A11 (DPG sửa tay) app vốn đã đúng. Nhóm C chờ bản gốc ĐLVN / DVK.LAB.TM.")}
       </details>
-      ${SECTIONS.map(s => `<details class="fsec" id="f-${s.id}"><summary><b>${s.t}</b><br><small class="mut">${s.src}</small></summary>${s.body}</details>`).join("")}
+      ${SECTIONS.map(s => `<details class="fsec" id="f-${s.id}"><summary><b>${s.t}</b></summary>${s.body}</details>`).join("")}
     </div>`;
   }
   window.LabFormulas = { render, SECTIONS };
