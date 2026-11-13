@@ -255,7 +255,7 @@
         <tr><th>Áp suất tác động<br>${it("(Set-Pressure)")}</th><th>Áp suất trả về<br>${it("(Reset-Pressure)")}</th></tr></thead><tbody>
         ${rec.ps.set.map((v, i) => { const sv = num(v), rv = num(rec.ps.reset[i]), ps = num(h.pset); return `<tr><td>${p2(i + 1)}</td>${i === 0 ? `<td rowspan="5">${esc(h.pset)}</td>` : ""}<td>${vn(sv, pd)}</td><td>${vn(rv, pd)}</td><td>${vn(ps - sv, pd)}</td><td>${vn(ps - rv, pd)}</td></tr>`; }).join("")}</tbody></table>`;
     }
-    return `<section class="a4 qtg">${wmImg}${draft(info)}${qtgHeader(st, PT)}
+    return `<section class="a4 qtg">${wmImg}${qtgHeader(st, PT)}
       <h1 class="q">BIÊN BẢN HIỆU CHUẨN</h1><div class="sub"><b><i>(Calibration Report)</i></b></div>
       <div class="no">Số ${it("(N<sup>o</sup>)")}: ${esc(bb)}</div>
       <div class="formcode">${it(esc(S.qtgForm))}</div>
