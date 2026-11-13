@@ -190,7 +190,7 @@
   function chip() {
     const h = document.querySelector("header.top"); if (!h) return;
     let c = h.querySelector(".me"); if (!c) { c = document.createElement("button"); c.className = "me"; c.onclick = () => logout("Đã đăng xuất"); h.appendChild(c); }
-    c.hidden = !me; if (me) c.innerHTML = `${esc(me.name)}${me.uid ? ` (${esc(me.uid)})` : ""} · cấp ${me.role} <span>Đăng xuất</span>`;
+    c.hidden = !me; if (me) c.innerHTML = `<b class="nm">${esc(me.name)}${me.uid ? ` (${esc(me.uid)})` : ""} · cấp ${me.role}</b><span>Đăng xuất</span>`;   // v81: tên cắt "…" bên trong, chữ Đăng xuất luôn hiện, không tràn ngang
     let st = h.querySelector("#cloudst"); if (!st && C && C.enabled) { st = document.createElement("span"); st.id = "cloudst"; st.className = "cloudst"; st.hidden = true; st.onclick = () => C.sync(); h.appendChild(st); }
     if (st) { if (me) C.paint(st); else st.hidden = true; }
   }
