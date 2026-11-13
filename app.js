@@ -2196,7 +2196,7 @@
       <div class="card"><h2>Theo người nhập</h2>${tbl(["Người nhập", "Tổng", "Final", "Đạt", "Không đạt"], tally(rows, x => x.owner || "—").map(line))}</div></div>
       <div class="card"><h2>Danh sách thiết bị <small>(${rows.length})</small></h2>${tbl(["Tag", "Loại", "Công trình", "Số CN", "Ngày HC", "Kết quả", "Người nhập", "Trạng thái"], rows.slice(0, 300).map(x => [x.tag, x.type, x.site, x.certNo, x.cal, x.result, x.owner, x.stat]))}${rows.length > 300 ? `<p class="hint">Hiện 300 dòng đầu; file Excel có đủ ${rows.length}.</p>` : ""}</div>` : `<div class="card"><p class="hint">Không có hồ sơ nào khớp bộ lọc.</p></div>`}`;
 
-    if (el.firstElementChild) el.firstElementChild.insertAdjacentHTML("afterend", rqCard());
+    el.insertAdjacentHTML("afterbegin", rqCard());   // v84 NGOC: tra bảng tính theo tag lên đầu, các mục khác thu gọn khi không dùng
     repCollapse();  }
   /* v81 (NGOC 13/11/2026): cấp 3 tra 1 tag bất kỳ (chưa chuyển / đang chờ / đã duyệt) và mở bảng tính chi tiết đủ công thức như mục 5,
    * kèm Excel công thức chạy thật (qcxlsx.js) để chứng minh với VILAS. */
@@ -2245,10 +2245,10 @@
     btn.disabled = false; btn.textContent = old;
   }
   // Thu gọn / mở từng mục báo cáo (nhớ trạng thái trên máy)
-  const colSet = new Set(store.get("repCol", []));
+  const openSet = new Set(store.get("repOpen", []));   // v84: mặc định thu gọn, chỉ mở mục người dùng đã mở
   const colKey = c => { const h = c.querySelector(":scope > h2"); return h ? h.textContent.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim().slice(0, 48) : ""; };
   function repCollapse() {
-    $$("#v-report .card").forEach((c, i) => { const h = c.querySelector(":scope > h2"); if (!h) return; if (i === 0) c.dataset.top = "1"; h.classList.add("colh"); if (!c.dataset.top && colSet.has(colKey(c))) c.classList.add("rcol"); });
+    $$("#v-report .card").forEach(c => { const h = c.querySelector(":scope > h2"); if (!h) return; if (c.querySelector("#rqtag")) { c.dataset.top = "1"; return; } h.classList.add("colh"); if (!openSet.has(colKey(c))) c.classList.add("rcol"); });
   }
   let exLoad = null;
   const loadScript = src => new Promise((ok, no) => { const s = document.createElement("script"); s.src = src; s.onload = ok; s.onerror = () => no(new Error("Không tải được " + src)); document.head.appendChild(s); });
@@ -2453,8 +2453,8 @@
   async function onReportClick(e) {
     const rv = e.target.closest("[data-rv]"); if (rv) { REP.view = rv.dataset.rv; renderReport(); return; }
     const pcol = e.target.closest("[data-pcol]"); if (pcol) { REP.plan.col = pcol.dataset.pcol; renderReport(); return; }
-    const cb = e.target.closest("[data-rcol]"); if (cb) { colSet.clear(); if (cb.dataset.rcol === "none") $$("#v-report .card").forEach(c => { if (!c.dataset.top && c.querySelector(":scope > h2")) colSet.add(colKey(c)); }); store.set("repCol", [...colSet]); renderReport(); return; }
-    const colh = e.target.closest("#v-report .colh"); if (colh) { const c = colh.parentElement, k = colKey(c); if (colSet.has(k)) colSet.delete(k); else colSet.add(k); c.classList.toggle("rcol", colSet.has(k)); store.set("repCol", [...colSet]); return; }
+    const cb = e.target.closest("[data-rcol]"); if (cb) { openSet.clear(); if (cb.dataset.rcol === "all") $$("#v-report .card").forEach(c => { if (!c.dataset.top && c.querySelector(":scope > h2")) openSet.add(colKey(c)); }); else { const t = $$("#v-report .card").find(c => !c.dataset.top && c.querySelector(".rtabs")); if (t) openSet.add(colKey(t)); } store.set("repOpen", [...openSet]); renderReport(); return; }
+    const colh = e.target.closest("#v-report .colh"); if (colh) { const c = colh.parentElement, k = colKey(c); if (openSet.has(k)) openSet.delete(k); else openSet.add(k); c.classList.toggle("rcol", !openSet.has(k)); store.set("repOpen", [...openSet]); return; }
     const rq = e.target.closest("[data-rq]"); if (rq) { RQ.id = RQ.id === rq.dataset.rq ? "" : rq.dataset.rq; $("#rqout").innerHTML = rqBody(); return; }
     const rqx = e.target.closest("[data-rqx]"); if (rqx) { rqExcel(rqx); return; }
     const b = e.target.closest("[data-rp]"); if (!b) return; const out = $("#repout"), say = h => { out.innerHTML = h; };
