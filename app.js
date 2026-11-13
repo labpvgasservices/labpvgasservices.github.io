@@ -109,12 +109,14 @@
   // Cấp 3 xem tất cả; cấp 1/2 chỉ xem hồ sơ mình nhập và hồ sơ được chuyển tới mình (NGOC 10/11/2026)
   const visible = r => { const m = A.me(); if (!m) return false; if (m.role >= 3) return true; return !!(r.owner && r.owner.id === m.id) || (r.viewers || []).includes(m.id); };
   // Hồ sơ đang chờ chính mình xử lý: bước kiểm soát (được chuyển tới mình) hoặc bước final (cấp 3, chuyển tới mình hoặc chưa ghi người)
-  const myTurn = r => { const m = A.me(); if (!m || m.role < 2 || !visible(r)) return false; const st = stage(r);
-    if (st === "review") return r.submitted.to ? r.submitted.to.id === m.id : !(r.owner && r.owner.id === m.id);
+  // v80 (NGOC 13/11/2026): cấp 1 cũng làm Người kiểm soát cho hồ sơ người khác chuyển tới mình (không tự duyệt hồ sơ của mình)
+  const sentToMe = r => { const m = A.me(); return !!(m && r && r.submitted && r.submitted.to && r.submitted.to.id === m.id); };
+  const myTurn = r => { const m = A.me(); if (!m || !visible(r)) return false; const st = stage(r);
+    if (st === "review") return r.submitted.to ? r.submitted.to.id === m.id : m.role >= 2 && !(r.owner && r.owner.id === m.id);
     if (st === "final") return m.role >= 3 && (!r.finalTo || r.finalTo.id === m.id);
     return false; };
   const isFail = r => !!(r.summary && r.summary.pass === false);
-  const reviewers = exclude => people.filter(p => p.role >= 2 && p.id !== exclude);
+  const reviewers = exclude => people.filter(p => p.role >= 1 && p.id !== exclude);   // v80: cấp 1, 2, 3 đều kiểm soát được (trừ người nhập)
   const finals = () => people.filter(p => p.role >= 3);
   function addViewer(r, id) { if (!id) return; r.viewers = Array.isArray(r.viewers) ? r.viewers : []; if (!r.viewers.includes(id)) r.viewers.push(id); }
   const personByName = n => { n = String(n || "").trim().toLowerCase(); return n ? people.find(p => String(p.name || "").trim().toLowerCase() === n) : null; };
@@ -123,7 +125,7 @@
     const w = (c.warns || []).filter(x => /^Không đạt/.test(x) && !/không cấp số/.test(x));
     return w.length ? w[0].replace(/^Không đạt:\s*/, "") : "Sai số + độ không đảm bảo đo vượt sai số cho phép (MPE)";
   }
-  // Ô Người kiểm soát: chọn từ danh sách cấp 2 / 3 (trừ người nhập hồ sơ)
+  // Ô Người kiểm soát: chọn từ danh sách cấp 1 / 2 / 3 (trừ người nhập hồ sơ) – v80
   function ctlField() {
     const list = reviewers(rec.owner ? rec.owner.id : (A.me() || {}).id), cur = rec.sig.controller || "";
     const opts = [["", list.length ? "— Chọn Người kiểm soát —" : "— Chưa tải được danh sách người dùng —"]].concat(list.map(p => [p.name, p.name]));
@@ -145,7 +147,7 @@
   const AGE = r => { const t = r.submitted ? r.submitted.at : r.approved ? r.approved.at : ""; return t ? (Date.now() - new Date(t)) / 864e5 : 0; };
   function pendBar(vis) {
     const m = A.me(), pb = document.getElementById("pendbar"); if (!pb) return;
-    if (!m || m.role < 2) { pb.hidden = true; } else {
+    if (!m || (m.role < 2 && !vis.some(myTurn))) { pb.hidden = true; } else {
       const mine = vis.filter(myTurn), old = mine.filter(r => AGE(r) > 3).length;
       const others = m.role >= 3 ? vis.filter(r => ["review", "final"].includes(stage(r)) && !myTurn(r)) : [], oldO = others.filter(r => AGE(r) > 3).length;
       if (!mine.length && !others.length) pb.hidden = true;
@@ -189,7 +191,7 @@
   }
 
   /* v75 (NGOC 13/11/2026) "habit choice": nhớ Người kiểm soát mỗi người dùng chọn lần trước (theo tài khoản, trên máy này),
-   * tự điền cho hồ sơ mới người đó tạo; vẫn đổi được. Chỉ điền khi người đó còn trong danh sách cấp 2 / 3. */
+   * tự điền cho hồ sơ mới người đó tạo; vẫn đổi được. Chỉ điền khi người đó còn trong danh sách người dùng. */
   const ctlMap = () => { const o = store.get("lastCtl", {}); return o && typeof o === "object" ? o : {}; };   // bản cũ lưu chuỗi id → bỏ
   const ctlOf = id => ctlMap()[id] || "";
   function rememberCtl(v) { const m = A.me(); if (!m || !v) return; const o = ctlMap(); if (o[m.id] === v) return; o[m.id] = v; store.set("lastCtl", o); }
@@ -995,7 +997,7 @@
   }
   /* ---------- người chịu trách nhiệm & ảnh bằng chứng ---------- */
   // Người tạo hồ sơ (tài khoản đăng nhập lúc tạo) chịu trách nhiệm số liệu; cấp 2 trở lên được sửa hồ sơ của người khác
-  const canEdit = () => !rec.owner || !A.me() || rec.owner.id === A.me().id || (A.can("approve") && visible(rec));
+  const canEdit = () => !rec.owner || !A.me() || rec.owner.id === A.me().id || (A.can("approve") && visible(rec)) || sentToMe(rec) || wfAs;
   function ownerHtml() {
     const o = rec.owner ? `<b>${esc(ownerName(rec.owner))}</b>` : `<span class="mut">chưa ghi (hồ sơ tạo trước khi có đăng nhập)</span>`;
     return `<div class="hint wide">Người nhập: ${o}${canEdit() ? "" : ` · <span class="bad">bạn chỉ được xem, không sửa</span>`}</div>`;
@@ -1376,12 +1378,12 @@
     const stHtml = st === "done" ? `<span class="stp ok">✓ Đã duyệt final</span><span>${f ? `bởi <b>${esc(fullName(f.by))}</b> · ${when(f.at)}` : `bởi <b>${esc(a.by)}</b> · ${when(a.at)}`} · được in / tải</span>`
       : st === "final" ? `<span class="stp wait">⏳ Chờ duyệt final</span><span>Kiểm soát <b>${esc(fullName(a.by))}</b> đã duyệt ${when(a.at)} → chờ <b>${esc(rec.finalTo ? rec.finalTo.name : "người duyệt final")}</b> duyệt final</span>`
       : st === "review" ? `<span class="stp wait">⏳ Chờ kiểm soát</span><span>${esc(fullName(sb.by))} chuyển ${when(sb.at)} → <b>${esc(sb.to ? sb.to.name : "người kiểm soát")}</b></span>`
-      : `<span class="stp no">Chưa chuyển duyệt</span><span>Chọn Người kiểm soát ở trên rồi bấm Chuyển duyệt. Chỉ in / tải PDF sau khi duyệt final.</span>`;
+      : `<span class="stp no">Chưa chuyển duyệt</span><span>Chọn Người kiểm soát ở trên rồi bấm Chuyển duyệt. GCN chỉ in / tải sau khi duyệt final.</span>`;
     const ret = rec.returned && st === "draft" ? `<div class="hint bad">↩ ${esc(fullName(rec.returned.by))} trả lại ${when(rec.returned.at)}${rec.returned.note ? ": " + esc(rec.returned.note) : ""}</div>` : "";
     const mine = m && rec.owner && rec.owner.id === m.id;
     let rv = "";
-    if (st === "draft" && m && (mine || !rec.owner || m.role >= 3)) rv = `<div class="arow"><button class="btn pri" data-act="submit">➜ Chuyển duyệt${rec.sig.controller ? " cho " + esc(rec.sig.controller) : ""}</button></div>`;
-    if (st === "review" && m && m.role >= 2 && (!sb.to || sb.to.id === m.id || m.role >= 3) && !(mine && m.role < 3)) {
+    if (st === "draft" && m && (mine || !rec.owner || m.role >= 3)) rv = `<div class="arow"><button class="btn pri" data-act="submit">➜ Chuyển duyệt</button></div>`;
+    if (st === "review" && m && (m.role >= 2 || sentToMe(rec)) && (!sb.to || sb.to.id === m.id || m.role >= 3) && !(mine && m.role < 3)) {
       const fwd = reviewers(m.id).filter(p => !rec.owner || p.id !== rec.owner.id);
       rv = `<div class="wf">${m.role >= 3 ? "" : `<label class="f"><span>Người duyệt final</span>${personSel("wf_final", finals(), (rec.finalTo || {}).id || store.get("lastFinal", ""), "— Chọn người duyệt final —")}</label>`}
         <div class="arow"><button class="btn pri" data-act="approve">✓ ${m.role >= 3 ? "Duyệt kiểm soát + final" : "Duyệt kiểm soát → chuyển final"}</button><button class="btn" data-act="return">↩ Trả lại</button></div>
@@ -1416,10 +1418,12 @@
     if (!rec.sig.inspector) { toast("Chưa có tên Kiểm định viên"); return null; }
     return c;
   }
-  function wfSave(msg) { rec.flow2 = true; if (rec.owner) addViewer(rec, rec.owner.id); saveRecord(true); if (isFinal(rec) && A.can("settings") && devSync(rec)) msg = (msg || "") + " · đã cập nhật danh mục thiết bị"; persistCurrent(); renderEntry(); badge(); if (msg) toast(msg); }
+  function wfSave(msg) { rec.flow2 = true; if (rec.owner) addViewer(rec, rec.owner.id); saveRecord(true); wfAs = false; if (isFinal(rec) && A.can("settings") && devSync(rec)) msg = (msg || "") + " · đã cập nhật danh mục thiết bị"; persistCurrent(); renderEntry(); badge(); if (msg) toast(msg); }
   const clearFlow = r => { delete r.submitted; delete r.approved; delete r.final; delete r.finalTo; };
+  let wfAs = false;   // v80: người kiểm soát cấp 1 đang thao tác duyệt / trả lại / chuyển tiếp (rec.submitted bị xoá trước khi lưu)
   async function wf(act) {
     const m = A.me(); if (!m) return;
+    wfAs = sentToMe(rec);
     const now = new Date().toISOString();
     if (["submit", "approve", "final"].includes(act)) {
       const sv = await checkCertServer();   // số trùng trên toàn hệ thống (máy chủ)
@@ -1429,7 +1433,7 @@
     if (act === "submit") {
       if (!wfCheck()) return;
       const p = personByName(rec.sig.controller);
-      if (!p || p.role < 2) { toast("Chọn Người kiểm soát trong danh sách trước khi chuyển duyệt"); focusPath("sig.controller"); return; }
+      if (!p || p.role < 1) { toast("Chọn Người kiểm soát trong danh sách trước khi chuyển duyệt"); focusPath("sig.controller"); return; }
       if (p.id === m.id) { toast("Không tự chuyển duyệt cho chính mình – chọn người khác"); return; }
       clearFlow(rec); delete rec.returned;
       rec.submitted = { by: m.name, byId: m.id, at: now, to: { id: p.id, name: p.name } };
@@ -1437,7 +1441,7 @@
       if (!A.cloud()) submitReview();   // chế độ PIN trên máy (chưa có máy chủ): vẫn đóng gói file để gửi qua Zalo / email
       return;
     }
-    if (m.role < 2) return;
+    if (m.role < 2 && !sentToMe(rec)) return;
     if (act === "forward") {
       const p = people.find(x => x.id === ($("#wf_fwd") || {}).value);
       if (!p) { toast("Chọn người kiểm soát để chuyển"); return; }
@@ -1785,7 +1789,7 @@
     const m = A.me(); if (!m) return;
     const list = records.filter(r => folderKey(r) === b.dataset.f && stage(r) === "draft" && !r.deleted && r.owner && r.owner.id === m.id);
     if (!list.length) { toast("Không có hồ sơ nào chưa chuyển duyệt trong thư mục này"); return; }
-    const p = people.find(x => x.id === (document.getElementById(b.dataset.sel) || {}).value && x.role >= 2);
+    const p = people.find(x => x.id === (document.getElementById(b.dataset.sel) || {}).value && x.role >= 1);
     if (!p) { toast("Chọn người kiểm soát bên cạnh nút trước khi chuyển"); return; }
     if (p.id === m.id) { toast("Không tự chuyển duyệt cho chính mình – chọn người khác"); return; }
     if (!b.dataset.armed) { b.dataset.armed = 1; const t = b.textContent; b.textContent = `Xác nhận chuyển ${list.length} hồ sơ cho ${p.name}?`; b.classList.add("danger"); setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = t; b.classList.remove("danger"); } }, 4000); return; }
@@ -1803,7 +1807,7 @@
     toast(`Đã chuyển ${n} hồ sơ cho ${p.name}${skip.length ? ` · bỏ qua ${skip.length} hồ sơ (thiếu số liệu / chuẩn hết hạn / số tem ngoài dải hoặc trùng): ${skip.join(", ")}` : ""}${n && !A.cloud() ? " · chế độ trên máy: dùng 'Sao lưu JSON thư mục này' để gửi cho người duyệt" : ""}`);
   }
   function approveFolder(b) {
-    const m = A.me(); if (!m || m.role < 2) return;
+    const m = A.me(); if (!m) return;
     const list = records.filter(r => folderKey(r) === b.dataset.f && myTurn(r));
     if (!list.length) return;
     let fin = null;
