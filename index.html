@@ -198,6 +198,8 @@ section.a4>*{position:relative;z-index:1}
 .a4 .qhdr img{width:94px}
 .a4 .qhdr .nologo{width:94px;height:80px}
 .a4 .qhdr .t{flex:1;text-align:center;font-size:15px;line-height:1.32}
+.a4 .qhdr::after{content:"";width:94px;flex:none}   /* v86: khoảng trống bằng logo → khối tên công ty căn giữa trang, thẳng hàng tiêu đề */
+input.secret{-webkit-text-security:disc}
 .a4 .qhdr .b{font-weight:700}.a4 .qhdr .u{text-decoration:underline}
 .a4.qtg h1.q{font:700 16.5px "Times New Roman",Tinos,serif;text-align:center;margin:18px 0 0}
 .a4.qtg .sub,.a4.qtg .no{font-size:14.5px;margin:0}
