@@ -7,7 +7,7 @@
 (function () {
   "use strict";
   const ROLES = { 1: "Kiểm định viên", 2: "Người kiểm soát", 3: "Trưởng phòng / Quản trị" };
-  const PERM = { approve: 2, deleteRecord: 2, editStands: 3, settings: 3, certNo: 3, users: 3 };
+  const PERM = { approve: 2, deleteRecord: 2, editStands: 3, settings: 3, certNo: 1, users: 3 };
   const IDLE_MIN = 12 * 60;   // NGOC 01/11/2026: tự khoá sau 12 giờ không thao tác (trước đây 30 phút)
   const ls = {
     get(k, d) { try { const v = localStorage.getItem("lab." + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -131,7 +131,7 @@
   }
   function login(u) {
     me = u; ss.set(u.id); ls.set("lastUser", u.id); lastAct = Date.now();
-    const g = document.getElementById("auth"); if (g) g.hidden = true; document.body.classList.remove("locked");
+    const g = document.getElementById("auth"); if (g) { g.hidden = true; g.innerHTML = ""; }   // v86: xoá form đăng nhập (PIN) khỏi trang, tránh Chrome hỏi "Cập nhật mật khẩu?" khi gõ thông số thiết bị document.body.classList.remove("locked");
     chip(); if (onReady) onReady(me);
   }
   function logout(msg) {

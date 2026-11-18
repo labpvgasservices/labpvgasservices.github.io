@@ -1393,13 +1393,13 @@
     if (st === "final" && m && m.role >= 3) rv = `<div class="arow"><button class="btn pri" data-act="final">✓ Duyệt final (cho in, cho tải)</button><button class="btn" data-act="return">↩ Trả lại</button></div>`;
     if (st === "done" && m && m.role >= 3) rv = `<div class="arow"><button class="btn" data-act="unapprove">Huỷ duyệt</button></div>`;
     const L = lv1(), ok = isFinal(rec), fl = rec.summary && !rec.summary.pass;
-    const exp = ok ? `<button class="btn pri" data-pdf="cert">Chứng chỉ <small>2 trang</small></button>
+    const unc = L ? "" : `<button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`, dr = ok ? "" : " · bản CHƯA DUYỆT";
+    // v86 (NGOC 18/11/2026): tạm thời mọi cấp xem / tải được GCN trước khi duyệt final; GCN chưa duyệt in dấu "CHƯA DUYỆT". Không đạt: chỉ QTG.
+    const exp = fl && NOCERT.includes(rec.type) ? `<button class="btn" data-pdf="qtg">Biên bản QTG <small>PDF</small></button>${unc}<button class="btn wide2" data-act="preview">Xem trước</button>`
+      : `<button class="btn${ok ? " pri" : ""}" data-pdf="cert">Chứng chỉ <small>2 trang${dr}</small></button>
         <button class="btn" data-pdf="qtg">Biên bản QTG <small>PDF</small></button>
-        <button class="btn" data-pdf="all">Trọn bộ <small>QTG + GCN</small></button>
-        ${L ? "" : `<button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`}
-        <button class="btn wide2" data-act="preview">Xem trước trọn bộ</button>`
-      : `<button class="btn" data-pdf="qtg">Biên bản QTG <small>PDF</small></button>${L ? "" : `<button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`}
-        <button class="btn wide2" data-act="preview">Xem trước trọn bộ <small>(GCN chỉ tải sau khi duyệt final)</small></button>`;   // v76 (NGOC 13/11/2026): mọi cấp tải QTG ngay khi nhập xong
+        <button class="btn" data-pdf="all">Trọn bộ <small>QTG + GCN${dr}</small></button>
+        ${unc}<button class="btn wide2" data-act="preview">Xem trước trọn bộ</button>`;
     return `<div class="acts">
       <div class="agrp"><div class="alab">Hồ sơ</div><div class="arow">
         <button class="btn pri" data-act="save">💾 Lưu hồ sơ</button><button class="btn" data-act="new">＋ Hồ sơ mới</button></div></div>
@@ -1592,7 +1592,6 @@
   }
   const fileTag = () => `${(rec.certNo || "").replace(/[^\w.-]+/g, "_")}_${(rec.h.tag || "").replace(/[^\w.-]+/g, "_")}`;
   async function makePdf(which, htmlIn, nameIn, outSel) {
-    if (!htmlIn && which !== "unc" && which !== "qtg" && !isFinal(rec)) { toast("Chứng chỉ chỉ in / tải sau khi hồ sơ được duyệt final"); return; }
     if (!htmlIn && lv1()) { if (which === "unc") { toast("Bảng Uncer chỉ dành cho Người kiểm soát / Trưởng phòng"); return; } }
     const html = htmlIn || pagesHtml(which); if (!html) return;
     const out = $(outSel || "#pdfout"); out.innerHTML = `<p class="mut">Đang tạo PDF…</p>`;
@@ -1959,7 +1958,7 @@
     return `<div class="card" id="moc"><h2>Mộc ẩn & Kiểm tra GCN</h2>
       <p class="hint">Khi có khóa Phòng, mọi PDF xuất ra đều mang một mã ẩn (lưới chấm gần trắng trong ảnh trang + thông tin ẩn của file) và được ghi dấu vân tay SHA-256 vào nhật ký máy này. Mắt thường không thấy; chỉ kiểm tra được bằng khóa Phòng. Giữ khóa ở nơi an toàn: mất khóa thì không kiểm tra được GCN cũ.</p>
       <p class="${on ? "ok" : "bad"}"><b>${on ? "Đang bật: PDF xuất ra có mộc ẩn" : "Chưa có khóa: PDF chưa gắn mộc ẩn"}</b></p>
-      <div class="grid"><label class="f wide"><span>Khóa Phòng (bí mật)</span><input type="password" id="mockey" data-sp="mocKey" value="${esc(settings.mocKey || "")}" autocomplete="off"></label></div>
+      <div class="grid"><label class="f wide"><span>Khóa Phòng (bí mật)</span><input type="text" id="mockey" class="secret" data-sp="mocKey" value="${esc(settings.mocKey || "")}" autocomplete="off" spellcheck="false"></label></div>
       <div class="btns"><button class="btn" data-t="mocshow">Hiện / ẩn khóa</button><button class="btn" data-t="mocnew">${on ? "Đổi khóa mới" : "Tạo khóa"}</button></div>
       <div class="grid"><label class="f wide"><span>Cấp được dùng "Kiểm tra nguyên bản GCN"</span><select data-sp="mocCheckLevel">${[[1, "Tất cả (cấp 1, 2, 3)"], [2, "Cấp 2 và 3"], [3, "Chỉ cấp 3"]].map(([v, t]) => `<option value="${v}"${checkLevel() === v ? " selected" : ""}>${t}</option>`).join("")}</select></label></div></div>`;
   }
