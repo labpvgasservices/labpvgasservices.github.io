@@ -1393,8 +1393,8 @@
     if (st === "final" && m && m.role >= 3) rv = `<div class="arow"><button class="btn pri" data-act="final">✓ Duyệt final (cho in, cho tải)</button><button class="btn" data-act="return">↩ Trả lại</button></div>`;
     if (st === "done" && m && m.role >= 3) rv = `<div class="arow"><button class="btn" data-act="unapprove">Huỷ duyệt</button></div>`;
     const L = lv1(), ok = isFinal(rec), fl = rec.summary && !rec.summary.pass;
-    const unc = L ? "" : `<button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`, dr = ok ? "" : " · bản CHƯA DUYỆT";
-    // v86 (NGOC 18/11/2026): tạm thời mọi cấp xem / tải được GCN trước khi duyệt final; GCN chưa duyệt in dấu "CHƯA DUYỆT". Không đạt: chỉ QTG.
+    const unc = L ? "" : `<button class="btn" data-pdf="unc">Bảng Uncer <small>chỉ cấp 2–3</small></button>`, dr = "";   // v86: tạm không ghi "chưa duyệt"
+    // v86 (NGOC 18/11/2026): tạm thời mọi cấp xem / tải được GCN trước khi duyệt final, không in dấu chưa duyệt. Không đạt: chỉ QTG.
     const exp = fl && NOCERT.includes(rec.type) ? `<button class="btn" data-pdf="qtg">Biên bản QTG <small>PDF</small></button>${unc}<button class="btn wide2" data-act="preview">Xem trước</button>`
       : `<button class="btn${ok ? " pri" : ""}" data-pdf="cert">Chứng chỉ <small>2 trang${dr}</small></button>
         <button class="btn" data-pdf="qtg">Biên bản QTG <small>PDF</small></button>
@@ -1518,7 +1518,7 @@
     const c = compute();
     const s1 = standById(rec.h.stand1), s2 = standById(rec.h.stand2), s3 = standById(rec.h.stand3), T = rec.type;
     const exp = expiredUsed(rec);   // luôn đóng dấu, không phụ thuộc Cài đặt (NGOC 06/11/2026)
-    return { c, info: { stand1: s1, stand2: ["PT", "TT", "RTD", "TG", "TC"].includes(T) ? s2 : null, stand3: s3, heat: T === "TS" ? s1 : null, loc: recLoc(), draft: exp.length ? "CHUẨN HẾT HẠN, CẦN CẬP NHẬT" : (!rec.sig.inspector || !rec.sig.controller ? "CHƯA ĐỦ CHỮ KÝ" : (isFinal(rec) ? "" : "CHƯA DUYỆT")) } };
+    return { c, info: { stand1: s1, stand2: ["PT", "TT", "RTD", "TG", "TC"].includes(T) ? s2 : null, stand3: s3, heat: T === "TS" ? s1 : null, loc: recLoc(), draft: exp.length ? "CHUẨN HẾT HẠN, CẦN CẬP NHẬT" : (!rec.sig.inspector || !rec.sig.controller ? "CHƯA ĐỦ CHỮ KÝ" : ""   /* v86 (NGOC 18/11): tạm bỏ dấu CHƯA DUYỆT trên GCN */) } };
   }
   function pagesHtml(which) {
     const { c, info } = docInfo();
