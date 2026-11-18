@@ -1711,8 +1711,7 @@
       return `<details class="fold ${cls}" data-f="${esc(k)}"${openFolders.has(k) || keys.length === 1 ? " open" : ""}><summary>📁 <b>${esc(f.name)}</b>${f.mine ? " <span class=\"tag\">của tôi</span>" : ""} <small class="mut">${n} hồ sơ · ${ok}/${n} đã duyệt final${hid ? ` · ${hid} đang chờ duyệt (ẩn)` : ""}${drafts ? ` · <b class="bad">${drafts} chưa chuyển duyệt</b>` : ""}</small>${ok === n ? ' <span class="ok">✓ Đã duyệt</span>' : ""}${fl ? ` <span class="bad">⚠ ${fl} không đạt</span>` : ""}</summary>
         ${drafts ? `<div class="subf"><select id="sc_${ki}">${["— Chọn người kiểm soát —"].map(t => `<option value="">${t}</option>`).join("")}${reviewers(me.id).map(p => `<option value="${esc(p.id)}"${ctlOf(me.id) === p.name ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
           <button class="btn sm pri" data-r="subf" data-f="${esc(k)}" data-sel="sc_${ki}">➜ Chuyển duyệt cả thư mục (${drafts})</button></div>` : ""}
-        ${(pg => pg ? `<div class="hint bad">⚠ GCN chưa được duyệt: ${pg}/${n} hồ sơ – thư mục tải về chỉ có QTG cho các hồ sơ này</div>` : "")(f.items.filter(r => !isFinal(r) && !isFail(r)).length)}
-        <div class="btns">${mq ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${mq})</button>` : ""}<button class="btn sm pri" data-r="zipf" data-f="${esc(k)}">⬇ Tải thư mục QTG (${n})${ok ? ` + GCN (${ok})` : ""}</button><button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button>${A.cloud() ? "" : `<button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button>`}</div>
+        <div class="btns">${mq ? `<button class="btn sm pri" data-r="apf" data-f="${esc(k)}">✓ Duyệt cả gói (${mq})</button>` : ""}<button class="btn sm pri" data-r="zipf" data-f="${esc(k)}">⬇ Tải thư mục QTG (${n})${(g => g ? ` + GCN (${g})` : "")(f.items.filter(r => !(isFail(r) && NOCERT.includes(r.type))).length)}</button><button class="btn sm" data-r="csvf" data-f="${esc(k)}">CSV thư mục này</button>${A.cloud() ? "" : `<button class="btn sm" data-r="backupf" data-f="${esc(k)}">Sao lưu JSON thư mục này</button>`}</div>
         ${shown.map(row).join("")}</details>`; }).join("");
   }
   function onRecordsClick(e) {
@@ -1767,7 +1766,7 @@
     }
   }
   // Tải cả thư mục: QTG/ và GCN/, tên "1. Tag.pdf" (NGOC 12/11/2026). v78 (NGOC 13/11/2026): mọi cấp tải QTG của mọi hồ sơ trong thư mục, kể cả chưa duyệt;
-  // GCN chỉ có cho hồ sơ đã duyệt final; hồ sơ chưa duyệt được liệt kê trong file "GCN_CHUA_DUOC_DUYET.txt" để nhắc.
+  // v87 (NGOC 18/11/2026): tạm thời GCN cũng có cho hồ sơ chưa duyệt final (trừ hồ sơ không đạt).
   async function zipFolder(b) {
     const sel = records.filter(r => visible(r) && folderKey(r) === b.dataset.f && !r.deleted); if (!sel.length) { toast("Thư mục trống"); return; }
     const old = b.textContent; b.disabled = true;
@@ -2443,7 +2442,7 @@
         const x = list[i], nm = `${i + 1}. ${safeTagName(x.tag || x.certNo)}`; say(`<p class="mut">Đang tạo PDF ${i + 1}/${list.length}: ${esc(x.tag)}…</p>`); await new Promise(r => setTimeout(r, 0));
         rec = normalize(clone(x.r)); const c = compute(); if (!c.res) { skipped.push(x.tag); continue; }
         const q = pagesHtml("qtg"); if (q) files.push({ name: `QTG/${nm}.pdf`, blob: await buildPdf(q) });
-        if (failed(c)) noCert.push(x.tag); else if (qtgAll && !isFinal(rec)) { if (c.res.pass) pending.push(x.tag); } else { const g = pagesHtml("cert"); if (g) files.push({ name: `GCN/${nm}.pdf`, blob: await buildPdf(g) }); }
+        if (failed(c)) noCert.push(x.tag); else {   /* v87 (NGOC 18/11): tạm thời GCN có trong thư mục tải về kể cả khi chưa duyệt final */ const g = pagesHtml("cert"); if (g) files.push({ name: `GCN/${nm}.pdf`, blob: await buildPdf(g) }); }
       }
     } finally { rec = keep; }
     return { files, skipped, noCert, pending };
