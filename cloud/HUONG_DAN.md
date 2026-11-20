@@ -32,3 +32,12 @@ Dải số GCN / QTG theo công trình (v51, 10/11/2026)
 - Địa điểm gõ tay: chọn ô "Dải số chứng chỉ". Công trình chưa có dải: chỉ cảnh báo, vẫn kiểm trùng.
 - v52: chạy `05_v52_dai_so_chung.sql` TRƯỚC khi merge. Mọi loại (PT, PS, TT…) dùng chung dải: đuôi số đã cấp cho loại này thì loại khác không dùng lại trong năm (PS 2301 có rồi thì không có PT 2301).
 - Cài đặt › "Số tem / GCN còn trống theo site": mọi cấp xem được các khoảng số chưa dùng (A–B) của từng dải theo năm.
+
+## v88 – Chụp phiếu (AI đọc số từ ảnh phiếu gốc)
+
+Cài một lần (NGOC làm, ~10 phút):
+1. Tạo khóa Gemini MỚI tại aistudio.google.com/apikey (không dán khóa vào chat/ảnh).
+2. Supabase › Edge Functions › Secrets › thêm `GEMINI_API_KEY` = khóa vừa tạo.
+3. Supabase › Edge Functions › Deploy a new function, tên **ocr-phieu**, dán nội dung `cloud/functions/ocr-phieu/index.ts`, TẮT "Verify JWT" (hàm tự kiểm tra đăng nhập), Deploy.
+4. Trong app, cấp 3: Cài đặt › "Chụp phiếu – AI đọc số" › Bật.
+Không cần chạy SQL. Tắt lại bất cứ lúc nào ở Cài đặt; khôi phục bản trước: nhánh backup/v87-stable-2026-11-20.

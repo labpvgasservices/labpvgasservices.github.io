@@ -259,7 +259,15 @@
   async function certNext(pre, lo, hi, id) { const { data, error } = await client().rpc("cert_next", { p_pre: pre, p_lo: lo, p_hi: hi, p_id: id || "" }); if (error) throw error; return data || 0; }
   async function certWho(no, id) { const { data, error } = await client().rpc("cert_who", { p_no: no, p_id: id || "" }); if (error) throw error; return data || null; }
   async function certUsed(pool) { const { data, error } = await client().rpc("cert_used", { p_pool: pool }); if (error) throw error; return data || []; }
+  /* gọi Edge Function (v88: ocr-phieu) bằng phiên đăng nhập hiện tại */
+  async function fn(name, body) {
+    const se = await session(); if (!se) throw new Error("Chưa đăng nhập máy chủ");
+    const r = await fetch(`${CONFIG.url}/functions/v1/${name}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + se.access_token, apikey: CONFIG.key }, body: JSON.stringify(body) });
+    let j = null; try { j = await r.json(); } catch (e) { }
+    if (!r.ok && !(j && j.error)) throw new Error(r.status === 404 ? "Chức năng đọc ảnh chưa được cài trên máy chủ (Edge Function ocr-phieu)" : "Máy chủ trả lỗi " + r.status);
+    return j || {};
+  }
   async function usage() { const { data, error } = await client().rpc("storage_usage"); if (error) throw error; return data; }
   const storage = () => client() && client().storage.from("pid");   // kho P&ID riêng tư (pid.js, v69)
-  window.LabCloud = { storage, usage, enabled, attach, start, stop, sync, schedule, deleted, backupAll, restoreAll, certNext, certWho, certUsed, signIn, signUp, signOut, currentProfile, changePassword, createUser, resetPin, listUsers, setRole, paint, pending, isUuid };
+  window.LabCloud = { fn, storage, usage, enabled, attach, start, stop, sync, schedule, deleted, backupAll, restoreAll, certNext, certWho, certUsed, signIn, signUp, signOut, currentProfile, changePassword, createUser, resetPin, listUsers, setRole, paint, pending, isUuid };
 })();

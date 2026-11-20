@@ -401,6 +401,7 @@
     const out = compute0(target), r = target || curRec(), ex = expiredUsed(r);
     // gom cảnh báo hết hạn cũ (có thể lặp 2 lần) thành 1 dòng rõ ràng cho mỗi chuẩn
     out.warns = out.warns.filter(w => !/hết hạn/.test(w));
+    if ((r.ocrAuto || []).length) { out.errors.unshift(`Số đọc do AI điền từ ảnh chưa đối chiếu với phiếu gốc (${r.ocrAuto.length} ô vàng) – kiểm tra rồi bấm "Đã đối chiếu"`); out.res = null; }   // v88
     ex.forEach(s => out.warns.unshift(`Chuẩn ${s.key} (S/N ${s.serial}) HẾT HẠN ${s.due}, trước ngày hiệu chuẩn – không được duyệt, GCN đóng dấu BẢN NHÁP cho tới khi cập nhật GCN mới của chuẩn`));
     return out;
   }
@@ -951,23 +952,24 @@
         ${decHint([[standById(h.stand1), PT ? h.unit : h.unitPset], [PT ? standById(h.stand2) : null, "mA", 20]])}
       </div>`;
     let pts;
+    const oc = p => (rec.ocrAuto || []).includes(p) ? ` class="ocr${(rec.ocrBad || []).includes(p) ? " ocrbad" : ""}" title="${(rec.ocrBad || []).includes(p) ? "AI đọc có thể sai: lệch cột hiệu chỉnh/chênh lệch trên phiếu" : "AI điền – đối chiếu với phiếu gốc"}"` : "";
     if (PT) {
       const rows = rec.pt.points.map((x, i) => {
         const ideal = (num(h.max) > num(h.min) && isFinite(num(x))) ? (4 + 16 * (num(x) - num(h.min)) / (num(h.max) - num(h.min))).toFixed(3) : "";
         return `<tr><td class="n">${i + 1}</td><td><div class="pm"><input data-p="pt.points.${i}" inputmode="decimal" value="${esc(x)}"><button type="button" class="pmb sm" data-neg="pt.points.${i}" aria-label="Đổi dấu" title="Đổi dấu âm / dương">±</button></div></td><td class="mut">${ideal}</td>
-          <td><input data-p="pt.rise.${i}" inputmode="decimal" value="${esc(rec.pt.rise[i])}" placeholder="mA"></td>
-          <td><input data-p="pt.fall.${i}" inputmode="decimal" value="${esc(rec.pt.fall[i])}" placeholder="mA"></td></tr>`;
+          <td><input data-p="pt.rise.${i}" inputmode="decimal" value="${esc(rec.pt.rise[i])}" placeholder="mA"${oc(`pt.rise.${i}`)}></td>
+          <td><input data-p="pt.fall.${i}" inputmode="decimal" value="${esc(rec.pt.fall[i])}" placeholder="mA"${oc(`pt.fall.${i}`)}></td></tr>`;
       }).join("");
       pts = `<table class="entry"><thead><tr><th>#</th><th>Áp suất chuẩn<br>${esc(h.unit)}</th><th>mA lý tưởng</th><th>Tăng ↑<br>mA</th><th>Giảm ↓<br>mA</th></tr></thead><tbody>${rows}</tbody></table>
         <div class="btns"><button class="btn" data-act="pts">Điểm 0-25-50-75-100%</button><button class="btn pri" data-act="sync">⇅ Đồng bộ Tăng / Giảm</button></div>`;
     } else {
-      const rows = rec.ps.set.map((v, i) => `<tr><td class="n">${i + 1}</td><td><input data-p="ps.set.${i}" inputmode="decimal" value="${esc(v)}"></td><td><input data-p="ps.reset.${i}" inputmode="decimal" value="${esc(rec.ps.reset[i])}"></td></tr>`).join("");
+      const rows = rec.ps.set.map((v, i) => `<tr><td class="n">${i + 1}</td><td><input data-p="ps.set.${i}" inputmode="decimal" value="${esc(v)}"${oc(`ps.set.${i}`)}></td><td><input data-p="ps.reset.${i}" inputmode="decimal" value="${esc(rec.ps.reset[i])}"${oc(`ps.reset.${i}`)}></td></tr>`).join("");
       pts = `<p class="hint">Như QTG: chiều ${h.dirQTG === "Falling" ? "giảm (Falling) – áp suất tác động đọc khi giảm áp" : "tăng (Rising) – áp suất tác động đọc khi tăng áp"}.</p>
         <table class="entry"><thead><tr><th>TT</th><th>Áp suất tác động<br>(Set) ${esc(h.unitPset)}</th><th>Áp suất trả về<br>(Reset) ${esc(h.unitPset)}</th></tr></thead><tbody>${rows}</tbody></table>
         <div class="btns"><button class="btn pri" data-act="copy1">Lần 2–5 = Lần 1</button></div>`;
     }
     let ptsTitle = PT ? "lên / xuống" : "5 lần";
-    if (NEWT.includes(rec.type)) ({ dev, std, pts, ptsTitle } = buildNew(locHtml));
+    if (NEWT.includes(rec.type)) ({ dev, std, pts, ptsTitle } = buildNew(locHtml)); else pts += ocrBox();
     const sig = `<div class="grid">
         ${fld("Người thực hiện (Kiểm định viên)", "sig.inspector", { list: "names", ro: !A.can("users") })}
         ${ctlField()}
@@ -1202,6 +1204,46 @@
     el.innerHTML = body || `<p class="mut">Nhập đủ thông tin để xem kết quả.</p>`;
     dock(c.errors, c.warns);
   }
+  /* ---------- Chụp phiếu (v88): AI chép số đọc từ ảnh phiếu gốc, người dùng bắt buộc đối chiếu ---------- */
+  let ocrErr = "", ocrBusy = false;
+  function ocrBox() {
+    if (!settings.ocrOn || !window.LabOCR || !LabOCR.supported(rec.type) || !canEdit() || !A.cloud()) return "";
+    const n = (rec.ocrAuto || []).length, m = rec.ocrMsg, nb = (rec.ocrBad || []).length;
+    return `<div class="ocrbox" id="ocrst"><label class="btn pri${ocrBusy ? " dis" : ""}">📷 Chụp phiếu gốc – AI điền số<input type="file" id="ocrfile" accept="image/*" hidden${ocrBusy ? " disabled" : ""}></label>
+      <p class="hint">Chụp thẳng, đủ sáng, thấy cả bảng số liệu. AI chỉ chép lại; app điền vào bảng trên, ô AI điền màu vàng. Điền Pset / dải đo trước để app tự kiểm chéo cột hiệu chỉnh.</p>
+      ${ocrBusy ? `<p class="mut">Đang gửi ảnh cho AI đọc (khoảng 10–30 giây)…</p>` : ""}${ocrErr ? `<p class="bad">${esc(ocrErr)}</p>` : ""}
+      ${n ? `<div class="ocrnote"><b>AI đã điền ${n} ô${m ? ` (${esc(m.model || "")})` : ""} – phải đối chiếu từng ô với phiếu gốc.</b>
+        ${nb ? `<p class="bad"><b>${nb} ô đỏ nghi đọc sai</b> (phép trừ với cột hiệu chỉnh/chênh lệch trên phiếu không khớp) – xem kỹ ô đó.</p>` : `<p class="ok">Các ô đã khớp phép kiểm chéo với cột hiệu chỉnh/chênh lệch trên phiếu.</p>`}
+        ${m && m.notes && m.notes.length ? `<ul>${m.notes.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+        <div class="btns"><button class="btn pri" data-act="ocrok">✔ Đã đối chiếu xong với phiếu gốc</button></div></div>` : ""}</div>`;
+  }
+  async function ocrRun(file) {
+    if (!file || ocrBusy || !canEdit()) return;
+    const my = rec; ocrBusy = true; ocrErr = ""; renderEntry();
+    try {
+      const r = await LabOCR.read(file, my.type);
+      if (rec !== my) return;
+      const pl = LabOCR.plan(my.type, my, r.data, num);
+      if (pl.stop) { ocrErr = pl.stop; return; }
+      pl.fills.forEach(f => setPath(my, f.p, f.v));
+      my.ocrAuto = pl.fills.map(f => f.p); my.ocrBad = pl.bad; my.ocrMsg = { model: r.model, notes: pl.notes };
+      touched(); logAct(`Đọc số từ ảnh phiếu bằng AI (${r.model || ""}): ${pl.fills.length} ô, ${pl.bad.length} ô nghi sai`);
+    } catch (e) { ocrErr = e.message || String(e); }
+    finally { ocrBusy = false; if (rec === my) { renderEntry(); persistCurrent(); } }
+  }
+  let ocrArm = false;
+  function ocrOk() {
+    const nb = (rec.ocrBad || []).length;
+    if (nb && !ocrArm) { ocrArm = true; toast(`Còn ${nb} ô đỏ nghi sai – sửa theo phiếu gốc, hoặc bấm lần nữa nếu đã xem và số đúng`); return; }
+    ocrArm = false; logAct(`Đã đối chiếu số đọc AI với phiếu gốc (${(rec.ocrAuto || []).length} ô)`);
+    delete rec.ocrAuto; delete rec.ocrBad; delete rec.ocrMsg; touched(); renderEntry(); persistCurrent(); toast("Đã xác nhận đối chiếu");
+  }
+  function ocrCard() {
+    return `<div class="card" id="ocrcard"><h2>📷 Chụp phiếu – AI đọc số</h2>
+      <p class="hint">Cho phép nút "Chụp phiếu gốc" trong màn nhập PT / PS. AI (Google Gemini, gói miễn phí ~20 ảnh mỗi ngày cho cả phòng) chỉ chép số viết tay vào bảng; người nhập bắt buộc đối chiếu rồi mới tính được. Ảnh gửi sang máy chủ Google để đọc. Cần đã cài Edge Function ocr-phieu trên Supabase.</p>
+      <div class="grid"><label class="f"><span>Trạng thái</span><select data-sp="ocrOn"><option value="1"${settings.ocrOn ? " selected" : ""}>Bật</option><option value=""${settings.ocrOn ? "" : " selected"}>Tắt</option></select></label></div></div>`;
+  }
+
   /* ---------- thanh cảnh báo nổi (yêu cầu NGOC 01/11/2026): luôn đi theo màn hình đang xem, bấm vào mục để nhảy tới ô cần sửa ---------- */
   let dockOpen = false, dockMsgs = [];
   const TARGETS = [[/\bTag\b/, "#f_h_tag"], [/Kiểm định viên/, "#f_sig_inspector"], [/Người kiểm soát/, "#f_sig_controller"], [/Pset/, "#f_h_pset"], [/Tset/, "#f_h_tset"],
@@ -1238,6 +1280,7 @@
     if (!canEdit()) { toast(`Hồ sơ của ${rec.owner.name}: cấp 1 chỉ sửa hồ sơ mình tạo`); renderEntry(); return; }
     if (p === "fv") { rec.fv = Number(e.target.value) === 2 ? 2 : 1; touched(); logAct("Đổi phiên bản công thức: " + D.FV[rec.fv]); renderEntry(); persistCurrent(); return; }
     setPath(rec, p, e.target.value);
+    if ((rec.ocrAuto || []).includes(p)) { rec.ocrAuto = rec.ocrAuto.filter(x => x !== p); rec.ocrBad = (rec.ocrBad || []).filter(x => x !== p); e.target.classList.remove("ocr", "ocrbad"); if (!rec.ocrAuto.length) delete rec.ocrMsg; }   // gõ tay = đã tự đối chiếu ô đó
     if (p === "h.tag") showSuggest(e.target);
     const wasApproved = touched();
     if (p === "certNo") { rec.certAuto = false; clearTimeout(onInput._ct); onInput._ct = setTimeout(() => { paintCert(); checkCertServer(); }, 500); }
@@ -1356,6 +1399,7 @@
     if (act === "tccopy") { rec.tc.std = rec.tc.std.map(a => a.map(() => a[0])); rec.tc.dut = rec.tc.dut.map(a => a.map(() => a[0])); renderEntry(); toast("Đã chép lần 1 cho lần 2–5"); }
     if (act === "rtd6") { rec.rtd.std[5] = rec.rtd.std[2]; renderEntry(); }
     if (act === "rtdcopy") { rec.rtd.dut = rec.rtd.dut.map(a => a.map(() => a[0])); renderEntry(); toast("Đã chép lần 1 cho lần 2–5"); }
+    if (act === "ocrok") { ocrOk(); return; }
     if (act === "copy1") { rec.ps.set = rec.ps.set.map(() => rec.ps.set[0]); rec.ps.reset = rec.ps.reset.map(() => rec.ps.reset[0]); renderEntry(); toast("Đã chép lần 1 cho cả 5 lần"); }
     if (act === "save") saveRecord();
     if (act === "new") { if (unsavedRec() && !confirm(`Hồ sơ ${rec.h.tag} CHƯA LƯU.\nBấm OK để bỏ và tạo hồ sơ mới; bấm Hủy để quay lại lưu.`)) return; const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.locMode === "free" ? rec.h.custFree : "" }; const t = rec.type; rec = freshRecord(t); Object.assign(rec.h, keep); rec.certNo = autoCertNo(); renderEntry(); persistCurrent(); window.scrollTo(0, 0); }
@@ -1950,7 +1994,7 @@
         ${f("PS – Môi trường (chứng chỉ)", "PS.env", 1)}${f("PS – Nhiệt độ QTG", "PS.qtgTemp")}${f("PS – Độ ẩm QTG", "PS.qtgHum")}
         ${NEWT.map(t => `${f(`${t} – Phương pháp`, `${t}.procedure`)}${f(`${t} – Mã biểu mẫu QTG`, `${t}.qtgForm`)}${t === "PG" ? f("PG – Ký hiệu series (N256.yy<b>A</b>)", "PG.series") : f(`${t} – Mã bảng Uncer`, `${t}.form`)}${f(`${t} – Tiền tố CC`, `${t}.prefix`)}${f(`${t} – Tiền tố BB`, `${t}.bbPrefix`)}
           ${t === "PG" ? f("PG – Phương pháp in GCN (VN)", "PG.procVN", 1) + f("PG – Phương pháp in GCN (EN)", "PG.procEN", 1) : f(`${t} – Môi trường (chứng chỉ)`, `${t}.env`, 1)}${f(`${t} – Nhiệt độ QTG`, `${t}.qtgTemp`)}${f(`${t} – Độ ẩm QTG`, `${t}.qtgHum`)}${t === "TC" ? f("TC – U thiết bị bù đầu tự do (°C, uch7 = U/2; 0 = bỏ)", "TC.uCJ") : ""}`).join("")}</div>
-        <div class="btns"><button class="btn" data-t="resetset">Về mặc định</button></div></div>` + mocCard() + tail;
+        <div class="btns"><button class="btn" data-t="resetset">Về mặc định</button></div></div>` + mocCard() + ocrCard() + tail;
   }
   function mocCard() {
     const on = !!settings.mocKey;
@@ -1993,7 +2037,7 @@
     if (e.target.id === "mocfile") { if (e.type === "change" && e.target.files[0]) { if (canCheck()) mocCheck(e.target.files[0]); e.target.value = ""; } return; }
     if (e.type === "change" && A.onAccountChange(e, renderSettings, toast)) return;
     const p = e.target.dataset.sp; if (!p || !A.can("settings")) return;
-    let v = e.target.value; if (["showLogo", "warnExpired", "issueDayBlank", "showAccred"].includes(p)) v = !!v; if (p === "dueMonths") v = num(v) || 12;
+    let v = e.target.value; if (["showLogo", "warnExpired", "issueDayBlank", "showAccred", "ocrOn"].includes(p)) v = !!v; if (p === "dueMonths") v = num(v) || 12;
     const ks = p.split("."); const last = ks.pop(); const t = ks.reduce((a, k) => a[k], settings); t[last] = v;
     store.set("settings", settings);
   }
@@ -2517,6 +2561,7 @@
     $("#v-entry").addEventListener("click", onClick);
     $("#v-entry").addEventListener("change", e => { if (e.target.dataset.pk === "sel") { curPackId = e.target.value; store.set("curPack", curPackId); renderEntry(); } });
     $("#v-entry").addEventListener("change", e => { if (e.target.dataset.photo != null) onPhotoChange(e); });
+    $("#v-entry").addEventListener("change", e => { if (e.target.id === "ocrfile") { const f = e.target.files[0]; e.target.value = ""; ocrRun(f); } });
     $("#v-entry").addEventListener("click", e => { const im = e.target.closest("img[data-phview]"); if (im) { const w = window.open(); if (w) w.document.write(`<title>Ảnh</title><img src="${im.src}" style="max-width:100%">`); } });
     $("#v-records").addEventListener("click", onRecordsClick);
     $("#v-report").addEventListener("click", onReportClick); $("#v-report").addEventListener("change", onReportChange);
