@@ -401,7 +401,7 @@
     const out = compute0(target), r = target || curRec(), ex = expiredUsed(r);
     // gom cảnh báo hết hạn cũ (có thể lặp 2 lần) thành 1 dòng rõ ràng cho mỗi chuẩn
     out.warns = out.warns.filter(w => !/hết hạn/.test(w));
-    if ((r.ocrAuto || []).length) { out.errors.unshift(`Số đọc do AI điền từ ảnh chưa đối chiếu với phiếu gốc (${r.ocrAuto.length} ô vàng) – kiểm tra rồi bấm "Đã đối chiếu"`); out.res = null; }   // v88
+    if ((r.ocrAuto || []).length) { out.errors.unshift(`Số đọc từ ảnh chụp chưa đối chiếu với phiếu gốc (${r.ocrAuto.length} ô vàng) – kiểm tra rồi bấm "Đã đối chiếu"`); out.res = null; }   // v88
     ex.forEach(s => out.warns.unshift(`Chuẩn ${s.key} (S/N ${s.serial}) HẾT HẠN ${s.due}, trước ngày hiệu chuẩn – không được duyệt, GCN đóng dấu BẢN NHÁP cho tới khi cập nhật GCN mới của chuẩn`));
     return out;
   }
@@ -952,7 +952,7 @@
         ${decHint([[standById(h.stand1), PT ? h.unit : h.unitPset], [PT ? standById(h.stand2) : null, "mA", 20]])}
       </div>`;
     let pts;
-    const oc = p => (rec.ocrAuto || []).includes(p) ? ` class="ocr${(rec.ocrBad || []).includes(p) ? " ocrbad" : ""}" title="${(rec.ocrBad || []).includes(p) ? "AI đọc có thể sai: lệch cột hiệu chỉnh/chênh lệch trên phiếu" : "AI điền – đối chiếu với phiếu gốc"}"` : "";
+    const oc = p => (rec.ocrAuto || []).includes(p) ? ` class="ocr${(rec.ocrBad || []).includes(p) ? " ocrbad" : ""}" title="${(rec.ocrBad || []).includes(p) ? "Có thể đọc sai: lệch cột hiệu chỉnh/chênh lệch trên phiếu" : "Điền từ ảnh – đối chiếu với phiếu gốc"}"` : "";
     if (PT) {
       const rows = rec.pt.points.map((x, i) => {
         const ideal = (num(h.max) > num(h.min) && isFinite(num(x))) ? (4 + 16 * (num(x) - num(h.min)) / (num(h.max) - num(h.min))).toFixed(3) : "";
@@ -969,7 +969,7 @@
         <div class="btns"><button class="btn pri" data-act="copy1">Lần 2–5 = Lần 1</button></div>`;
     }
     let ptsTitle = PT ? "lên / xuống" : "5 lần";
-    if (NEWT.includes(rec.type)) ({ dev, std, pts, ptsTitle } = buildNew(locHtml)); else pts += ocrBox();
+    if (NEWT.includes(rec.type)) ({ dev, std, pts, ptsTitle } = buildNew(locHtml));
     const sig = `<div class="grid">
         ${fld("Người thực hiện (Kiểm định viên)", "sig.inspector", { list: "names", ro: !A.can("users") })}
         ${ctlField()}
@@ -979,7 +979,7 @@
     // Máy tính (≥ 1100 px): 2 cột – trái = thông tin (1, 2, 3, ảnh), phải = số đo + kết quả + ký (4, 5, 6).
     // Điện thoại: .ecl/.ecr là display:contents, thứ tự thẻ giữ như cũ nhờ class o1…o8 (index.html).
     $("#v-entry").innerHTML = `<div class="ecols"><div class="ecl">
-      <div class="card o1"><h2><i>1</i> Loại thiết bị</h2><div class="chips">${types}</div></div>
+      ${ocrBox()}<div class="card o1"><h2><i>1</i> Loại thiết bị</h2><div class="chips">${types}</div></div>
       <div class="card o2" id="c2"><h2><i>2</i> Thông tin thiết bị <small>(phần ghi tay trên QTG)</small></h2>${dev}</div>
       <div class="card o3" id="c3"><h2><i>3</i> Chuẩn sử dụng</h2>${std}</div>
       <div class="o5">${photoCard()}</div>
@@ -1209,10 +1209,10 @@
   function ocrBox() {
     if (!settings.ocrOn || !window.LabOCR || !LabOCR.supported(rec.type) || !canEdit() || !A.cloud()) return "";
     const n = (rec.ocrAuto || []).length, m = rec.ocrMsg, nb = (rec.ocrBad || []).length;
-    return `<div class="ocrbox" id="ocrst"><label class="btn pri${ocrBusy ? " dis" : ""}">📷 Chụp phiếu gốc – AI điền số<input type="file" id="ocrfile" accept="image/*" hidden${ocrBusy ? " disabled" : ""}></label>
-      <p class="hint">Chụp thẳng, đủ sáng, thấy cả bảng số liệu. AI chỉ chép lại; app điền vào bảng trên, ô AI điền màu vàng. Điền Pset / dải đo trước để app tự kiểm chéo cột hiệu chỉnh.</p>
-      ${ocrBusy ? `<p class="mut">Đang gửi ảnh cho AI đọc (thường 10–30 giây, tối đa 75 giây)…</p>` : ""}${ocrErr ? `<p class="bad">${esc(ocrErr)}</p>` : ""}
-      ${n ? `<div class="ocrnote"><b>AI đã điền ${n} ô${m ? ` (${esc(m.model || "")})` : ""} – phải đối chiếu từng ô với phiếu gốc.</b>
+    return `<div class="ocrbox" id="ocrst"><div class="ocrrow"><label class="btn pri ocrbtn${ocrBusy ? " dis" : ""}">📷 Chụp phiếu gốc<input type="file" id="ocrfile" accept="image/*" hidden${ocrBusy ? " disabled" : ""}></label>
+      <span class="hint">Chụp thẳng, đủ sáng, thấy cả bảng số liệu. Số đọc được tự điền vào mục 4 (ô màu vàng).</span></div>
+      ${ocrBusy ? `<p class="mut">Đang đọc ảnh… (thường 10–30 giây, tối đa 75 giây)</p>` : ""}${ocrErr ? `<p class="bad">${esc(ocrErr)}</p>` : ""}
+      ${n ? `<div class="ocrnote"><b>Đã điền ${n} ô vào mục 4${m ? ` (${esc(m.model || "")})` : ""} – kiểm tra từng ô với phiếu gốc.</b>
         ${nb ? `<p class="bad"><b>${nb} ô đỏ nghi đọc sai</b> (phép trừ với cột hiệu chỉnh/chênh lệch trên phiếu không khớp) – xem kỹ ô đó.</p>` : `<p class="ok">Các ô đã khớp phép kiểm chéo với cột hiệu chỉnh/chênh lệch trên phiếu.</p>`}
         ${m && m.notes && m.notes.length ? `<ul>${m.notes.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
         <div class="btns"><button class="btn pri" data-act="ocrok">✔ Đã đối chiếu xong với phiếu gốc</button></div></div>` : ""}</div>`;
@@ -1227,7 +1227,7 @@
       if (pl.stop) { ocrErr = pl.stop; return; }
       pl.fills.forEach(f => setPath(my, f.p, f.v));
       my.ocrAuto = pl.fills.map(f => f.p); my.ocrBad = pl.bad; my.ocrMsg = { model: r.model, notes: pl.notes };
-      touched(); logAct(`Đọc số từ ảnh phiếu bằng AI (${r.model || ""}): ${pl.fills.length} ô, ${pl.bad.length} ô nghi sai`);
+      touched(); logAct(`Đọc số từ ảnh phiếu (${r.model || ""}): ${pl.fills.length} ô, ${pl.bad.length} ô nghi sai`);
     } catch (e) { ocrErr = e.message || String(e); }
     finally { ocrBusy = false; if (rec === my) { renderEntry(); persistCurrent(); } }
   }
@@ -1235,12 +1235,12 @@
   function ocrOk() {
     const nb = (rec.ocrBad || []).length;
     if (nb && !ocrArm) { ocrArm = true; toast(`Còn ${nb} ô đỏ nghi sai – sửa theo phiếu gốc, hoặc bấm lần nữa nếu đã xem và số đúng`); return; }
-    ocrArm = false; logAct(`Đã đối chiếu số đọc AI với phiếu gốc (${(rec.ocrAuto || []).length} ô)`);
+    ocrArm = false; logAct(`Đã đối chiếu số đọc từ ảnh với phiếu gốc (${(rec.ocrAuto || []).length} ô)`);
     delete rec.ocrAuto; delete rec.ocrBad; delete rec.ocrMsg; touched(); renderEntry(); persistCurrent(); toast("Đã xác nhận đối chiếu");
   }
   function ocrCard() {
-    return `<div class="card" id="ocrcard"><h2>📷 Chụp phiếu – AI đọc số</h2>
-      <p class="hint">Cho phép nút "Chụp phiếu gốc" trong màn nhập PT / PS. AI (Google Gemini, gói miễn phí ~20 ảnh mỗi ngày cho cả phòng) chỉ chép số viết tay vào bảng; người nhập bắt buộc đối chiếu rồi mới tính được. Ảnh gửi sang máy chủ Google để đọc. Cần đã cài Edge Function ocr-phieu trên Supabase.</p>
+    return `<div class="card" id="ocrcard"><h2>📷 Chụp phiếu gốc</h2>
+      <p class="hint">Cho phép nút "Chụp phiếu gốc" trong màn nhập PT / PS. Số đọc từ ảnh (Google Gemini, gói miễn phí ~20 ảnh mỗi ngày cho cả phòng) chỉ chép số viết tay vào bảng, người nhập bắt buộc đối chiếu rồi mới tính được. Ảnh gửi sang máy chủ Google để đọc. Cần đã cài Edge Function ocr-phieu trên Supabase.</p>
       <div class="grid"><label class="f"><span>Trạng thái</span><select data-sp="ocrOn"><option value="1"${settings.ocrOn ? " selected" : ""}>Bật</option><option value=""${settings.ocrOn ? "" : " selected"}>Tắt</option></select></label></div></div>`;
   }
 
