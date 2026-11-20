@@ -32,16 +32,21 @@ Deno.serve(async (req) => {
       contents: [{ parts: [{ text: PROMPT[type] }, { inline_data: { mime_type: "image/jpeg", data: image } }] }],
       generationConfig: { temperature: 0, responseMimeType: "application/json", responseSchema: SCHEMA[type] },
     };
-    let quota = false, last = "";
+    let quota = false, slow = false, last = "";
+    const t0 = Date.now();
     for (const model of MODELS) {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body) });
+      if (Date.now() - t0 > 90_000) { last = "quá thời gian"; break; }   // tổng ngân sách < giới hạn 150 s của Supabase
+      let r: Response;
+      try {
+        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key }, body: JSON.stringify(body), signal: AbortSignal.timeout(40_000) });
+      } catch (e) { slow = true; last = `${model} không phản hồi sau 40 giây`; continue; }
       if (r.status === 429) { quota = true; continue; }
-      if (!r.ok) { last = `${model} ${r.status}`; continue; }
+      if (!r.ok) { last = `${model} lỗi ${r.status}: ` + (await r.text()).replace(/\s+/g, " ").slice(0, 160); continue; }
       const j = await r.json();
       const txt = j?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text || "").join("") || "";
       try { return json({ ok: true, model, data: JSON.parse(txt) }); } catch { last = model + " JSON"; }
     }
-    return json(quota ? { error: "quota", msg: "Hết lượt đọc ảnh miễn phí hôm nay (giới hạn của Google). Nhập tay hoặc thử lại sau." } : { error: "fail", msg: "Không đọc được ảnh (" + last + ")" });
+    return json(quota ? { error: "quota", msg: "Hết lượt đọc ảnh miễn phí hôm nay (giới hạn của Google). Nhập tay hoặc thử lại sau." } : { error: slow ? "slow" : "fail", msg: "Không đọc được ảnh – " + last });
   } catch (e) {
     return json({ error: "fail", msg: String(e) }, 500);
   }

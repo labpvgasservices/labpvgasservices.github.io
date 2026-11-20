@@ -1211,7 +1211,7 @@
     const n = (rec.ocrAuto || []).length, m = rec.ocrMsg, nb = (rec.ocrBad || []).length;
     return `<div class="ocrbox" id="ocrst"><label class="btn pri${ocrBusy ? " dis" : ""}">📷 Chụp phiếu gốc – AI điền số<input type="file" id="ocrfile" accept="image/*" hidden${ocrBusy ? " disabled" : ""}></label>
       <p class="hint">Chụp thẳng, đủ sáng, thấy cả bảng số liệu. AI chỉ chép lại; app điền vào bảng trên, ô AI điền màu vàng. Điền Pset / dải đo trước để app tự kiểm chéo cột hiệu chỉnh.</p>
-      ${ocrBusy ? `<p class="mut">Đang gửi ảnh cho AI đọc (khoảng 10–30 giây)…</p>` : ""}${ocrErr ? `<p class="bad">${esc(ocrErr)}</p>` : ""}
+      ${ocrBusy ? `<p class="mut">Đang gửi ảnh cho AI đọc (thường 10–30 giây, tối đa 75 giây)…</p>` : ""}${ocrErr ? `<p class="bad">${esc(ocrErr)}</p>` : ""}
       ${n ? `<div class="ocrnote"><b>AI đã điền ${n} ô${m ? ` (${esc(m.model || "")})` : ""} – phải đối chiếu từng ô với phiếu gốc.</b>
         ${nb ? `<p class="bad"><b>${nb} ô đỏ nghi đọc sai</b> (phép trừ với cột hiệu chỉnh/chênh lệch trên phiếu không khớp) – xem kỹ ô đó.</p>` : `<p class="ok">Các ô đã khớp phép kiểm chéo với cột hiệu chỉnh/chênh lệch trên phiếu.</p>`}
         ${m && m.notes && m.notes.length ? `<ul>${m.notes.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
