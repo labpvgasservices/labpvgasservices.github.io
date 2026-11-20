@@ -1207,7 +1207,7 @@
   /* ---------- Chụp phiếu (v88): AI chép số đọc từ ảnh phiếu gốc, người dùng bắt buộc đối chiếu ---------- */
   let ocrErr = "", ocrBusy = false;
   function ocrBox() {
-    if (!settings.ocrOn || !window.LabOCR || !LabOCR.supported(rec.type) || !canEdit() || !A.cloud()) return "";
+    if (!window.LabOCR || !LabOCR.supported(rec.type) || !canEdit() || !A.cloud()) return "";
     const n = (rec.ocrAuto || []).length, m = rec.ocrMsg, nb = (rec.ocrBad || []).length;
     return `<div class="ocrbox" id="ocrst"><div class="ocrrow"><label class="btn pri ocrbtn${ocrBusy ? " dis" : ""}">📷 Chụp phiếu gốc<input type="file" id="ocrfile" accept="image/*" hidden${ocrBusy ? " disabled" : ""}></label>
       <span class="hint">Chụp thẳng, đủ sáng, thấy cả bảng số liệu. Số đọc được tự điền vào mục 4 (ô màu vàng).</span></div>
@@ -1237,11 +1237,6 @@
     if (nb && !ocrArm) { ocrArm = true; toast(`Còn ${nb} ô đỏ nghi sai – sửa theo phiếu gốc, hoặc bấm lần nữa nếu đã xem và số đúng`); return; }
     ocrArm = false; logAct(`Đã đối chiếu số đọc từ ảnh với phiếu gốc (${(rec.ocrAuto || []).length} ô)`);
     delete rec.ocrAuto; delete rec.ocrBad; delete rec.ocrMsg; touched(); renderEntry(); persistCurrent(); toast("Đã xác nhận đối chiếu");
-  }
-  function ocrCard() {
-    return `<div class="card" id="ocrcard"><h2>📷 Chụp phiếu gốc</h2>
-      <p class="hint">Cho phép nút "Chụp phiếu gốc" trong màn nhập PT / PS. Số đọc từ ảnh (Google Gemini, gói miễn phí ~20 ảnh mỗi ngày cho cả phòng) chỉ chép số viết tay vào bảng, người nhập bắt buộc đối chiếu rồi mới tính được. Ảnh gửi sang máy chủ Google để đọc. Cần đã cài Edge Function ocr-phieu trên Supabase.</p>
-      <div class="grid"><label class="f"><span>Trạng thái</span><select data-sp="ocrOn"><option value="1"${settings.ocrOn ? " selected" : ""}>Bật</option><option value=""${settings.ocrOn ? "" : " selected"}>Tắt</option></select></label></div></div>`;
   }
 
   /* ---------- thanh cảnh báo nổi (yêu cầu NGOC 01/11/2026): luôn đi theo màn hình đang xem, bấm vào mục để nhảy tới ô cần sửa ---------- */
@@ -1994,7 +1989,7 @@
         ${f("PS – Môi trường (chứng chỉ)", "PS.env", 1)}${f("PS – Nhiệt độ QTG", "PS.qtgTemp")}${f("PS – Độ ẩm QTG", "PS.qtgHum")}
         ${NEWT.map(t => `${f(`${t} – Phương pháp`, `${t}.procedure`)}${f(`${t} – Mã biểu mẫu QTG`, `${t}.qtgForm`)}${t === "PG" ? f("PG – Ký hiệu series (N256.yy<b>A</b>)", "PG.series") : f(`${t} – Mã bảng Uncer`, `${t}.form`)}${f(`${t} – Tiền tố CC`, `${t}.prefix`)}${f(`${t} – Tiền tố BB`, `${t}.bbPrefix`)}
           ${t === "PG" ? f("PG – Phương pháp in GCN (VN)", "PG.procVN", 1) + f("PG – Phương pháp in GCN (EN)", "PG.procEN", 1) : f(`${t} – Môi trường (chứng chỉ)`, `${t}.env`, 1)}${f(`${t} – Nhiệt độ QTG`, `${t}.qtgTemp`)}${f(`${t} – Độ ẩm QTG`, `${t}.qtgHum`)}${t === "TC" ? f("TC – U thiết bị bù đầu tự do (°C, uch7 = U/2; 0 = bỏ)", "TC.uCJ") : ""}`).join("")}</div>
-        <div class="btns"><button class="btn" data-t="resetset">Về mặc định</button></div></div>` + mocCard() + ocrCard() + tail;
+        <div class="btns"><button class="btn" data-t="resetset">Về mặc định</button></div></div>` + mocCard() + tail;
   }
   function mocCard() {
     const on = !!settings.mocKey;
@@ -2037,7 +2032,7 @@
     if (e.target.id === "mocfile") { if (e.type === "change" && e.target.files[0]) { if (canCheck()) mocCheck(e.target.files[0]); e.target.value = ""; } return; }
     if (e.type === "change" && A.onAccountChange(e, renderSettings, toast)) return;
     const p = e.target.dataset.sp; if (!p || !A.can("settings")) return;
-    let v = e.target.value; if (["showLogo", "warnExpired", "issueDayBlank", "showAccred", "ocrOn"].includes(p)) v = !!v; if (p === "dueMonths") v = num(v) || 12;
+    let v = e.target.value; if (["showLogo", "warnExpired", "issueDayBlank", "showAccred"].includes(p)) v = !!v; if (p === "dueMonths") v = num(v) || 12;
     const ks = p.split("."); const last = ks.pop(); const t = ks.reduce((a, k) => a[k], settings); t[last] = v;
     store.set("settings", settings);
   }
