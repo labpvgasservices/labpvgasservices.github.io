@@ -262,9 +262,13 @@
   /* gọi Edge Function (v88: ocr-phieu) bằng phiên đăng nhập hiện tại */
   async function fn(name, body) {
     const se = await session(); if (!se) throw new Error("Chưa đăng nhập máy chủ");
-    const r = await fetch(`${CONFIG.url}/functions/v1/${name}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + se.access_token, apikey: CONFIG.key }, body: JSON.stringify(body) });
+    const ac = new AbortController(), tm = setTimeout(() => ac.abort(), 75000);
+    let r;
+    try { r = await fetch(`${CONFIG.url}/functions/v1/${name}`, { method: "POST", signal: ac.signal, headers: { "Content-Type": "application/json", Authorization: "Bearer " + se.access_token, apikey: CONFIG.key }, body: JSON.stringify(body) }); }
+    catch (e) { throw new Error(e && e.name === "AbortError" ? "Quá 75 giây không có phản hồi – thử chụp lại hoặc nhập tay" : "Không nối được máy chủ (kiểm tra mạng; hoặc hàm chưa tắt Verify JWT / chưa cài)"); }
+    finally { clearTimeout(tm); }
     let j = null; try { j = await r.json(); } catch (e) { }
-    if (!r.ok && !(j && j.error)) throw new Error(r.status === 404 ? "Chức năng đọc ảnh chưa được cài trên máy chủ (Edge Function ocr-phieu)" : "Máy chủ trả lỗi " + r.status);
+    if (!r.ok && !(j && j.error)) throw new Error(r.status === 404 ? "Chức năng đọc ảnh chưa được cài trên máy chủ (Edge Function ocr-phieu)" : r.status === 401 ? "Máy chủ từ chối đăng nhập (tắt Verify JWT của hàm ocr-phieu, hoặc đăng nhập lại)" : "Máy chủ trả lỗi " + r.status);
     return j || {};
   }
   async function usage() { const { data, error } = await client().rpc("storage_usage"); if (error) throw error; return data; }

@@ -4,7 +4,7 @@
  * Hỗ trợ: PT, PS. Khóa Gemini nằm trong Supabase Secrets, không có trong app. */
 (function () {
   "use strict";
-  const MAXPX = 2000, Q = 0.85;
+  const MAXPX = 1600, Q = 0.8;
   function toJpegB64(file) {
     return new Promise((res, rej) => {
       const url = URL.createObjectURL(file), img = new Image();
