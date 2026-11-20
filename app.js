@@ -779,6 +779,7 @@
     if (applyLastStd()) msg.push("chuẩn như lần trước");
     if (rec.certAuto) rec.certNo = autoCertNo();
     if (rec.ptAuto) genPoints();
+    if (opt.quiet) return;
     touched(); hideSuggest(); renderEntry(); persistCurrent();
     toast(`Đã điền ${d.t} ${msg.join(", ")}. Sửa tay nếu thiết bị đã thay.`);
   }
@@ -1205,31 +1206,84 @@
     dock(c.errors, c.warns);
   }
   /* ---------- Chụp phiếu (v88): AI chép số đọc từ ảnh phiếu gốc, người dùng bắt buộc đối chiếu ---------- */
-  let ocrErr = "", ocrBusy = false;
+  let ocrErr = "", ocrBusy = false, ocrProg = "", ocrRep = null;
+  // Tìm thiết bị theo Tag đọc từ ảnh: chỉ nhận khi khớp đúng Tag và đúng loại, không đoán
+  function ocrFindDev(tag, kind, site) {
+    const k = tagKey(tag); if (!k) return { dev: null, n: 0 };
+    let c = DEVS.filter(d => d.key === k && d.T === kind);
+    if (c.length > 1 && site) { const s = c.filter(d => d.s === site); if (s.length === 1) c = s; }
+    return { dev: c.length === 1 ? c[0] : null, n: c.length, sites: [...new Set(c.map(d => siteName(d.s)))] };
+  }
   function ocrBox() {
-    if (!window.LabOCR || !LabOCR.supported(rec.type) || !canEdit() || !A.cloud()) return "";
-    const n = (rec.ocrAuto || []).length, m = rec.ocrMsg, nb = (rec.ocrBad || []).length;
+    if (!window.LabOCR || !canEdit() || !A.cloud()) return "";
+    const n = (rec.ocrAuto || []).length, m = rec.ocrMsg, nb = (rec.ocrBad || []).length, rp = ocrRep;
     return `<div class="ocrbox" id="ocrst"><div class="ocrrow"><label class="btn pri ocrbtn${ocrBusy ? " dis" : ""}">📷 Chụp phiếu gốc<input type="file" id="ocrfile" accept="image/*" hidden${ocrBusy ? " disabled" : ""}></label>
-      <span class="hint">Chụp thẳng, đủ sáng, thấy cả bảng số liệu. Số đọc được tự điền vào mục 4 (ô màu vàng).</span></div>
-      ${ocrBusy ? `<p class="mut">Đang đọc ảnh… (thường 10–30 giây, tối đa 75 giây)</p>` : ""}${ocrErr ? `<p class="bad">${esc(ocrErr)}</p>` : ""}
+      <label class="btn ocrbtn${ocrBusy ? " dis" : ""}">🗂 Chọn nhiều ảnh<input type="file" id="ocrmulti" accept="image/*" multiple hidden${ocrBusy ? " disabled" : ""}></label>
+      <span class="hint">Tự nhận Tag, điền thông số thiết bị và số đọc (ô màu vàng). Chọn nhiều ảnh: mỗi phiếu thành 1 hồ sơ nháp.</span></div>
+      ${ocrBusy ? `<p class="mut">${esc(ocrProg || "Đang đọc ảnh…")} (mỗi ảnh thường 10–30 giây, tối đa 75 giây)</p>` : ""}${ocrErr ? `<p class="bad">${esc(ocrErr)}</p>` : ""}
+      ${rp ? `<div class="ocrnote"><b>Đã tạo ${rp.filter(x => x.ok).length}/${rp.length} hồ sơ nháp – vào tab Hồ sơ để đối chiếu từng hồ sơ với phiếu gốc, rồi gửi duyệt.</b>
+        <ul>${rp.map(x => x.ok ? `<li>✔ <b>${esc(x.tag)}</b> (${x.kind})${x.dev ? "" : " – Tag chưa khớp danh mục thiết bị, điền thông số tay"}${x.bad ? ` – <span class="bad">${x.bad} ô đỏ nghi sai</span>` : ""}</li>` : `<li class="bad">✖ ${esc(x.name)}: ${esc(x.msg)}</li>`).join("")}</ul>
+        <div class="btns"><button class="btn" data-act="ocrrepx">Đóng bảng này</button></div></div>` : ""}
       ${n ? `<div class="ocrnote"><b>Đã điền ${n} ô vào mục 4${m ? ` (${esc(m.model || "")})` : ""} – kiểm tra từng ô với phiếu gốc.</b>
         ${nb ? `<p class="bad"><b>${nb} ô đỏ nghi đọc sai</b> (phép trừ với cột hiệu chỉnh/chênh lệch trên phiếu không khớp) – xem kỹ ô đó.</p>` : `<p class="ok">Các ô đã khớp phép kiểm chéo với cột hiệu chỉnh/chênh lệch trên phiếu.</p>`}
         ${m && m.notes && m.notes.length ? `<ul>${m.notes.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
         <div class="btns"><button class="btn pri" data-act="ocrok">✔ Đã đối chiếu xong với phiếu gốc</button></div></div>` : ""}</div>`;
   }
+  const paintOcr = () => { const el = $("#ocrst"); if (el) el.outerHTML = ocrBox(); };
   async function ocrRun(file) {
     if (!file || ocrBusy || !canEdit()) return;
-    const my = rec; ocrBusy = true; ocrErr = ""; renderEntry();
+    const my = rec; ocrBusy = true; ocrErr = ""; ocrProg = ""; renderEntry();
     try {
-      const r = await LabOCR.read(file, my.type);
+      const r = await LabOCR.read(file, "AUTO");
       if (rec !== my) return;
-      const pl = LabOCR.plan(my.type, my, r.data, num);
+      const d = r.data, kind = d.kind, extra = [];
+      if (!LabOCR.supported(kind)) { ocrErr = "Ảnh này không phải phiếu PT hoặc PS (hoặc không nhận ra). Chụp lại rõ hơn."; return; }
+      if (!my.h.tag) {   // chưa nhập Tag: lấy Tag trên phiếu, tìm thiết bị trong danh mục và điền thông số
+        if (!d.tag) { ocrErr = "Không đọc được Tag trên phiếu. Nhập Tag tay rồi chụp lại."; return; }
+        if (my.saved && my.type !== kind) { ocrErr = `Phiếu là ${kind} nhưng hồ sơ đang mở là ${my.type} đã lưu – tạo hồ sơ mới.`; return; }
+        const f = ocrFindDev(d.tag, kind, my.h.locMode !== "free" ? my.h.location : "");
+        if (f.dev) { applyDevice(f.dev, { quiet: true }); extra.push(`Tag ${rec.h.tag} nhận từ phiếu, thông số thiết bị lấy theo danh mục`); }
+        else {
+          if (rec.type !== kind) { const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.custFree, calDate: rec.h.calDate }; rec = freshRecord(kind); Object.assign(rec.h, keep); }
+          rec.h.tag = d.tag; extra.push(f.n > 1 ? `Tag ${d.tag} có ở nhiều công trình (${f.sites.join(", ")}) – chọn công trình rồi bấm chọn thiết bị trong gợi ý Tag` : `Tag ${d.tag} chưa có trong danh mục thiết bị – điền thông số thiết bị tay`);
+        }
+      } else if (kind !== my.type) { ocrErr = `Phiếu là ${kind} nhưng hồ sơ đang mở là ${my.type}. Chọn đúng loại hoặc tạo hồ sơ mới.`; return; }
+      const cur = rec, pl = LabOCR.plan(kind, cur, d, num);
       if (pl.stop) { ocrErr = pl.stop; return; }
-      pl.fills.forEach(f => setPath(my, f.p, f.v));
-      my.ocrAuto = pl.fills.map(f => f.p); my.ocrBad = pl.bad; my.ocrMsg = { model: r.model, notes: pl.notes };
+      pl.fills.forEach(f => setPath(cur, f.p, f.v));
+      cur.ocrAuto = pl.fills.map(f => f.p); cur.ocrBad = pl.bad; cur.ocrMsg = { model: r.model, notes: extra.concat(pl.notes) };
       touched(); logAct(`Đọc số từ ảnh phiếu (${r.model || ""}): ${pl.fills.length} ô, ${pl.bad.length} ô nghi sai`);
     } catch (e) { ocrErr = e.message || String(e); }
-    finally { ocrBusy = false; if (rec === my) { renderEntry(); persistCurrent(); } }
+    finally { ocrBusy = false; renderEntry(); persistCurrent(); }
+  }
+  /* Nhiều ảnh một lần: mỗi phiếu → 1 hồ sơ nháp (đã lưu, ô vàng chờ đối chiếu). Đọc nối tiếp; hết lượt miễn phí thì dừng. */
+  async function ocrBatch(files) {
+    files = [...files]; if (!files.length || ocrBusy || !canEdit()) return;
+    const cur = rec, keep = { location: cur.h.location, cust: cur.h.cust, locMode: cur.h.locMode, locFree: cur.h.locFree, custFree: cur.h.locMode === "free" ? cur.h.custFree : "", calDate: cur.h.calDate };
+    ocrBusy = true; ocrErr = ""; ocrRep = []; renderEntry();
+    try {
+      for (let i = 0; i < files.length; i++) {
+        ocrProg = `Đang đọc ảnh ${i + 1}/${files.length}…`; paintOcr();
+        try {
+          const r = await LabOCR.read(files[i], "AUTO"), d = r.data, kind = d.kind;
+          if (!LabOCR.supported(kind)) throw new Error("không phải phiếu PT/PS");
+          if (!d.tag) throw new Error("không đọc được Tag");
+          rec = freshRecord(kind); Object.assign(rec.h, keep);
+          const f = ocrFindDev(d.tag, kind, keep.locMode !== "free" ? keep.location : "");
+          if (f.dev) applyDevice(f.dev, { quiet: true }); else rec.h.tag = d.tag;
+          const pl = LabOCR.plan(kind, rec, d, num); if (pl.stop) throw new Error(pl.stop);
+          pl.fills.forEach(x => setPath(rec, x.p, x.v));
+          rec.ocrAuto = pl.fills.map(x => x.p); rec.ocrBad = pl.bad; rec.ocrMsg = { model: r.model, notes: pl.notes };
+          if (rec.certAuto) rec.certNo = autoCertNo();
+          logAct(`Tạo từ ảnh phiếu (${r.model || ""}): ${pl.fills.length} ô, ${pl.bad.length} ô nghi sai`); saveRecord(true);
+          ocrRep.push({ ok: true, tag: rec.h.tag, kind, bad: pl.bad.length, dev: !!f.dev });
+        } catch (e) {
+          const msg = e.message || String(e);
+          ocrRep.push({ ok: false, name: files[i].name || `ảnh ${i + 1}`, msg });
+          if (/Hết lượt|Chưa đăng nhập|Chưa cài|Không nối được/.test(msg)) { if (i + 1 < files.length) ocrRep.push({ ok: false, name: `${files.length - i - 1} ảnh còn lại`, msg: "chưa đọc (dừng vì lỗi trên)" }); break; }
+        }
+      }
+    } finally { rec = cur; ocrBusy = false; ocrProg = ""; renderEntry(); persistCurrent(); badge(); }
   }
   let ocrArm = false;
   function ocrOk() {
@@ -1395,6 +1449,7 @@
     if (act === "rtd6") { rec.rtd.std[5] = rec.rtd.std[2]; renderEntry(); }
     if (act === "rtdcopy") { rec.rtd.dut = rec.rtd.dut.map(a => a.map(() => a[0])); renderEntry(); toast("Đã chép lần 1 cho lần 2–5"); }
     if (act === "ocrok") { ocrOk(); return; }
+    if (act === "ocrrepx") { ocrRep = null; paintOcr(); return; }
     if (act === "copy1") { rec.ps.set = rec.ps.set.map(() => rec.ps.set[0]); rec.ps.reset = rec.ps.reset.map(() => rec.ps.reset[0]); renderEntry(); toast("Đã chép lần 1 cho cả 5 lần"); }
     if (act === "save") saveRecord();
     if (act === "new") { if (unsavedRec() && !confirm(`Hồ sơ ${rec.h.tag} CHƯA LƯU.\nBấm OK để bỏ và tạo hồ sơ mới; bấm Hủy để quay lại lưu.`)) return; const keep = { location: rec.h.location, cust: rec.h.cust, locMode: rec.h.locMode, locFree: rec.h.locFree, custFree: rec.h.locMode === "free" ? rec.h.custFree : "" }; const t = rec.type; rec = freshRecord(t); Object.assign(rec.h, keep); rec.certNo = autoCertNo(); renderEntry(); persistCurrent(); window.scrollTo(0, 0); }
@@ -2556,7 +2611,7 @@
     $("#v-entry").addEventListener("click", onClick);
     $("#v-entry").addEventListener("change", e => { if (e.target.dataset.pk === "sel") { curPackId = e.target.value; store.set("curPack", curPackId); renderEntry(); } });
     $("#v-entry").addEventListener("change", e => { if (e.target.dataset.photo != null) onPhotoChange(e); });
-    $("#v-entry").addEventListener("change", e => { if (e.target.id === "ocrfile") { const f = e.target.files[0]; e.target.value = ""; ocrRun(f); } });
+    $("#v-entry").addEventListener("change", e => { if (e.target.id === "ocrfile") { const f = e.target.files[0]; e.target.value = ""; ocrRun(f); } if (e.target.id === "ocrmulti") { const fs = [...e.target.files]; e.target.value = ""; ocrBatch(fs); } });
     $("#v-entry").addEventListener("click", e => { const im = e.target.closest("img[data-phview]"); if (im) { const w = window.open(); if (w) w.document.write(`<title>Ảnh</title><img src="${im.src}" style="max-width:100%">`); } });
     $("#v-records").addEventListener("click", onRecordsClick);
     $("#v-report").addEventListener("click", onReportClick); $("#v-report").addEventListener("change", onReportChange);
