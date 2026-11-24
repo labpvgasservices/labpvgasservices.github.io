@@ -913,7 +913,6 @@
     const locOpts = cu ? [["", cu.locs.length > 1 ? "— chọn công trình —" : "—"]].concat(cu.locs.map(l => [l[0], cu.locs.filter(x => x[1] === l[1]).length > 1 ? `${l[1]} (${l[0]})` : l[1]])) : [["", "— chọn khách hàng trước —"]];
     const legacyLoc = h.location && cu && !cu.locs.some(l => l[0] === h.location);   // hồ sơ cũ dùng mục đã ẩn
     if (legacyLoc) { const l = locInfo(h.location); locOpts.push([l.code, `${l.locVN} (mục cũ)`]); }
-    const L0 = h.locMode !== "free" && h.location ? recLoc() : null;
     const descOpts = PT ? ["Pressure Transmitter", "Differential Pressure Transmitter"] : ["Pressure Switch", "Differential Pressure Switch"];
     const locHtml = `<div class="f wide"><span>Địa điểm</span><div class="seg"><button data-loc="list" class="${h.locMode !== "free" ? "on" : ""}">Công trình khí (chọn sẵn)</button><button data-loc="free" class="${h.locMode === "free" ? "on" : ""}">Địa điểm 2 (gõ tay)</button></div></div>
         ${h.locMode === "free"
