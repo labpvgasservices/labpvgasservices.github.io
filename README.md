@@ -1,26 +1,20 @@
 # LAB PVGAS Services
 
-PWA (chạy offline, cài lên màn hình chính) để nhập số liệu QTG, tính độ không đảm bảo đo và xuất
-Giấy chứng nhận hiệu chuẩn + Biên bản QTG + Bảng tính ĐKĐBĐ dạng PDF (lưu vào Tệp / chia sẻ trên iPhone).
+PWA (chạy offline, cài lên màn hình chính) cho Phòng TNHC: nhập số liệu hiệu chuẩn, tính độ không đảm bảo đo, xuất QTG + Giấy chứng nhận
+(GCN) + bảng Uncer dạng PDF / Excel, duyệt 2 bước, đồng bộ nhiều người qua Supabase.
 
-Bản hiện tại: **PT/DPT (4–20 mA)** và **PS/DPS**. Không làm PSV.
-
-## Nguồn logic
-- PT: `GPP_2024_PT_Uncer Form.xls` – sheet `DLVN112-2002_Rev2` (TM.10.BM.112.2-1), `Data112`, macro PT_CALC.
-- PS: `GPP_PS Uncer Form.xls` – sheet `DLVN133 - 2004` (DVK.LAB.TM.10.BM.133-03), `Data133`.
-- Mẫu chứng chỉ: `14 PT - Thang 8.docx`, `133.3-2 PS 801 Cert khong logo vcl.docx`.
-
-`calc.js` đã được đối chiếu: 28/28 thiết bị PT và 12/12 PS của năm 2024 cho cùng Uexp, Pass/Fail và số in trên chứng chỉ
-(trừ 1 ô PS mà file Excel làm tròn tay, xem ghi chú phân tích). Tab Cài đặt › Tự kiểm tra chạy lại 2 ca mẫu.
+Chín loại thiết bị: **PT/DPT, PS/DPS, PG, DPG, TT, TG, RTD, TC, TS**. Không làm PSV.
 
 ## Cấu trúc
-`index.html` giao diện · `app.js` xử lý · `calc.js` công thức · `docs.js` trang A4 · `data.js` chuẩn & địa điểm 2024 ·
-`vendor/` jsPDF 2.5.1 + html2canvas 1.4.1 (offline) · `sw.js` cache offline.
+- `index.html` giao diện · `app.js` xử lý chính · `auth.js` đăng nhập/phân quyền · `cloud.js` đồng bộ Supabase
+- `calc.js`, `calc2.js` công thức · `formulas.js`, `qcwork.js`, `qcxlsx.js` tab Công thức, bảng QC, Excel bảng tính
+- `docs.js`, `docs2.js` trang A4 (QTG, GCN, Uncer) · `mocan.js` mộc ẩn · `zip.js` gói thư mục
+- `data.js` chuẩn & địa điểm · `devices.js` danh mục thiết bị · `refs.js` căn cứ · `pid.js` P&ID · `photos.js` ảnh bằng chứng (đang ẩn)
+- `ocr.js` + `cloud/functions/ocr-phieu/` Chụp phiếu: đọc số từ ảnh phiếu gốc (Gemini qua Supabase Edge Function), bắt buộc đối chiếu
+- `cloud/` SQL + hướng dẫn Supabase · `vendor/` thư viện chạy offline · `sw.js` cache offline
 
-Cập nhật app: sửa file, tăng `CACHE` trong `sw.js`, push lên `main`.
+## Cập nhật
+Sửa file, tăng `CACHE` trong `sw.js` (và thêm file mới vào `FILES`), tạo PR vào `main`; GitHub Pages cập nhật sau vài phút.
+Bản khôi phục ổn định: nhánh `backup/v87-stable-2026-11-20`.
 
-## Bản v3 – mẫu 2026 (29/10/2026)
-- Xuất 3 loại theo mẫu 2026: **Biên bản hiệu chuẩn (QTG)** BB.PT/BB.PS (DVK.LAB.TM21.PL03 / ĐLVN 133:2004.PL1), **Giấy chứng nhận 2 trang** theo MailMerge_PT_Cert / MailMerge_PS_Cert, **Bảng Uncer** theo sheet DLVN112-2002_Rev2 / DLVN133 - 2004 kèm khối "Kiểm tra".
-- Tab Hồ sơ: **Bảng kiểm tra PT/PS (QC)** gom nhiều hồ sơ như sheet ẩn "Kiểm tra".
-- Danh mục chuẩn và địa điểm lấy từ PT_DGCP_10_2026.xls. Công thức đối chiếu lại: PT 31/31, PS 13/13 thiết bị DGCP; số in trên chứng chỉ trùng 30/30 chứng chỉ trong PT_DGCP_10-2026.docx.
-- PS nhập Áp tác động / Áp trả về như QTG, theo chiều Rising/Falling.
+Ghi chú nguồn logic ban đầu: `PHAN_TICH.md`.
